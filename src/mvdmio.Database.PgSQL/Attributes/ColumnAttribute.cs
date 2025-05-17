@@ -1,8 +1,11 @@
+using JetBrains.Annotations;
+
 namespace mvdmio.Database.PgSQL.Attributes;
 
 /// <summary>
 ///    Attribute for specifying a column on a <see cref="DbTable" />
 /// </summary>
+[PublicAPI]
 [AttributeUsage(AttributeTargets.Property)]
 public class ColumnAttribute : Attribute
 {

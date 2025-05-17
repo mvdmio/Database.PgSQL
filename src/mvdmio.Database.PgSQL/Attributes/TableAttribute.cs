@@ -1,8 +1,11 @@
-﻿namespace mvdmio.Database.PgSQL.Attributes;
+﻿using JetBrains.Annotations;
+
+namespace mvdmio.Database.PgSQL.Attributes;
 
 /// <summary>
 ///    Attribute to decorate a Table class.
 /// </summary>
+[PublicAPI]
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public class TableAttribute : Attribute
 {

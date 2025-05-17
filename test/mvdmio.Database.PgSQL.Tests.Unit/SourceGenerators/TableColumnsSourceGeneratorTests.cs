@@ -11,6 +11,9 @@ public class TableColumnsSourceGeneratorTests
 
    public TableColumnsSourceGeneratorTests()
    {
+      if(!VerifySourceGenerators.Initialized)
+         VerifySourceGenerators.Initialize();
+      
       _settings = new VerifySettings();
       _settings.UseDirectory("_verify_snapshots");
    }

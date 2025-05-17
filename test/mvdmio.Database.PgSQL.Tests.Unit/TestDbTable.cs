@@ -3,7 +3,7 @@ using mvdmio.Database.PgSQL.Attributes;
 namespace mvdmio.Database.PgSQL.Tests.Unit;
 
 [Table("test")]
-public partial class TestDbTable : DbTable
+public partial class TestDbTable
 {
    [Column("id")]
    public long Id { get; set; }
