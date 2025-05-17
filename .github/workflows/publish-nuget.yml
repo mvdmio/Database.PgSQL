@@ -24,10 +24,10 @@ jobs:
           dotnet-version: 9
 
       - name: Restore dependencies
-        run: dotnet restore mvdmio.Database.PgSQL
+        run: dotnet restore src/mvdmio.Database.PgSQL
 
       - name: Build
-        run: dotnet build mvdmio.Database.PgSQL --no-restore
+        run: dotnet build src/mvdmio.Database.PgSQL --no-restore
 
       - name: Push package
         run: nuget push **\*.nupkg -Source 'https://api.nuget.org/v3/index.json' -NonInteractive -SkipDuplicate -Verbosity normal
