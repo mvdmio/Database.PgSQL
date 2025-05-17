@@ -6,6 +6,9 @@
       <Nullable>enable</Nullable>
       <LangVersion>latest</LangVersion>
       <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+      <DebugType>embedded</DebugType>
+      <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+      <GenerateDocumentationFile>True</GenerateDocumentationFile>
    </PropertyGroup>
 
    <PropertyGroup>
@@ -17,6 +20,11 @@
       <PackageReadmeFile>Readme.md</PackageReadmeFile>
       <PackageLicenseFile>LICENSE</PackageLicenseFile>
    </PropertyGroup>
+
+   <ItemGroup>
+      <None Include="..\License" PackagePath="" Pack="true" />
+      <None Include="..\Readme.md" PackagePath="" Pack="true" />
+   </ItemGroup>
    
    <ItemGroup>
       <ProjectReference Include="..\mvdmio.Database.PgSQL.SourceGenerators\mvdmio.Database.PgSQL.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
