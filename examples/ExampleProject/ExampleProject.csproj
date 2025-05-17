@@ -6,4 +6,8 @@
       <Nullable>enable</Nullable>
    </PropertyGroup>
 
+   <ItemGroup>
+     <PackageReference Include="mvdmio.Database.PgSQL" Version="0.1.0" />
+   </ItemGroup>
+
 </Project>

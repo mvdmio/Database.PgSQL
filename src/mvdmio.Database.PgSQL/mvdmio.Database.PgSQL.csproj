@@ -12,7 +12,7 @@
    </PropertyGroup>
 
    <PropertyGroup>
-      <Version>0.1.0</Version>
+      <Version>0.1.1</Version>
       <Title>mvdmio.Database.PgSQL</Title>
       <Description>PostgreSQL database interaction including migrations and ORM.</Description>
       <Company>mvdmio</Company>
@@ -27,7 +27,10 @@
    </ItemGroup>
    
    <ItemGroup>
-      <ProjectReference Include="..\mvdmio.Database.PgSQL.SourceGenerators\mvdmio.Database.PgSQL.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+      <ProjectReference Include="..\mvdmio.Database.PgSQL.SourceGenerators\mvdmio.Database.PgSQL.SourceGenerators.csproj" ReferenceOutputAssembly="false" />
+
+      <!-- Pack the source generator binary -->
+      <None Include="..\mvdmio.Database.PgSQL.SourceGenerators\bin\$(Configuration)\netstandard2.0\mvdmio.Database.PgSQL.SourceGenerators.dll" PackagePath="analyzers\dotnet\cs" Pack="true" />
    </ItemGroup>
    
    <ItemGroup>
