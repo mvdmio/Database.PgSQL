@@ -8,6 +8,7 @@
    </PropertyGroup>
 
    <ItemGroup>
+      <PackageReference Include="Basic.Reference.Assemblies" Version="1.8.0" />
       <PackageReference Include="coverlet.collector" Version="6.0.4">
         <PrivateAssets>all</PrivateAssets>
         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -20,19 +21,27 @@
       </PackageReference>
       <PackageReference Include="Verify.XunitV3" Version="30.0.0" />
       <PackageReference Include="Verify.SourceGenerators" Version="2.5.0" />
+      <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.13.0" />
+      <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
+      <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0">
+         <PrivateAssets>all</PrivateAssets>
+         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      </PackageReference>
    </ItemGroup>
 
    <ItemGroup>
       <Using Include="Xunit"/>
    </ItemGroup>
-
+   
    <ItemGroup>
-      <ProjectReference Include="..\..\mvdmio.Database.PgSQL.SourceGenerators\mvdmio.Database.PgSQL.SourceGenerators.csproj" />
+      <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL.SourceGenerators\mvdmio.Database.PgSQL.SourceGenerators.csproj" />
       <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL\mvdmio.Database.PgSQL.csproj"/>
    </ItemGroup>
 
    <ItemGroup>
-     <Folder Include="SourceGenerators\.verify\" />
+     <Compile Update="TestDbTable.cs">
+       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+     </Compile>
    </ItemGroup>
 
 </Project>

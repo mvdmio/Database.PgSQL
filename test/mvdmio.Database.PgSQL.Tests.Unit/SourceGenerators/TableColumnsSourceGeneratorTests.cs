@@ -1,4 +1,5 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using Basic.Reference.Assemblies;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using mvdmio.Database.PgSQL.SourceGenerators;
 
@@ -10,44 +11,24 @@ public class TableColumnsSourceGeneratorTests
 
    public TableColumnsSourceGeneratorTests()
    {
-      if(!VerifySourceGenerators.Initialized)
-         VerifySourceGenerators.Initialize();
-
       _settings = new VerifySettings();
-      _settings.UseDirectory(".verify");
+      _settings.UseDirectory("_verify_snapshots");
    }
    
    [Fact]
    public async Task Test()
    {
-      var syntaxTree = CSharpSyntaxTree.ParseText(
-         """
-         using mvdmio.Database.PgSQL.Attributes;
-         
-         namespace TestNamespace;
-         
-         [Table("test")]
-         public partial class TestDbTable : DbTable
-         {
-            [Column("id")]
-            public long Id { get; set; }
-
-            [Column("first_name")]
-            public required string FirstName { get; set; }
-
-            [Column("last_name")]
-            public required string LastName { get; set; }
-
-            [Column("email")]
-            public required string Email { get; set; }
-         }
-         """,
-         cancellationToken: TestContext.Current.CancellationToken
-      );
-      
+      var testDbTableSourceCode = await File.ReadAllTextAsync("TestDbTable.cs", TestContext.Current.CancellationToken);
+      var syntaxTree = CSharpSyntaxTree.ParseText(testDbTableSourceCode, cancellationToken: TestContext.Current.CancellationToken);
       var compilation = CSharpCompilation.Create(
          assemblyName: "TestProject",
-         syntaxTrees: [syntaxTree]
+         syntaxTrees: [
+            syntaxTree
+         ],
+         references: [
+            ..ReferenceAssemblies.NetStandard20,
+            MetadataReference.CreateFromFile(typeof(DbTable).Assembly.Location)
+         ]
       );
 
       var generator = new TableColumnsSourceGenerator();

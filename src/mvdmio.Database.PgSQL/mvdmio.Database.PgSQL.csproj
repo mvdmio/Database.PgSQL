@@ -5,8 +5,23 @@
       <ImplicitUsings>enable</ImplicitUsings>
       <Nullable>enable</Nullable>
       <LangVersion>latest</LangVersion>
+      <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
    </PropertyGroup>
 
+   <PropertyGroup>
+      <Version>0.1.0</Version>
+      <Title>mvdmio.Database.PgSQL</Title>
+      <Description>PostgreSQL database interaction including migrations and ORM.</Description>
+      <Company>mvdmio</Company>
+      <Authors>Michiel van der Meer</Authors>
+      <PackageReadmeFile>Readme.md</PackageReadmeFile>
+      <PackageLicenseFile>LICENSE</PackageLicenseFile>
+   </PropertyGroup>
+   
+   <ItemGroup>
+      <ProjectReference Include="..\mvdmio.Database.PgSQL.SourceGenerators\mvdmio.Database.PgSQL.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+   </ItemGroup>
+   
    <ItemGroup>
       <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
          <_Parameter1>mvdmio.Database.PgSQL.Tests.Unit</_Parameter1>
@@ -15,13 +30,5 @@
          <_Parameter1>mvdmio.Database.PgSQL.Tests.Integration</_Parameter1>
       </AssemblyAttribute>
    </ItemGroup>
-
-   <ItemGroup>
-      <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0"/>
-      <PackageReference Include="PolySharp" Version="1.15.0">
-         <PrivateAssets>all</PrivateAssets>
-         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-   </ItemGroup>
-
+   
 </Project>
