@@ -32,7 +32,7 @@ public class TableColumnsSourceGeneratorTests
          references: [
             ..ReferenceAssemblies.NetStandard20,
             MetadataReference.CreateFromFile(typeof(ColumnAttribute).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(DbTable).Assembly.Location)
+            MetadataReference.CreateFromFile(typeof(DbTable<>).Assembly.Location)
          ]
       );
 

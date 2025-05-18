@@ -1,6 +1,5 @@
 ﻿using System.Reflection;
 using JetBrains.Annotations;
-using Microsoft.Extensions.Logging;
 using mvdmio.Database.PgSQL.Exceptions;
 using mvdmio.Database.PgSQL.Internal;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
@@ -23,13 +22,12 @@ public class DatabaseMigrator : IDatabaseMigrator
    ///    Constructor.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
-   /// <param name="logger">The logger to use.</param>
    /// <param name="assembliesContainingMigrations">
    ///    List of assemblies to use for searching <see cref="IDbMigration" />
    ///    classes.
    /// </param>
-   public DatabaseMigrator(DatabaseConnection connection, ILogger<DatabaseMigrator> logger, params Assembly[] assembliesContainingMigrations)
-      : this(connection, logger, new ReflectionMigrationRetriever(assembliesContainingMigrations))
+   public DatabaseMigrator(DatabaseConnection connection, params Assembly[] assembliesContainingMigrations)
+      : this(connection, new ReflectionMigrationRetriever(assembliesContainingMigrations))
    {
    }
 
@@ -37,9 +35,8 @@ public class DatabaseMigrator : IDatabaseMigrator
    ///    Constructor.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
-   /// <param name="logger">The logger to use.</param>
    /// <param name="migrationRetriever">The migration retriever to use.</param>
-   public DatabaseMigrator(DatabaseConnection connection, ILogger<DatabaseMigrator> logger, IMigrationRetriever migrationRetriever)
+   public DatabaseMigrator(DatabaseConnection connection, IMigrationRetriever migrationRetriever)
    {
       _connection = connection;
       _migrationRetriever = migrationRetriever;

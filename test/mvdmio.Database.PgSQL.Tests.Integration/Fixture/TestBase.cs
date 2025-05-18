@@ -3,19 +3,25 @@
 public abstract class TestBase : IAsyncLifetime
 {
    private readonly TestFixture _fixture;
+   private readonly DatabaseConnectionFactory _databaseConnectionFactory;
 
-   public TestBase(TestFixture fixture)
+   protected DatabaseConnection Db { get; private set; } = null!;
+
+   protected TestBase(TestFixture fixture)
    {
       _fixture = fixture;
+      _databaseConnectionFactory = new DatabaseConnectionFactory();
    }
    
    public virtual async ValueTask InitializeAsync()
    {
-      await _fixture.Db.BeginTransactionAsync();
+      Db = _databaseConnectionFactory.ForConnectionString(_fixture.DbContainer.GetConnectionString());
+      
+      await Db.BeginTransactionAsync();
    }
 
    public virtual async ValueTask DisposeAsync()
    {
-      await _fixture.Db.RollbackTransactionAsync();
+      await Db.RollbackTransactionAsync();
    }
 }

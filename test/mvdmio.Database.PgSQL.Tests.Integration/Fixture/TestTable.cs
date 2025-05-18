@@ -10,7 +10,7 @@ public partial class TestTable
   public long Id { get; init; }
   
   [Column("required_string_value")]
-  public required string RequiredStringValue { get; set; }
+  public string RequiredStringValue { get; set; }
   
   [Column("optional_string_value")]
   public string? OptionalStringValue { get; set; }

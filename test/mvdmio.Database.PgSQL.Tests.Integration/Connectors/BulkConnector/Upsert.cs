@@ -7,15 +7,11 @@ namespace mvdmio.Database.PgSQL.Tests.Integration.Connectors.BulkConnector;
 
 public class BulkConnectorUpsertTests : TestBase
 {
-   private readonly DatabaseConnection _db;
-   
    private readonly Dictionary<string, Func<TestItem, DbValue>> _columnMapping;
 
    public BulkConnectorUpsertTests(TestFixture fixture)
       : base(fixture)
    {
-      _db = fixture.Db;
-      
       _columnMapping = new Dictionary<string, Func<TestItem, DbValue>> {
          { "integer", x => new DbValue(x.Integer, NpgsqlDbType.Integer) },
          { "float", x => new DbValue(x.Float, NpgsqlDbType.Real) },
@@ -28,7 +24,7 @@ public class BulkConnectorUpsertTests : TestBase
    {
       await base.InitializeAsync();
       
-      await _db.Dapper.ExecuteAsync(
+      await Db.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS test_upsert (
             integer integer          NOT NULL,
@@ -48,10 +44,10 @@ public class BulkConnectorUpsertTests : TestBase
       var items = TestItem.Create(10);
       
       // Act
-      await _db.Bulk.UpsertAsync("test_upsert", [ "integer" ], items, _columnMapping);
+      await Db.Bulk.UpsertAsync("test_upsert", [ "integer" ], items, _columnMapping);
 
       // Assert
-      var result = (await _db.Dapper.QueryAsync<TestItem>(
+      var result = (await Db.Dapper.QueryAsync<TestItem>(
          "SELECT * FROM test_upsert ORDER BY integer"
       )).ToArray();
       
@@ -82,11 +78,11 @@ public class BulkConnectorUpsertTests : TestBase
       );
 
       // Act
-      await _db.Bulk.CopyAsync("test_upsert", items, _columnMapping, ct: TestContext.Current.CancellationToken);
-      await _db.Bulk.UpsertAsync("test_upsert", [ "integer" ], updateItems, _columnMapping);
+      await Db.Bulk.CopyAsync("test_upsert", items, _columnMapping, ct: TestContext.Current.CancellationToken);
+      await Db.Bulk.UpsertAsync("test_upsert", [ "integer" ], updateItems, _columnMapping);
 
       // Assert
-      var result = (await _db.Dapper.QueryAsync<TestItem>(
+      var result = (await Db.Dapper.QueryAsync<TestItem>(
          "SELECT * FROM test_upsert ORDER BY integer"
       )).ToArray();
       
