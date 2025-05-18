@@ -2,6 +2,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using mvdmio.Database.PgSQL.SourceGenerators;
+using mvdmio.Database.PgSQL.SourceGenerators.Attributes;
 
 namespace mvdmio.Database.PgSQL.Tests.Unit.SourceGenerators;
 
@@ -30,6 +31,7 @@ public class TableColumnsSourceGeneratorTests
          ],
          references: [
             ..ReferenceAssemblies.NetStandard20,
+            MetadataReference.CreateFromFile(typeof(ColumnAttribute).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(DbTable).Assembly.Location)
          ]
       );

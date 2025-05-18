@@ -21,6 +21,11 @@ public abstract class DbTable
    public abstract string[] Columns { get; }
    
    /// <summary>
+   ///   The column names of the primary key columns in the table.
+   /// </summary>
+   public abstract string[] PrimaryKeyColumns { get; }
+   
+   /// <summary>
    ///   The full name of the table in the database, including schema.
    /// </summary>
    public string FullTableName => $"{Schema}.{TableName}";

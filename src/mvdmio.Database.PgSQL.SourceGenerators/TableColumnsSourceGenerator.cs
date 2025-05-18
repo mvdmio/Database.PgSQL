@@ -2,15 +2,16 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using mvdmio.Database.PgSQL.Attributes;
+using mvdmio.Database.PgSQL.SourceGenerators.Attributes;
 
 namespace mvdmio.Database.PgSQL.SourceGenerators;
 
 [Generator(LanguageNames.CSharp)]
 public class TableColumnsSourceGenerator : IIncrementalGenerator
 {
-   private const string TABLE_ATTRIBUTE_NAME = "mvdmio.Database.PgSQL.Attributes.TableAttribute";
-   private const string COLUMN_ATTRIBUTE_NAME = "mvdmio.Database.PgSQL.Attributes.ColumnAttribute";
-   private const string DB_TABLE_TYPE_NAME = "mvdmio.Database.PgSQL.DbTable";
+   private static readonly string _tableAttributeName = typeof(TableAttribute).FullName!;
+   private static readonly string _columnAttributeName = typeof(ColumnAttribute).FullName!;
 
    public void Initialize(IncrementalGeneratorInitializationContext context)
    {
@@ -62,21 +63,21 @@ public class TableColumnsSourceGenerator : IIncrementalGenerator
                }
 
                // Check if class is valid (has [Table] or inherits from DbTable)
-               var tableInfo = GetTableName(classSymbol);
-               if(tableInfo is null)
+               var tableAttribute = GetTableAttribute(classSymbol);
+               if(tableAttribute is null)
                   continue;
                
-               var columnNames = GetColumnNames(context, model, classDeclaration);
-               var sourceCode = GenerateSource(classSymbol, tableInfo.Value, columnNames);
+               var columnAttributes = GetColumnAttributes(context, model, classDeclaration);
+               var sourceCode = GenerateSource(classSymbol, tableAttribute, columnAttributes);
                context.AddSource($"{classSymbol.Name}_Columns.g.cs", SourceText.From(sourceCode, Encoding.UTF8));
             }
          }
       );
    }
 
-   private static (string tableName, string schema)? GetTableName(INamedTypeSymbol classSymbol)
+   private static TableAttribute? GetTableAttribute(INamedTypeSymbol classSymbol)
    {
-      var tableAttribute = classSymbol.GetAttributes().FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == TABLE_ATTRIBUTE_NAME);
+      var tableAttribute = classSymbol.GetAttributes().FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == _tableAttributeName);
       if (tableAttribute is null)
          return null;
 
@@ -86,18 +87,18 @@ public class TableColumnsSourceGenerator : IIncrementalGenerator
       if(tableName is null)
          return null;
       
-      return (tableName, schema);
+      return new TableAttribute(tableName, schema);
    }
 
-   private static List<string> GetColumnNames(SourceProductionContext context, SemanticModel model, ClassDeclarationSyntax classDeclaration)
+   private static List<ColumnAttribute> GetColumnAttributes(SourceProductionContext context, SemanticModel model, ClassDeclarationSyntax classDeclaration)
    {
-      var columnNames = new List<string>();
+      var columnAttributes = new List<ColumnAttribute>();
 
       foreach (var member in classDeclaration.Members.OfType<PropertyDeclarationSyntax>())
       {
          var propertySymbol = model.GetDeclaredSymbol(member) as IPropertySymbol;
 
-         var columnAttribute = propertySymbol?.GetAttributes().FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == COLUMN_ATTRIBUTE_NAME);
+         var columnAttribute = propertySymbol?.GetAttributes().FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == _columnAttributeName);
 
          if (columnAttribute?.AttributeClass is null || columnAttribute.AttributeClass?.Kind == SymbolKind.ErrorType)
          {
@@ -117,24 +118,27 @@ public class TableColumnsSourceGenerator : IIncrementalGenerator
             );
             continue;
          }
-            
+         
+         var name = columnAttribute.ConstructorArguments[0].Value as string;
+         var isPrimaryKey = columnAttribute.ConstructorArguments[1].Value as bool? ?? false;
 
-         var nameArgument = columnAttribute.ConstructorArguments.FirstOrDefault().Value as string;
-
-         if (!string.IsNullOrEmpty(nameArgument))
-            columnNames.Add(nameArgument!);
+         if(name is null)
+            continue;
+         
+         columnAttributes.Add(new ColumnAttribute(name, isPrimaryKey));
       }
 
-      return columnNames;
+      return columnAttributes;
    }
 
-   private static string GenerateSource(INamedTypeSymbol classSymbol, (string tableName, string schema) tableInfo, List<string> columnNames)
+   private static string GenerateSource(INamedTypeSymbol classSymbol, TableAttribute table, List<ColumnAttribute> columns)
    {
       var namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
       var accessibility = classSymbol.DeclaredAccessibility.ToString().ToLower();
       var className = classSymbol.Name;
 
-      var columnArray = string.Join(", ", columnNames.Select(name => $"\"{name}\""));
+      var columnNames = string.Join(", ", columns.Select(c => $"\"{c.Name}\""));
+      var primaryKeyColumnNames = string.Join(", ", columns.Where(c => c.IsPrimaryKey).Select(c => $"\"{c.Name}\""));
 
       return $$"""
          using System;
@@ -145,9 +149,10 @@ public class TableColumnsSourceGenerator : IIncrementalGenerator
              /// <auto-generated />
              {{accessibility}} partial class {{className}} : DbTable
              {
-                public override string TableName => "{{tableInfo.tableName}}";
-                public override string Schema => "{{tableInfo.schema}}";
-                public override string[] Columns => new[] { {{columnArray}} };
+                public override string TableName => "{{table.Name}}";
+                public override string Schema => "{{table.Schema}}";
+                public override string[] Columns => new[] { {{columnNames}} };
+                public override string[] PrimaryKeyColumns => new[] { {{primaryKeyColumnNames}} };
              }
          }
          """;

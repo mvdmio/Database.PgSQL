@@ -24,7 +24,7 @@ public class BulkConnector
    /// <summary>
    ///    Perform a binary copy to a given table.
    /// </summary>
-   public async Task<CopyResult> CopyAsync<T>(string tableName, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, bool ignoreErrors = false, bool logLastRow = false, CancellationToken ct = default)
+   public async Task<CopyResult> CopyAsync<T>(string tableName, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, bool ignoreErrors = false, CancellationToken ct = default)
    {
       var rowsProvided = 0;
       var rowsWritten = 0;

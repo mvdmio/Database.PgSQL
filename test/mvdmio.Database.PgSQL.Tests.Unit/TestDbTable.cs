@@ -1,11 +1,12 @@
 using mvdmio.Database.PgSQL.Attributes;
+using mvdmio.Database.PgSQL.SourceGenerators.Attributes;
 
 namespace mvdmio.Database.PgSQL.Tests.Unit;
 
-[Table("test")]
+[Table("test_table", schema: "test_schema")]
 public partial class TestDbTable
 {
-   [Column("id")]
+   [Column("id", isPrimaryKey: true)]
    public long Id { get; set; }
 
    [Column("first_name")]
