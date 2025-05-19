@@ -6,11 +6,11 @@ using mvdmio.Database.PgSQL.SourceGenerators.Attributes;
 
 namespace mvdmio.Database.PgSQL.Tests.Unit.SourceGenerators;
 
-public class TableColumnsSourceGeneratorTests
+public class DbTableSourceGeneratorTests
 {
    private readonly VerifySettings _settings;
 
-   public TableColumnsSourceGeneratorTests()
+   public DbTableSourceGeneratorTests()
    {
       if(!VerifySourceGenerators.Initialized)
          VerifySourceGenerators.Initialize();
@@ -36,7 +36,7 @@ public class TableColumnsSourceGeneratorTests
          ]
       );
 
-      var generator = new TableColumnsSourceGenerator();
+      var generator = new DbTableSourceGenerator();
       GeneratorDriver driver = CSharpGeneratorDriver.Create(generator);
       
       // Run the generator

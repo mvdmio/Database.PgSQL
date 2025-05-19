@@ -2,16 +2,16 @@
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.Fixture.Migrations;
 
-public class _202505181000_TestTable : IDbMigration
+public class _202505181000_SimpleTable : IDbMigration
 {
    public long Identifier { get; } = 202505181000;
-   public string Name { get; } = "TestTable";
+   public string Name { get; } = "SimpleTable";
    
    public async Task UpAsync(DatabaseConnection db)
    {
       await db.Dapper.ExecuteAsync(
          """
-         CREATE TABLE public.test_table (
+         CREATE TABLE public.simple_table (
              id                    BIGINT NOT NULL,
              required_string_value TEXT   NOT NULL,
              optional_string_value TEXT   NULL,

@@ -1,15 +1,15 @@
-﻿namespace mvdmio.Database.PgSQL.Tests.Integration.Fixture;
+﻿using mvdmio.Database.PgSQL.Tests.Integration.Fixture.Entities;
+
+namespace mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 
 public class TestDbContext
 {
-   private readonly DatabaseConnection _db;
-
+   public SimpleRecordDbTable SimpleTable { get; }
+   public ComplexRecordDbTable ComplexTable { get; }
+   
    public TestDbContext(DatabaseConnection db)
    {
-      _db = db;
-
-      TestTable = new TestTable(db);
+      SimpleTable = new SimpleRecordDbTable(db);
+      ComplexTable = new ComplexRecordDbTable(db);
    }
-   
-   public TestTable TestTable { get; }
 }
