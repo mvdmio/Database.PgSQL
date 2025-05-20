@@ -6,8 +6,8 @@ namespace mvdmio.Database.PgSQL;
 ///    Abstract base class for all database tables.
 /// </summary>
 [PublicAPI]
-public abstract class DbTable<TEntity>
-   where TEntity : DbRecord
+public abstract class DbTable<TRecord>
+   where TRecord : DbRecord
 {
    private readonly DatabaseConnection _db;
 
@@ -62,9 +62,9 @@ public abstract class DbTable<TEntity>
    /// <summary>
    ///    Retrieves a single record from the database by its primary key.
    /// </summary>
-   public TEntity? Find(long id)
+   public TRecord? Find(long id)
    {
-      return _db.Dapper.QuerySingleOrDefault<TEntity>(
+      return _db.Dapper.QuerySingleOrDefault<TRecord>(
          $"SELECT {string.Join(", ", Columns)} FROM {FullTableName} WHERE {PrimaryKeyColumns[0]} = :id",
          new Dictionary<string, object?> {
             { PrimaryKeyColumns[0], id }
@@ -75,9 +75,9 @@ public abstract class DbTable<TEntity>
    /// <summary>
    ///    Inserts a new record into the database.
    /// </summary>
-   public TEntity Insert(TEntity record)
+   public TRecord Insert(TRecord record)
    {
-      return _db.Dapper.QuerySingle<TEntity>(
+      return _db.Dapper.QuerySingle<TRecord>(
          $"""
           INSERT INTO {FullTableName} ({string.Join(", ", ColumnsExceptGenerated)}) 
           VALUES ({string.Join(", ", ColumnsExceptGenerated.Select(c => $":{c}"))})
