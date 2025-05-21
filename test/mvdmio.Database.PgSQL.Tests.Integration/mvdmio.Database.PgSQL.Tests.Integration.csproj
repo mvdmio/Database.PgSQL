@@ -8,6 +8,19 @@
    </PropertyGroup>
 
    <ItemGroup>
+     <Content Include="QueryOperations\.verify\DbTableFindTests.ShouldReturnRecord_WhenRecordWithIdExists.verified.txt" />
+     <Content Include="QueryOperations\.verify\DbTableInsertTests.ShouldInsertRecordAndReturnWithGeneratedValues.verified.txt" />
+     <Content Include="QueryOperations\.verify\DbTableInsertTests.ShouldInsertRecordWithOptionalValues.verified.txt" />
+   </ItemGroup>
+
+   <ItemGroup>
+     <None Include="QueryOperations\.verify\DbTableInsertTests.ShouldInsertRecordAndReturnWithGeneratedValues_Inserted.verified.txt" />
+     <None Include="QueryOperations\.verify\DbTableInsertTests.ShouldInsertRecordAndReturnWithGeneratedValues_Retrieved.verified.txt" />
+     <None Include="QueryOperations\.verify\DbTableInsertTests.ShouldInsertRecordWithOptionalValues_Inserted.verified.txt" />
+     <None Include="QueryOperations\.verify\DbTableInsertTests.ShouldInsertRecordWithOptionalValues_Retrieved.verified.txt" />
+   </ItemGroup>
+
+   <ItemGroup>
       <PackageReference Include="AwesomeAssertions" Version="8.2.0" />
       <PackageReference Include="coverlet.collector" Version="6.0.4">
         <PrivateAssets>all</PrivateAssets>
@@ -24,7 +37,7 @@
    </ItemGroup>
 
    <ItemGroup>
-      <Using Include="Xunit"/>
+      <Using Include="Xunit" />
    </ItemGroup>
 
    <ItemGroup>
