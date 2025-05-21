@@ -73,11 +73,39 @@ public abstract class DbTable<TRecord>
    }
 
    /// <summary>
+   ///    Retrieves a single record from the database by its primary key asynchronously.
+   /// </summary>
+   public Task<TRecord?> FindAsync(long id)
+   {
+      return _db.Dapper.QuerySingleOrDefaultAsync<TRecord>(
+         $"SELECT {string.Join(", ", Columns)} FROM {FullTableName} WHERE {PrimaryKeyColumns[0]} = :id",
+         new Dictionary<string, object?> {
+            { PrimaryKeyColumns[0], id }
+         }
+      );
+   }
+
+   /// <summary>
    ///    Inserts a new record into the database.
    /// </summary>
    public TRecord Insert(TRecord record)
    {
       return _db.Dapper.QuerySingle<TRecord>(
+         $"""
+          INSERT INTO {FullTableName} ({string.Join(", ", ColumnsExceptGenerated)}) 
+          VALUES ({string.Join(", ", ColumnsExceptGenerated.Select(c => $":{c}"))})
+          RETURNING {string.Join(", ", Columns)}
+          """,
+         ColumnsExceptGenerated.Select(x => new KeyValuePair<string, object?>(x, record.GetValue(x))).ToDictionary(x => x.Key, x => x.Value)
+      );
+   }
+
+   /// <summary>
+   ///    Inserts a new record into the database asynchronously.
+   /// </summary>
+   public Task<TRecord> InsertAsync(TRecord record)
+   {
+      return _db.Dapper.QuerySingleAsync<TRecord>(
          $"""
           INSERT INTO {FullTableName} ({string.Join(", ", ColumnsExceptGenerated)}) 
           VALUES ({string.Join(", ", ColumnsExceptGenerated.Select(c => $":{c}"))})

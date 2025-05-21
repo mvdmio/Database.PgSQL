@@ -8,12 +8,18 @@
    </PropertyGroup>
 
    <ItemGroup>
-     <Content Include="QueryOperations\.verify\DbTableFindTests.ShouldReturnRecord_WhenRecordWithIdExists.verified.txt" />
+     <None Include="QueryOperations\.verify\DbTableFindTests.ShouldReturnRecord_WhenRecordWithIdExists.verified.txt">
+       <ParentFile>$([System.String]::Copy('%(FileName)').Split('.')[0].Split('(')[0])</ParentFile>
+       <DependentUpon>%(ParentFile).cs</DependentUpon>
+     </None>
      <Content Include="QueryOperations\.verify\DbTableInsertTests.ShouldInsertRecordAndReturnWithGeneratedValues.verified.txt" />
      <Content Include="QueryOperations\.verify\DbTableInsertTests.ShouldInsertRecordWithOptionalValues.verified.txt" />
    </ItemGroup>
 
    <ItemGroup>
+     <None Include="QueryOperations\.verify\DbTableFindAsyncTests.ShouldReturnRecord_WhenRecordWithIdExists.verified.txt" />
+     <None Include="QueryOperations\.verify\DbTableInsertAsyncTests.ShouldInsertRecordAndReturnWithGeneratedValues_Inserted.verified.txt" />
+     <None Include="QueryOperations\.verify\DbTableInsertAsyncTests.ShouldInsertRecordWithOptionalValues_Inserted.verified.txt" />
      <None Include="QueryOperations\.verify\DbTableInsertTests.ShouldInsertRecordAndReturnWithGeneratedValues_Inserted.verified.txt" />
      <None Include="QueryOperations\.verify\DbTableInsertTests.ShouldInsertRecordAndReturnWithGeneratedValues_Retrieved.verified.txt" />
      <None Include="QueryOperations\.verify\DbTableInsertTests.ShouldInsertRecordWithOptionalValues_Inserted.verified.txt" />

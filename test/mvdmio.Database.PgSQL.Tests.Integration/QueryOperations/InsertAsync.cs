@@ -4,11 +4,11 @@ using mvdmio.Database.PgSQL.Tests.Integration.Fixture.Entities;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.QueryOperations;
 
-public class DbTableInsertTests : TestBase
+public class DbTableInsertAsyncTests : TestBase
 {
    private TestDbContext _dbContext = null!;
    
-   public DbTableInsertTests(TestFixture fixture)
+   public DbTableInsertAsyncTests(TestFixture fixture)
       : base(fixture)
    {
    }
@@ -28,18 +28,18 @@ public class DbTableInsertTests : TestBase
       var record = new SimpleRecord(id, "Test Value");
       
       // Act
-      var result = _dbContext.SimpleTable.Insert(record);
+      var result = await _dbContext.SimpleTable.InsertAsync(record);
          
       // Assert
       result.Should().NotBeNull();
       await Verify(result, VerifySettings).UseMethodName("ShouldInsertRecordAndReturnWithGeneratedValues_Inserted");
       
       // Verify the record was actually inserted
-      var dbRecord = _dbContext.SimpleTable.Find(id);
+      var dbRecord = await _dbContext.SimpleTable.FindAsync(id);
       dbRecord.Should().NotBeNull();
       await Verify(dbRecord, VerifySettings).UseMethodName("ShouldInsertRecordAndReturnWithGeneratedValues_Retrieved");
    }
-   
+
    [Fact]
    public async Task ShouldInsertRecordWithOptionalValues()
    {
@@ -51,32 +51,32 @@ public class DbTableInsertTests : TestBase
       };
       
       // Act
-      var result = _dbContext.SimpleTable.Insert(record);
+      var result = await _dbContext.SimpleTable.InsertAsync(record);
          
       // Assert
       result.Should().NotBeNull();
       await Verify(result, VerifySettings).UseMethodName("ShouldInsertRecordWithOptionalValues_Inserted");
       
       // Verify the record was actually inserted
-      var dbRecord = _dbContext.SimpleTable.Find(id);
+      var dbRecord = await _dbContext.SimpleTable.FindAsync(id);
       dbRecord.Should().NotBeNull();
       await Verify(dbRecord, VerifySettings).UseMethodName("ShouldInsertRecordWithOptionalValues_Retrieved");
    }
-   
+
    [Fact]
-   public void ShouldThrowException_WhenRecordWithSameIdAlreadyExists()
+   public async Task ShouldThrowException_WhenRecordWithSameIdAlreadyExists()
    {
       // Arrange
       const long id = 1;
       var record1 = new SimpleRecord(id, "Test Value 1");
       var record2 = new SimpleRecord(id, "Test Value 2");
       
-      _dbContext.SimpleTable.Insert(record1);
+      await _dbContext.SimpleTable.InsertAsync(record1);
       
       // Act
-      var act = () => _dbContext.SimpleTable.Insert(record2);
+      var act = () => _dbContext.SimpleTable.InsertAsync(record2);
          
       // Assert
-      act.Should().Throw<Exception>();
+      await act.Should().ThrowAsync<Exception>();
    }
 }
