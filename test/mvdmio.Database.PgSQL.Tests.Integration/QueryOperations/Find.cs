@@ -42,7 +42,7 @@ public class DbTableFindTests : TestBase
       
       // Act
       var result = _dbContext.SimpleTable.Find(id);
-         
+      
       // Assert
       result.Should().NotBeNull();
       await Verify(result, VerifySettings);
