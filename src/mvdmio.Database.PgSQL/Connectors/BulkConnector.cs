@@ -98,9 +98,9 @@ public class BulkConnector
    /// <param name="ignoreErrors">Flag for ignoring errors. Will not throw exceptions when enabled.</param>
    /// <typeparam name="T">The Type of the data to insert</typeparam>
    /// <returns>A task for asynchronous awaiting.</returns>
-   public Task UpsertAsync<T>(string tableName, string onConflictColumn, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, bool ignoreErrors = false)
+   public Task UpsertAsync<T>(string tableName, string onConflictColumn, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, bool ignoreErrors = false, CancellationToken ct = default)
    {
-      return UpsertAsync(tableName, [ onConflictColumn ], items, columnValueMapping, ignoreErrors);
+      return UpsertAsync(tableName, [ onConflictColumn ], items, columnValueMapping, ignoreErrors, ct);
    }
    
    /// <summary>
@@ -114,7 +114,7 @@ public class BulkConnector
    /// <typeparam name="T">The Type of the data to insert</typeparam>
    /// <returns>A task for asynchronous awaiting.</returns>
    [SuppressMessage("ReSharper", "PossibleMultipleEnumeration", Justification = "Multiple enumerations are not a problem here.")]
-   public async Task UpsertAsync<T>(string tableName, string[] onConflictColumns, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, bool ignoreErrors = false)
+   public async Task UpsertAsync<T>(string tableName, string[] onConflictColumns, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, bool ignoreErrors = false, CancellationToken ct = default)
    {
       if (!items.Any())
          return;
@@ -125,9 +125,9 @@ public class BulkConnector
 
       await _db.InTransactionAsync(
          async () => {
-            await _db.Dapper.ExecuteAsync($"CREATE TEMP TABLE {tempTableName} (LIKE {tableName});");
+            await _db.Dapper.ExecuteAsync($"CREATE TEMP TABLE {tempTableName} (LIKE {tableName} INCLUDING DEFAULTS);");
 
-            await CopyAsync(tempTableName, items, columnValueMapping, ignoreErrors);
+            await CopyAsync(tempTableName, items, columnValueMapping, ignoreErrors, ct);
 
             await _db.Dapper.ExecuteAsync(
                $"""
