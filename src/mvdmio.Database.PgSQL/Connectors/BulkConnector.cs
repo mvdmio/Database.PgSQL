@@ -125,7 +125,7 @@ public class BulkConnector
 
       await _db.InTransactionAsync(
          async () => {
-            await _db.Dapper.ExecuteAsync($"CREATE TEMP TABLE {tempTableName} (LIKE {tableName} INCLUDING DEFAULTS);");
+            await _db.Dapper.ExecuteAsync($"CREATE TEMP TABLE {tempTableName} (LIKE {tableName} INCLUDING DEFAULTS INCLUDING IDENTITY);");
 
             await CopyAsync(tempTableName, items, columnValueMapping, ignoreErrors, ct);
 

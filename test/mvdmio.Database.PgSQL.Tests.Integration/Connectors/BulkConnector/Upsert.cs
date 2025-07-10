@@ -27,6 +27,7 @@ public class BulkConnectorUpsertTests : TestBase
       await Db.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS test_upsert (
+            id              bigint           NOT NULL GENERATED ALWAYS AS IDENTITY, 
             integer         integer          NOT NULL,
             float           real             NOT NULL,
             double          double precision NOT NULL,
