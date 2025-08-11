@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
    <PropertyGroup>
-      <TargetFramework>netstandard2.0</TargetFramework>
+      <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
       <ImplicitUsings>enable</ImplicitUsings>
       <Nullable>enable</Nullable>
       <LangVersion>latest</LangVersion>
@@ -12,9 +12,9 @@
    </PropertyGroup>
 
    <PropertyGroup>
-      <Version>0.2.6</Version>
+      <Version>0.3.0</Version>
       <Title>mvdmio.Database.PgSQL</Title>
-      <Description>PostgreSQL database interaction including migrations and ORM.</Description>
+      <Description>PostgreSQL database interaction including migrations.</Description>
       <Company>mvdmio</Company>
       <Authors>Michiel van der Meer</Authors>
       <PackageReadmeFile>Readme.md</PackageReadmeFile>
@@ -25,14 +25,7 @@
       <None Include="..\..\LICENSE" PackagePath="" Pack="true" />
       <None Include="..\..\Readme.md" PackagePath="" Pack="true" />
    </ItemGroup>
-   
-   <ItemGroup>
-      <ProjectReference Include="..\mvdmio.Database.PgSQL.SourceGenerators\mvdmio.Database.PgSQL.SourceGenerators.csproj" ReferenceOutputAssembly="false" />
 
-      <!-- Pack the source generator binary -->
-      <None Include="..\mvdmio.Database.PgSQL.SourceGenerators\bin\$(Configuration)\netstandard2.0\mvdmio.Database.PgSQL.SourceGenerators.dll" PackagePath="analyzers\dotnet\cs" Pack="true" />
-   </ItemGroup>
-   
    <ItemGroup>
       <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
          <_Parameter1>mvdmio.Database.PgSQL.Tests.Unit</_Parameter1>
@@ -41,17 +34,17 @@
          <_Parameter1>mvdmio.Database.PgSQL.Tests.Integration</_Parameter1>
       </AssemblyAttribute>
    </ItemGroup>
-   
+
    <ItemGroup>
-     <PackageReference Include="Dapper" Version="2.1.66" />
-     <PackageReference Include="JetBrains.Annotations" Version="2024.3.0" />
-     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.5" />
-     <PackageReference Include="Npgsql" Version="8.0.7" />
-     <PackageReference Include="PolySharp" Version="1.15.0">
-       <PrivateAssets>all</PrivateAssets>
-       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-     </PackageReference>
-     <PackageReference Include="Portable.System.DateTimeOnly" Version="9.0.0" />
+      <PackageReference Include="Dapper" Version="2.1.66" />
+      <PackageReference Include="JetBrains.Annotations" Version="2025.2.0" />
+      <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.8" />
+      <PackageReference Include="Npgsql" Version="9.0.3" />
+      <PackageReference Include="PolySharp" Version="1.15.0">
+         <PrivateAssets>all</PrivateAssets>
+         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      </PackageReference>
+      <PackageReference Include="Portable.System.DateTimeOnly" Version="9.0.0" />
    </ItemGroup>
-   
+
 </Project>

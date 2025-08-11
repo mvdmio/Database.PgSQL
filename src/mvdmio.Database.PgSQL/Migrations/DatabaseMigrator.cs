@@ -43,12 +43,6 @@ public class DatabaseMigrator : IDatabaseMigrator
    }
 
    /// <inheritdoc />
-   public IEnumerable<ExecutedMigrationModel> RetrieveAlreadyExecutedMigrations()
-   {
-      return AsyncHelper.RunSync(() => RetrieveAlreadyExecutedMigrationsAsync());
-   }
-
-   /// <inheritdoc />
    public async Task<IEnumerable<ExecutedMigrationModel>> RetrieveAlreadyExecutedMigrationsAsync(CancellationToken cancellationToken = default)
    {
       return await _connection.Dapper.QueryAsync<ExecutedMigrationModel>(
@@ -60,12 +54,6 @@ public class DatabaseMigrator : IDatabaseMigrator
          FROM mvdmio.migrations
          """
       );
-   }
-
-   /// <inheritdoc />
-   public void MigrateDatabaseToLatest()
-   {
-      AsyncHelper.RunSync(() => MigrateDatabaseToLatestAsync());
    }
 
    /// <inheritdoc />
@@ -90,12 +78,6 @@ public class DatabaseMigrator : IDatabaseMigrator
             throw new MigrationException(migration, e);
          }
       }
-   }
-
-   /// <inheritdoc />
-   public void Run(IDbMigration migration)
-   {
-      AsyncHelper.RunSync(() => RunAsync(migration));
    }
 
    /// <inheritdoc />

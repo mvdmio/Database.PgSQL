@@ -17,11 +17,6 @@ public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
 
    private NpgsqlConnection? _openConnection;
 
-   /// <summary>
-   ///   Retrieve the connection to the database. This will open the connection if it is not already open.
-   /// </summary>
-   public NpgsqlConnection Connection => _openConnection ?? _datasource.OpenConnection();
-
    /// <inheritdoc cref="DapperDatabaseConnector" />
    public DapperDatabaseConnector Dapper { get; }
 

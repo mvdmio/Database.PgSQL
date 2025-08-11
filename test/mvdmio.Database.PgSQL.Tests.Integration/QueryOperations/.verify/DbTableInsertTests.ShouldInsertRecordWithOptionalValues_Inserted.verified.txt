@@ -1,5 +1,0 @@
-﻿{
-  Id: 1,
-  RequiredStringValue: Test Value,
-  OptionalStringValue: Optional Value
-}

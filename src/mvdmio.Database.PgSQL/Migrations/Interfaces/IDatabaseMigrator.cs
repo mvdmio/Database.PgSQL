@@ -10,27 +10,12 @@ public interface IDatabaseMigrator
    /// <summary>
    ///    Retrieve all migrations that have already been executed.
    /// </summary>
-   IEnumerable<ExecutedMigrationModel> RetrieveAlreadyExecutedMigrations();
-
-   /// <summary>
-   ///    Retrieve all migrations that have already been executed.
-   /// </summary>
    Task<IEnumerable<ExecutedMigrationModel>> RetrieveAlreadyExecutedMigrationsAsync(CancellationToken cancellationToken);
 
    /// <summary>
    ///    Run all migrations that have not yet been executed in order.
    /// </summary>
-   void MigrateDatabaseToLatest();
-
-   /// <summary>
-   ///    Run all migrations that have not yet been executed in order.
-   /// </summary>
    Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken);
-
-   /// <summary>
-   ///    Run a migration on the database. Returns true if the migration ran successfully. False otherwise.
-   /// </summary>
-   void Run(IDbMigration migration);
 
    /// <summary>
    ///    Run a migration on the database. Returns true if the migration ran successfully. False otherwise.

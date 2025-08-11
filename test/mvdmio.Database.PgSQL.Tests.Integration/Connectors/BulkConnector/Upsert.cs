@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+﻿using AwesomeAssertions;
 using mvdmio.Database.PgSQL.Models;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 using NpgsqlTypes;
