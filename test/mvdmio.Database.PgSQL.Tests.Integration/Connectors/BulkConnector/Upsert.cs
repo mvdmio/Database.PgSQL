@@ -47,7 +47,7 @@ public class BulkConnectorUpsertTests : TestBase
       var items = TestItem.Create(10);
       
       // Act
-      await Db.Bulk.UpsertAsync("test_upsert", [ "integer" ], items, _columnMapping);
+      await Db.Bulk.InsertOrUpdate("test_upsert", [ "integer" ], items, _columnMapping);
 
       // Assert
       var result = (await Db.Dapper.QueryAsync<TestItem>(
@@ -82,7 +82,7 @@ public class BulkConnectorUpsertTests : TestBase
 
       // Act
       await Db.Bulk.CopyAsync("test_upsert", items, _columnMapping, ct: TestContext.Current.CancellationToken);
-      await Db.Bulk.UpsertAsync("test_upsert", [ "integer" ], updateItems, _columnMapping);
+      await Db.Bulk.InsertOrUpdate("test_upsert", [ "integer" ], updateItems, _columnMapping);
 
       // Assert
       var result = (await Db.Dapper.QueryAsync<TestItem>(
