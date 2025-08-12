@@ -11,7 +11,7 @@ namespace mvdmio.Database.PgSQL;
 ///    Provides common methods for database access.
 /// </summary>
 [PublicAPI]
-public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
+public class DatabaseConnection : IDisposable, IAsyncDisposable
 {
    private readonly NpgsqlDataSource _datasource;
 
@@ -29,7 +29,7 @@ public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
    internal NpgsqlTransaction? Transaction { get; private set; }
 
    /// <summary>
-   ///   
+   ///    Create a new database connection for a database that is reachable with the given connection string.   
    /// </summary>
    /// <param name="connectionString"></param>
    public DatabaseConnection(string connectionString)
@@ -38,7 +38,7 @@ public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
    }
    
    /// <summary>
-   ///    Create a new database object for a database that is reachable with the given connection string.
+   ///    Create a new database connection for the given datasource.
    /// </summary>
    public DatabaseConnection(NpgsqlDataSource dataSource)
    {
