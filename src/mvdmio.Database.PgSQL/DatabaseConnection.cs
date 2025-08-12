@@ -29,21 +29,21 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    internal NpgsqlTransaction? Transaction { get; private set; }
 
    /// <summary>
-   ///    Create a new database connection for a database that is reachable with the given connection string.   
+   ///    Create a new database connection for a database that is reachable with the given connection string.
    /// </summary>
    /// <param name="connectionString"></param>
    public DatabaseConnection(string connectionString)
       : this(new NpgsqlDataSourceBuilder(connectionString).Build())
-   {  
+   {
    }
-   
+
    /// <summary>
    ///    Create a new database connection for the given datasource.
    /// </summary>
    public DatabaseConnection(NpgsqlDataSource dataSource)
    {
       _datasource = dataSource;
-      
+
       Dapper = new DapperDatabaseConnector(this);
       Management = new ManagementDatabaseConnector(this);
       Bulk = new BulkConnector(this);
@@ -52,14 +52,36 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <inheritdoc />
    public async ValueTask DisposeAsync()
    {
+      await DisposeAsync(true);
+      GC.SuppressFinalize(this);
+   }
+
+   protected virtual async ValueTask DisposeAsync(bool disposing)
+   {
+      if (!disposing)
+         return;
+
       if (_openConnection is not null)
+      {
          await _openConnection.DisposeAsync();
+         _openConnection = null;
+      }
    }
 
    /// <inheritdoc />
    public void Dispose()
    {
+      Dispose(true);
+      GC.SuppressFinalize(this);
+   }
+
+   protected virtual void Dispose(bool disposing)
+   {
+      if (!disposing)
+         return;
+
       _openConnection?.Dispose();
+      _openConnection = null;
    }
 
    /// <summary>
@@ -252,7 +274,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       try
       {
          action.Invoke();
-         
+
          if(transactionStarted)
             CommitTransaction();
       }
@@ -264,7 +286,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
          throw;
       }
    }
-   
+
    /// <summary>
    ///   Execute the given action in a transaction. If the action fails, the transaction will be rolled back.
    /// </summary>
@@ -275,7 +297,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       try
       {
          await action.Invoke();
-         
+
          if(transactionStarted)
             await CommitTransactionAsync();
       }
@@ -283,15 +305,14 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       {
          if (transactionStarted)
             await RollbackTransactionAsync();
-         
+
          throw;
       }
    }
-   
+
    internal void OpenConnectionAndExecute(string sql, Action<NpgsqlConnection> connectionDelegate)
    {
-      if (sql is null)
-         throw new ArgumentNullException(nameof(sql));
+      ArgumentNullException.ThrowIfNull(sql);
 
       var connectionOpened = false;
 
@@ -313,8 +334,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
 
    internal async Task OpenConnectionAndExecuteAsync(string sql, Func<NpgsqlConnection, Task> connectionDelegate, CancellationToken ct = default)
    {
-      if (sql is null)
-         throw new ArgumentNullException(nameof(sql));
+      ArgumentNullException.ThrowIfNull(sql);
 
       var connectionOpened = false;
 
@@ -336,8 +356,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
 
    internal T OpenConnectionAndExecute<T>(string sql, Func<NpgsqlConnection, T> connectionDelegate)
    {
-      if (sql is null)
-         throw new ArgumentNullException(nameof(sql));
+      ArgumentNullException.ThrowIfNull(sql);
 
       var connectionOpened = false;
 
@@ -359,9 +378,8 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
 
    internal async Task<T> OpenConnectionAndExecuteAsync<T>(string sql, Func<NpgsqlConnection, Task<T>> connectionDelegate)
    {
-      if (sql is null)
-         throw new ArgumentNullException(nameof(sql));
-      
+      ArgumentNullException.ThrowIfNull(sql);
+
       var connectionOpened = false;
 
       try

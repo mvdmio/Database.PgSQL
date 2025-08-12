@@ -5,6 +5,7 @@ public abstract class TestBase : IAsyncLifetime
    private readonly TestFixture _fixture;
    private readonly DatabaseConnectionFactory _databaseConnectionFactory;
 
+   protected static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
    protected VerifySettings VerifySettings { get; }
    protected DatabaseConnection Db { get; private set; } = null!;
 
@@ -16,16 +17,17 @@ public abstract class TestBase : IAsyncLifetime
       VerifySettings = new VerifySettings();
       VerifySettings.UseDirectory(".verify");
    }
-   
+
    public virtual async ValueTask InitializeAsync()
    {
       Db = _databaseConnectionFactory.ForConnectionString(_fixture.DbContainer.GetConnectionString());
-      
+
       await Db.BeginTransactionAsync();
    }
 
    public virtual async ValueTask DisposeAsync()
    {
       await Db.RollbackTransactionAsync();
+      await _databaseConnectionFactory.DisposeAsync();
    }
 }

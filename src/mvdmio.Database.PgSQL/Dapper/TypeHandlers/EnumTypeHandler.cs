@@ -1,5 +1,6 @@
 ﻿using System.Data;
 using Dapper;
+using System.Globalization;
 
 namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers;
 
@@ -18,10 +19,10 @@ public class EnumAsStringTypeHandler<T> : SqlMapper.TypeHandler<T>
    /// <inheritdoc />
    public override T Parse(object value)
    {
-      var stringValue = Convert.ToString(value);
+      var stringValue = Convert.ToString(value, CultureInfo.InvariantCulture);
       if (stringValue is null)
          return default;
 
-      return (T)Enum.Parse(typeof(T), stringValue);
+      return Enum.Parse<T>(stringValue);
    }
 }

@@ -82,9 +82,9 @@ public class BulkConnector
    /// <param name="ct">The cancellation token</param>
    /// <typeparam name="T">The Type of the data to insert</typeparam>
    /// <returns>A task for asynchronous awaiting.</returns>
-   public Task InsertOrUpdate<T>(string tableName, string onConflictColumn, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
+   public Task InsertOrUpdateAsync<T>(string tableName, string onConflictColumn, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
-      return InsertOrUpdate(tableName, [ onConflictColumn ], items, columnValueMapping, ct);
+      return InsertOrUpdateAsync(tableName, [ onConflictColumn ], items, columnValueMapping, ct);
    }
 
    /// <summary>
@@ -97,9 +97,9 @@ public class BulkConnector
    /// <param name="ct">The cancellation token</param>
    /// <typeparam name="T">The Type of the data to insert</typeparam>
    /// <returns>A task for asynchronous awaiting.</returns>
-   public Task InsertOrUpdate<T>(string tableName, string[] onConflictColumns, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
+   public Task InsertOrUpdateAsync<T>(string tableName, string[] onConflictColumns, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
-      return InsertOrUpdate(
+      return InsertOrUpdateAsync(
          tableName,
          new UpsertConfiguration {
             OnConflictColumns = onConflictColumns
@@ -121,7 +121,7 @@ public class BulkConnector
    /// <typeparam name="T">The Type of the data to insert</typeparam>
    /// <returns>A task for asynchronous awaiting.</returns>
    [SuppressMessage("ReSharper", "PossibleMultipleEnumeration", Justification = "Multiple enumerations are not a problem here.")]
-   public async Task InsertOrUpdate<T>(string tableName, UpsertConfiguration upsertConfiguration, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
+   public async Task InsertOrUpdateAsync<T>(string tableName, UpsertConfiguration upsertConfiguration, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
       if (!items.Any())
          return;
@@ -163,9 +163,9 @@ public class BulkConnector
    /// <param name="ct">The cancellation token</param>
    /// <typeparam name="T">The Type of the data to insert</typeparam>
    /// <returns>A task for asynchronous awaiting.</returns>
-   public Task InsertOrSkip<T>(string tableName, string onConflictColumn, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
+   public Task InsertOrSkipAsync<T>(string tableName, string onConflictColumn, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
-      return InsertOrSkip(tableName, [ onConflictColumn ], items, columnValueMapping, ct);
+      return InsertOrSkipAsync(tableName, [ onConflictColumn ], items, columnValueMapping, ct);
    }
    
    /// <summary>
@@ -178,9 +178,9 @@ public class BulkConnector
    /// <param name="ct">The cancellation token</param>
    /// <typeparam name="T">The Type of the data to insert</typeparam>
    /// <returns>A task for asynchronous awaiting.</returns>
-   public Task InsertOrSkip<T>(string tableName, string[] onConflictColumns, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
+   public Task InsertOrSkipAsync<T>(string tableName, string[] onConflictColumns, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
-      return InsertOrSkip(
+      return InsertOrSkipAsync(
          tableName,
          new UpsertConfiguration {
             OnConflictColumns = onConflictColumns
@@ -202,7 +202,7 @@ public class BulkConnector
    /// <typeparam name="T">The Type of the data to insert</typeparam>
    /// <returns>A task for asynchronous awaiting.</returns>
    [SuppressMessage("ReSharper", "PossibleMultipleEnumeration", Justification = "Multiple enumerations are not a problem here.")]
-   public async Task InsertOrSkip<T>(string tableName, UpsertConfiguration upsertConfiguration, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
+   public async Task InsertOrSkipAsync<T>(string tableName, UpsertConfiguration upsertConfiguration, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
       if (!items.Any())
          return;

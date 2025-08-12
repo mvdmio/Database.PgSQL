@@ -23,11 +23,11 @@ public class BulkConnectorUpsertTests : TestBase
    public override async ValueTask InitializeAsync()
    {
       await base.InitializeAsync();
-      
+
       await Db.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS test_upsert (
-            id              bigint           NOT NULL GENERATED ALWAYS AS IDENTITY, 
+            id              bigint           NOT NULL GENERATED ALWAYS AS IDENTITY,
             integer         integer          NOT NULL,
             float           real             NOT NULL,
             double          double precision NOT NULL,
@@ -39,21 +39,21 @@ public class BulkConnectorUpsertTests : TestBase
          """
       );
    }
-   
+
    [Fact]
    public async Task WithEmptyTable()
    {
       // Arrange
       var items = TestItem.Create(10);
-      
+
       // Act
-      await Db.Bulk.InsertOrUpdate("test_upsert", [ "integer" ], items, _columnMapping);
+      await Db.Bulk.InsertOrUpdateAsync("test_upsert", [ "integer" ], items, _columnMapping, CancellationToken);
 
       // Assert
       var result = (await Db.Dapper.QueryAsync<TestItem>(
          "SELECT * FROM test_upsert ORDER BY integer"
       )).ToArray();
-      
+
       result.Should().HaveCount(10);
       result[0].Text.Should().Be("Test 1");
       result[1].Text.Should().Be("Test 2");
@@ -66,7 +66,7 @@ public class BulkConnectorUpsertTests : TestBase
       result[8].Text.Should().Be("Test 9");
       result[9].Text.Should().Be("Test 10");
    }
-   
+
    [Fact]
    public async Task WithExistingValues()
    {
@@ -81,14 +81,14 @@ public class BulkConnectorUpsertTests : TestBase
       );
 
       // Act
-      await Db.Bulk.CopyAsync("test_upsert", items, _columnMapping, ct: TestContext.Current.CancellationToken);
-      await Db.Bulk.InsertOrUpdate("test_upsert", [ "integer" ], updateItems, _columnMapping);
+      await Db.Bulk.CopyAsync("test_upsert", items, _columnMapping, CancellationToken);
+      await Db.Bulk.InsertOrUpdateAsync("test_upsert", [ "integer" ], updateItems, _columnMapping, CancellationToken);
 
       // Assert
       var result = (await Db.Dapper.QueryAsync<TestItem>(
          "SELECT * FROM test_upsert ORDER BY integer"
       )).ToArray();
-      
+
       result.Should().HaveCount(10);
       result[0].Text.Should().Be("Test 1 Updated");
       result[1].Text.Should().Be("Test 2 Updated");
@@ -102,7 +102,7 @@ public class BulkConnectorUpsertTests : TestBase
       result[9].Text.Should().Be("Test 10 Updated");
    }
 
-   private record TestItem
+   private sealed record TestItem
    {
       public required int Integer { get; init; }
       public required float Float { get; init; }

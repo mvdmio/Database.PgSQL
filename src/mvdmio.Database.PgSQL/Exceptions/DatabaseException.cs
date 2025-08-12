@@ -5,8 +5,8 @@ namespace mvdmio.Database.PgSQL.Exceptions;
 /// <summary>
 ///   Base class for all database-related exceptions.
 /// </summary>
-[PublicAPI] 
-public class DatabaseException : ApplicationException
+[PublicAPI]
+public class DatabaseException : Exception
 {
    /// <inheritdoc />
    public DatabaseException()

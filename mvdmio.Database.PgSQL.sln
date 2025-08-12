@@ -15,6 +15,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".solution", ".solution", "{
 		README.md = README.md
 		.gitattributes = .gitattributes
 		.github\workflows\publish-nuget.yml = .github\workflows\publish-nuget.yml
+		.editorconfig = .editorconfig
 	EndProjectSection
 EndProject
 Global
