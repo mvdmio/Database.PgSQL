@@ -148,10 +148,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    ///    Starts a new transaction on the connection if no transaction is already active.
    ///    Returns true when a transaction was started.
    /// </summary>
-   /// <param name="isolationLevel">
-   ///    The isolation level to use for this transaction. Defaults to
-   ///    <see cref="IsolationLevel.ReadCommitted" />
-   /// </param>
+   /// <param name="isolationLevel">The isolation level to use for this transaction. Defaults to <see cref="IsolationLevel.ReadCommitted" /></param>
    /// <exception cref="InvalidOperationException">Thrown when a transaction has already been started on the connection.</exception>
    public bool BeginTransaction(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
    {
@@ -166,18 +163,16 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <summary>
    ///    Starts a new transaction on the connection.
    /// </summary>
-   /// <param name="isolationLevel">
-   ///    The isolation level to use for this transaction. Defaults to
-   ///    <see cref="IsolationLevel.ReadCommitted" />
-   /// </param>
+   /// <param name="isolationLevel">The isolation level to use for this transaction. Defaults to <see cref="IsolationLevel.ReadCommitted" /></param>
+   /// <param name="ct">An optional token to cancel the asynchronous operation. The default value is None.</param>
    /// <exception cref="InvalidOperationException">Thrown when a transaction has already been started on the connection.</exception>
-   public async Task<bool> BeginTransactionAsync(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
+   public async Task<bool> BeginTransactionAsync(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted, CancellationToken ct = default)
    {
       if (Transaction is not null)
          return false;
 
-      await OpenAsync();
-      Transaction = _openConnection.BeginTransaction(isolationLevel);
+      await OpenAsync(ct);
+      Transaction = await _openConnection.BeginTransactionAsync(isolationLevel, ct);
       return true;
    }
 
