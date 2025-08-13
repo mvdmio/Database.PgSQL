@@ -12,7 +12,7 @@
    </PropertyGroup>
 
    <PropertyGroup>
-      <Version>0.3.3</Version>
+      <Version>0.3.4</Version>
       <Title>mvdmio.Database.PgSQL</Title>
       <Description>PostgreSQL database interaction including migrations.</Description>
       <Company>mvdmio</Company>

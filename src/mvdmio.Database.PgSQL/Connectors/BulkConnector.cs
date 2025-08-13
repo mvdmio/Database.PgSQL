@@ -2,6 +2,7 @@
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Models;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace mvdmio.Database.PgSQL.Connectors;
 
@@ -12,7 +13,7 @@ namespace mvdmio.Database.PgSQL.Connectors;
 public class BulkConnector
 {
    private readonly DatabaseConnection _db;
-   
+
    /// <summary>
    ///    Constructor.
    /// </summary>
@@ -46,6 +47,8 @@ public class BulkConnector
                      var value = valueFunc.Invoke(item);
                      if (value.Value is null)
                         await writer.WriteNullAsync(ct);
+                     else if (value.Type is NpgsqlDbType.Unknown)
+                        await writer.WriteAsync(value.Value, ct);
                      else
                         await writer.WriteAsync(value.Value, value.Type, ct);
                   }
@@ -139,7 +142,7 @@ public class BulkConnector
             var onConflictWhereClause = string.IsNullOrEmpty(upsertConfiguration.OnConflictWhereClause)
                ? string.Empty
                : $"WHERE {upsertConfiguration.OnConflictWhereClause}";
-            
+
             await _db.Dapper.ExecuteAsync(
                $"""
                 INSERT INTO {tableName} ({string.Join(", ", allColumns)})
@@ -152,7 +155,7 @@ public class BulkConnector
          }
       );
    }
-   
+
    /// <summary>
    ///   Do an insert on a table. Creates a temp-table, copies the data to it and then does an insert on the original table. Rows that conflict with existing data are skipped.
    /// </summary>
@@ -167,7 +170,7 @@ public class BulkConnector
    {
       return InsertOrSkipAsync(tableName, [ onConflictColumn ], items, columnValueMapping, ct);
    }
-   
+
    /// <summary>
    ///   Do an insert on a table. Creates a temp-table, copies the data to it and then does an insert on the original table. Rows that conflict with existing data are skipped.
    /// </summary>
@@ -190,7 +193,7 @@ public class BulkConnector
          ct
       );
    }
-   
+
    /// <summary>
    ///   Do an insert on a table. Creates a temp-table, copies the data to it and then does an insert on the original table. Rows that conflict with existing data are skipped.
    /// </summary>
@@ -209,7 +212,7 @@ public class BulkConnector
 
       var tempTableName = $"temp_{Guid.NewGuid():N}";
       var allColumns = columnValueMapping.Keys;
-      
+
       await _db.InTransactionAsync(
          async () => {
             await _db.Dapper.ExecuteAsync($"CREATE TEMP TABLE {tempTableName} (LIKE {tableName} INCLUDING CONSTRAINTS INCLUDING DEFAULTS INCLUDING GENERATED INCLUDING IDENTITY);");
@@ -219,7 +222,7 @@ public class BulkConnector
             var onConflictWhereClause = string.IsNullOrEmpty(upsertConfiguration.OnConflictWhereClause)
                ? string.Empty
                : $"WHERE {upsertConfiguration.OnConflictWhereClause}";
-            
+
             await _db.Dapper.ExecuteAsync(
                $"""
                 INSERT INTO {tableName} ({string.Join(", ", allColumns)})
