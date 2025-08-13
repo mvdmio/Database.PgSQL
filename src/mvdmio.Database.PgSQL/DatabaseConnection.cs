@@ -318,7 +318,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
       catch (Exception exception)
       {
-         throw new DatabaseException(sql, exception);
+         throw new QueryException(sql, exception);
       }
       finally
       {
@@ -340,7 +340,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
       catch (Exception exception)
       {
-         throw new DatabaseException(sql, exception);
+         throw new QueryException(sql, exception);
       }
       finally
       {
@@ -362,7 +362,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
       catch (Exception exception)
       {
-         throw new DatabaseException(sql, exception);
+         throw new QueryException(sql, exception);
       }
       finally
       {
@@ -384,7 +384,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
       catch (Exception exception)
       {
-         throw new DatabaseException(sql, exception);
+         throw new QueryException(sql, exception);
       }
       finally
       {
