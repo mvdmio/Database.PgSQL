@@ -76,6 +76,11 @@ public class DbValue
    public static implicit operator DbValue(DateTime? value) =>  new(value, NpgsqlDbType.TimestampTz);
 
    /// <summary>
+   ///   Implicit conversion for <see cref="DateTimeOffset"/> values.
+   /// </summary>
+   public static implicit operator DbValue(DateTimeOffset? value) =>  new(value, NpgsqlDbType.TimestampTz);
+
+   /// <summary>
    ///   Implicit conversion for <see cref="DateOnly"/> values.
    /// </summary>
    public static implicit operator DbValue(DateOnly? value) => new(value, NpgsqlDbType.Date);
