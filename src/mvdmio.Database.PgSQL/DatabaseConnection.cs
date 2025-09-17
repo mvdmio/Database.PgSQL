@@ -305,6 +305,38 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
    }
 
+
+   /// <inheritdoc cref="NpgsqlConnection.Wait(TimeSpan)"/>
+   public bool Wait(TimeSpan? timeout = null)
+   {
+      return OpenConnectionAndExecute(
+         string.Empty,
+         x => {
+            if (timeout is not null)
+               return x.Wait(timeout.Value);
+
+            x.Wait();
+            return true;
+         }
+      );
+   }
+   
+   /// <inheritdoc cref="NpgsqlConnection.WaitAsync(TimeSpan, CancellationToken)"/>
+   public async Task<bool> WaitAsync(TimeSpan? timeout = null, CancellationToken ct = default)
+   {
+      return await OpenConnectionAndExecuteAsync(
+         string.Empty,
+         async x => {
+            if (timeout is not null)
+               return await x.WaitAsync(timeout.Value, ct);
+
+            await x.WaitAsync(ct);
+            return true;
+         },
+         ct
+      );
+   }
+   
    internal void OpenConnectionAndExecute(string sql, Action<NpgsqlConnection> connectionDelegate)
    {
       ArgumentNullException.ThrowIfNull(sql);
@@ -327,7 +359,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
    }
 
-   internal async Task OpenConnectionAndExecuteAsync(string sql, Func<NpgsqlConnection, Task> connectionDelegate, CancellationToken ct = default)
+   internal T OpenConnectionAndExecute<T>(string sql, Func<NpgsqlConnection, T> connectionDelegate)
    {
       ArgumentNullException.ThrowIfNull(sql);
 
