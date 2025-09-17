@@ -305,33 +305,44 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
    }
 
-   /// <inheritdoc cref="NpgsqlConnection.Wait(TimeSpan)"/>
-   public bool Wait(TimeSpan? timeout = null)
+   /// <inheritdoc cref="NpgsqlConnection.Wait()"/>
+   public void Wait()
    {
-      return OpenConnectionAndExecute(
+      OpenConnectionAndExecute(
          string.Empty,
          x => {
-            if (timeout is not null)
-               return x.Wait(timeout.Value);
-
             x.Wait();
-            return true;
          }
       );
    }
 
+   /// <inheritdoc cref="NpgsqlConnection.Wait(TimeSpan)"/>
+   public bool Wait(TimeSpan timeout)
+   {
+      return OpenConnectionAndExecute(
+         string.Empty,
+         x => x.Wait(timeout)
+      );
+   }
+
+   /// <inheritdoc cref="NpgsqlConnection.WaitAsync(CancellationToken)"/>
+   public async Task WaitAsync(CancellationToken ct = default)
+   {
+      await OpenConnectionAndExecuteAsync(
+         string.Empty,
+         async x => {
+            await x.WaitAsync(ct);
+         },
+         ct
+      );
+   }
+
    /// <inheritdoc cref="NpgsqlConnection.WaitAsync(TimeSpan, CancellationToken)"/>
-   public async Task<bool> WaitAsync(TimeSpan? timeout = null, CancellationToken ct = default)
+   public async Task<bool> WaitAsync(TimeSpan timeout, CancellationToken ct = default)
    {
       return await OpenConnectionAndExecuteAsync(
          string.Empty,
-         async x => {
-            if (timeout is not null)
-               return await x.WaitAsync(timeout.Value, ct);
-
-            await x.WaitAsync(ct);
-            return true;
-         },
+         async x => await x.WaitAsync(timeout, ct),
          ct
       );
    }
