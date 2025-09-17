@@ -12,7 +12,7 @@
    </PropertyGroup>
 
    <PropertyGroup>
-      <Version>0.3.8</Version>
+      <Version>0.3.9</Version>
       <Title>mvdmio.Database.PgSQL</Title>
       <Description>PostgreSQL database interaction including migrations.</Description>
       <Company>mvdmio</Company>
@@ -25,14 +25,7 @@
       <None Include="..\..\LICENSE" PackagePath="" Pack="true" />
       <None Include="..\..\Readme.md" PackagePath="" Pack="true" />
    </ItemGroup>
-   
-   <ItemGroup>
-      <ProjectReference Include="..\mvdmio.Database.PgSQL.SourceGenerators\mvdmio.Database.PgSQL.SourceGenerators.csproj" ReferenceOutputAssembly="false" />
-
-      <!-- Pack the source generator binary -->
-      <None Include="..\mvdmio.Database.PgSQL.SourceGenerators\bin\$(Configuration)\netstandard2.0\mvdmio.Database.PgSQL.SourceGenerators.dll" PackagePath="analyzers\dotnet\cs" Pack="true" />
-   </ItemGroup>
-   
+  
    <ItemGroup>
       <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
          <_Parameter1>mvdmio.Database.PgSQL.Tests.Unit</_Parameter1>
@@ -44,14 +37,14 @@
 
    <ItemGroup>
       <PackageReference Include="Dapper" Version="2.1.66" />
-      <PackageReference Include="JetBrains.Annotations" Version="2025.2.0" />
-      <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.8" />
+      <PackageReference Include="JetBrains.Annotations" Version="2025.2.2" />
+      <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.9" />
       <PackageReference Include="Npgsql" Version="9.0.3" />
       <PackageReference Include="PolySharp" Version="1.15.0">
          <PrivateAssets>all</PrivateAssets>
          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       </PackageReference>
-      <PackageReference Include="Portable.System.DateTimeOnly" Version="9.0.0" />
+      <PackageReference Include="Portable.System.DateTimeOnly" Version="9.0.1" />
    </ItemGroup>
 
 </Project>
