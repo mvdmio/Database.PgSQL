@@ -1,4 +1,5 @@
-﻿using System.Data;
+﻿using Dapper;
+using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Connectors;
@@ -306,43 +307,51 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    }
 
    /// <inheritdoc cref="NpgsqlConnection.Wait()"/>
-   public void Wait()
+   public void Wait(string channel)
    {
       OpenConnectionAndExecute(
          string.Empty,
-         x => {
-            x.Wait();
+         connection => {
+            connection.Execute($"LISTEN {channel}");
+            connection.Wait();
          }
       );
    }
 
    /// <inheritdoc cref="NpgsqlConnection.Wait(TimeSpan)"/>
-   public bool Wait(TimeSpan timeout)
+   public bool Wait(string channel, TimeSpan timeout)
    {
       return OpenConnectionAndExecute(
          string.Empty,
-         x => x.Wait(timeout)
+         connection => {
+            connection.Execute($"LISTEN {channel}");
+            return connection.Wait(timeout);
+         }
       );
    }
 
    /// <inheritdoc cref="NpgsqlConnection.WaitAsync(CancellationToken)"/>
-   public async Task WaitAsync(CancellationToken ct = default)
+   public async Task WaitAsync(string channel, CancellationToken ct = default)
    {
       await OpenConnectionAndExecuteAsync(
          string.Empty,
-         async x => {
-            await x.WaitAsync(ct);
+         async connection => {
+            await connection.ExecuteAsync("LISTEN {channel}");
+            await connection.WaitAsync(ct);
          },
          ct
       );
    }
 
    /// <inheritdoc cref="NpgsqlConnection.WaitAsync(TimeSpan, CancellationToken)"/>
-   public async Task<bool> WaitAsync(TimeSpan timeout, CancellationToken ct = default)
+   public async Task<bool> WaitAsync(string channel, TimeSpan timeout, CancellationToken ct = default)
    {
       return await OpenConnectionAndExecuteAsync(
          string.Empty,
-         async x => await x.WaitAsync(timeout, ct),
+         async connection => {
+            await connection.ExecuteAsync($"LISTEN {channel}");
+            return await connection.WaitAsync(timeout, ct);
+         },
          ct
       );
    }
