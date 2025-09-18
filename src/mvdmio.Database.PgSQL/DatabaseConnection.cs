@@ -309,51 +309,85 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <inheritdoc cref="NpgsqlConnection.Wait()"/>
    public void Wait(string channel)
    {
-      OpenConnectionAndExecute(
-         string.Empty,
-         connection => {
-            connection.Execute($"LISTEN {channel}");
-            connection.Wait();
-         }
-      );
+      var notificationConnection = _datasource.OpenConnection();
+
+      try
+      {
+         notificationConnection.ExecuteAsync($"LISTEN {channel}");
+         notificationConnection.Wait();
+      }
+      catch (Exception exception)
+      {
+         throw new QueryException($"LISTEN {channel}", exception);
+      }
+      finally
+      {
+         notificationConnection.Close();
+         notificationConnection.Dispose();
+      }
    }
 
    /// <inheritdoc cref="NpgsqlConnection.Wait(TimeSpan)"/>
    public bool Wait(string channel, TimeSpan timeout)
    {
-      return OpenConnectionAndExecute(
-         string.Empty,
-         connection => {
-            connection.Execute($"LISTEN {channel}");
-            return connection.Wait(timeout);
-         }
-      );
+      var notificationConnection = _datasource.OpenConnection();
+
+      try
+      {
+         notificationConnection.ExecuteAsync($"LISTEN {channel}");
+         return notificationConnection.Wait(timeout);
+      }
+      catch (Exception exception)
+      {
+         throw new QueryException($"LISTEN {channel}", exception);
+      }
+      finally
+      {
+         notificationConnection.Close();
+         notificationConnection.Dispose();
+      }
    }
 
    /// <inheritdoc cref="NpgsqlConnection.WaitAsync(CancellationToken)"/>
    public async Task WaitAsync(string channel, CancellationToken ct = default)
    {
-      await OpenConnectionAndExecuteAsync(
-         string.Empty,
-         async connection => {
-            await connection.ExecuteAsync("LISTEN {channel}");
-            await connection.WaitAsync(ct);
-         },
-         ct
-      );
+      var notificationConnection = await _datasource.OpenConnectionAsync(ct);
+
+      try
+      {
+         await notificationConnection.ExecuteAsync($"LISTEN {channel}");
+         await notificationConnection.WaitAsync(ct);
+      }
+      catch (Exception exception)
+      {
+         throw new QueryException($"LISTEN {channel}", exception);
+      }
+      finally
+      {
+         await notificationConnection.CloseAsync();
+         await notificationConnection.DisposeAsync();
+      }
    }
 
    /// <inheritdoc cref="NpgsqlConnection.WaitAsync(TimeSpan, CancellationToken)"/>
    public async Task<bool> WaitAsync(string channel, TimeSpan timeout, CancellationToken ct = default)
    {
-      return await OpenConnectionAndExecuteAsync(
-         string.Empty,
-         async connection => {
-            await connection.ExecuteAsync($"LISTEN {channel}");
-            return await connection.WaitAsync(timeout, ct);
-         },
-         ct
-      );
+      var notificationConnection = await _datasource.OpenConnectionAsync(ct);
+
+      try
+      {
+         await notificationConnection.ExecuteAsync($"LISTEN {channel}");
+         return await notificationConnection.WaitAsync(timeout, ct);
+      }
+      catch (Exception exception)
+      {
+         throw new QueryException($"LISTEN {channel}", exception);
+      }
+      finally
+      {
+         await notificationConnection.CloseAsync();
+         await notificationConnection.DisposeAsync();
+      }
    }
 
    internal void OpenConnectionAndExecute(string sql, Action<NpgsqlConnection> connectionDelegate)
