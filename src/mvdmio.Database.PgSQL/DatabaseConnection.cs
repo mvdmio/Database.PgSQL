@@ -358,6 +358,10 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
          await notificationConnection.ExecuteAsync($"LISTEN {channel}");
          await notificationConnection.WaitAsync(ct);
       }
+      catch (Exception ex) when (ex is TaskCanceledException or OperationCanceledException)
+      {
+         // Ignore
+      }
       catch (Exception exception)
       {
          throw new QueryException($"LISTEN {channel}", exception);
@@ -378,6 +382,11 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       {
          await notificationConnection.ExecuteAsync($"LISTEN {channel}");
          return await notificationConnection.WaitAsync(timeout, ct);
+      }
+      catch (Exception ex) when (ex is TaskCanceledException or OperationCanceledException)
+      {
+         // Ignore
+         return false;
       }
       catch (Exception exception)
       {
