@@ -463,7 +463,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
       catch (Exception ex) when (ex is TaskCanceledException or OperationCanceledException)
       {
-         // Ignore
+         throw; // Forward cancellation exceptions
       }
       catch (Exception exception)
       {
@@ -488,8 +488,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
       catch (Exception ex) when (ex is TaskCanceledException or OperationCanceledException)
       {
-         // Ignore
-         return false;
+         throw; // Forward cancellation exceptions
       }
       catch (Exception exception)
       {
