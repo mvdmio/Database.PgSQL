@@ -16,6 +16,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
 {
    private readonly NpgsqlDataSource _datasource;
 
+   private readonly SemaphoreSlim _connectionLock = new(1, 1);
    private NpgsqlConnection? _openConnection;
 
    /// <inheritdoc cref="DapperDatabaseConnector" />
@@ -27,6 +28,8 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <inheritdoc cref="BulkConnector" />
    public BulkConnector Bulk { get; }
 
+   private readonly SemaphoreSlim _transactionLock = new(1, 1);
+   private bool _transactionOpenedConnection;
    internal NpgsqlTransaction? Transaction { get; private set; }
 
    /// <summary>
@@ -62,6 +65,9 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       if (!disposing)
          return;
 
+      _transactionLock.Dispose();
+      _connectionLock.Dispose();
+
       if (_openConnection is not null)
       {
          await _openConnection.DisposeAsync();
@@ -81,6 +87,9 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       if (!disposing)
          return;
 
+      _transactionLock.Dispose();
+      _connectionLock.Dispose();
+
       _openConnection?.Dispose();
       _openConnection = null;
    }
@@ -93,12 +102,21 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    [MemberNotNull(nameof(_openConnection))]
    public bool Open()
    {
-      if (_openConnection is not null)
-         return false;
+      _connectionLock.Wait();
 
-      _openConnection = _datasource.OpenConnection();
+      try
+      {
+         if (_openConnection is not null)
+            return false;
 
-      return true;
+         _openConnection = _datasource.OpenConnection();
+
+         return true;
+      }
+      finally
+      {
+         _connectionLock.Release();
+      }
    }
 
    /// <summary>
@@ -108,14 +126,23 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <returns>True if the connection was opened. False if it was already open.</returns>
    #pragma warning disable CS8774 // Member must have a non-null value when exiting
    [MemberNotNull(nameof(_openConnection))]
-   public async Task<bool> OpenAsync(CancellationToken cancellationToken = default)
+   public async Task<bool> OpenAsync(CancellationToken ct = default)
    {
-      if (_openConnection is not null)
-         return false;
+      await _connectionLock.WaitAsync(ct);
 
-      _openConnection = await _datasource.OpenConnectionAsync(cancellationToken);
+      try
+      {
+         if (_openConnection is not null)
+            return false;
 
-      return true;
+         _openConnection = await _datasource.OpenConnectionAsync(ct);
+
+         return true;
+      }
+      finally
+      {
+         _connectionLock.Release();
+      }
    }
    #pragma warning restore CS8774
 
@@ -124,25 +151,43 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// </summary>
    public void Close()
    {
-      if (_openConnection is null)
-         return;
+      _connectionLock.Wait();
 
-      _openConnection.Close();
-      _openConnection.Dispose();
-      _openConnection = null;
+      try
+      {
+         if (_openConnection is null)
+            return;
+
+         _openConnection.Close();
+         _openConnection.Dispose();
+         _openConnection = null;
+      }
+      finally
+      {
+         _connectionLock.Release();
+      }
    }
 
    /// <summary>
    ///    Manually close the connection. This is useful when you want to keep the connection open for multiple operations.
    /// </summary>
-   public async Task CloseAsync()
+   public async Task CloseAsync(CancellationToken ct = default)
    {
-      if (_openConnection is null)
-         return;
+      await _connectionLock.WaitAsync(ct);
 
-      await _openConnection.CloseAsync();
-      await _openConnection.DisposeAsync();
-      _openConnection = null;
+      try
+      {
+         if (_openConnection is null)
+            return;
+
+         await _openConnection.CloseAsync();
+         await _openConnection.DisposeAsync();
+         _openConnection = null;
+      }
+      finally
+      {
+         _connectionLock.Release();
+      }
    }
 
    /// <summary>
@@ -153,12 +198,21 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <exception cref="InvalidOperationException">Thrown when a transaction has already been started on the connection.</exception>
    public bool BeginTransaction(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
    {
-      if (Transaction is not null)
-         return false;
+      _transactionLock.Wait();
 
-      Open();
-      Transaction = _openConnection.BeginTransaction(isolationLevel);
-      return true;
+      try
+      {
+         if (Transaction is not null)
+            return false;
+
+         _transactionOpenedConnection = Open();
+         Transaction = _openConnection.BeginTransaction(isolationLevel);
+         return true;
+      }
+      finally
+      {
+         _transactionLock.Release();
+      }
    }
 
    /// <summary>
@@ -169,12 +223,21 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <exception cref="InvalidOperationException">Thrown when a transaction has already been started on the connection.</exception>
    public async Task<bool> BeginTransactionAsync(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted, CancellationToken ct = default)
    {
-      if (Transaction is not null)
-         return false;
+      await _transactionLock.WaitAsync(ct);
 
-      await OpenAsync(ct);
-      Transaction = await _openConnection.BeginTransactionAsync(isolationLevel, ct);
-      return true;
+      try
+      {
+         if (Transaction is not null)
+            return false;
+
+         _transactionOpenedConnection = await OpenAsync(ct);
+         Transaction = await _openConnection.BeginTransactionAsync(isolationLevel, ct);
+         return true;
+      }
+      finally
+      {
+         _transactionLock.Release();
+      }
    }
 
    /// <summary>
@@ -183,18 +246,28 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <exception cref="InvalidOperationException">Thrown when no transaction is active.</exception>
    public void CommitTransaction()
    {
-      if (Transaction is null)
-         throw new InvalidOperationException("No transaction active");
+      _transactionLock.Wait();
 
       try
       {
-         Transaction.Commit();
-         Transaction.Dispose();
-         Transaction = null;
+         if (Transaction is null)
+            throw new InvalidOperationException("No transaction active");
+
+         try
+         {
+            Transaction.Commit();
+            Transaction.Dispose();
+            Transaction = null;
+         }
+         finally
+         {
+            if(_transactionOpenedConnection)
+               Close();
+         }
       }
       finally
       {
-         Close();
+         _transactionLock.Release();
       }
    }
 
@@ -202,20 +275,30 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    ///    Commits the transaction. Must be called after <see cref="BeginTransaction" />.
    /// </summary>
    /// <exception cref="InvalidOperationException">Thrown when no transaction is active.</exception>
-   public async Task CommitTransactionAsync()
+   public async Task CommitTransactionAsync(CancellationToken ct = default)
    {
-      if (Transaction is null)
-         throw new InvalidOperationException("No transaction active");
+      await _transactionLock.WaitAsync(ct);
 
       try
       {
-         await Transaction.CommitAsync();
-         await Transaction.DisposeAsync();
-         Transaction = null;
+         if (Transaction is null)
+            throw new InvalidOperationException("No transaction active");
+
+         try
+         {
+            await Transaction.CommitAsync(ct);
+            await Transaction.DisposeAsync();
+            Transaction = null;
+         }
+         finally
+         {
+            if (_transactionOpenedConnection)
+               await CloseAsync(ct);
+         }
       }
       finally
       {
-         await CloseAsync();
+         _transactionLock.Release();
       }
    }
 
@@ -225,18 +308,28 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <exception cref="InvalidOperationException">Thrown when no transaction is active.</exception>
    public void RollbackTransaction()
    {
-      if (Transaction is null)
-         throw new InvalidOperationException("No transaction active");
+      _transactionLock.Wait();
 
       try
       {
-         Transaction.Rollback();
-         Transaction.Dispose();
-         Transaction = null;
+         if (Transaction is null)
+            throw new InvalidOperationException("No transaction active");
+
+         try
+         {
+            Transaction.Rollback();
+            Transaction.Dispose();
+            Transaction = null;
+         }
+         finally
+         {
+            if (_transactionOpenedConnection)
+               Close();
+         }
       }
       finally
       {
-         Close();
+         _transactionLock.Release();
       }
    }
 
@@ -244,20 +337,30 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    ///    Rolls back the transaction. Must be called after <see cref="BeginTransaction" />.
    /// </summary>
    /// <exception cref="InvalidOperationException">Thrown when no transaction is active.</exception>
-   public async Task RollbackTransactionAsync()
+   public async Task RollbackTransactionAsync(CancellationToken ct = default)
    {
-      if (Transaction is null)
-         throw new InvalidOperationException("No transaction active");
+      await _transactionLock.WaitAsync(ct);
 
       try
       {
-         await Transaction.RollbackAsync();
-         await Transaction.DisposeAsync();
-         Transaction = null;
+         if (Transaction is null)
+            throw new InvalidOperationException("No transaction active");
+
+         try
+         {
+            await Transaction.RollbackAsync(ct);
+            await Transaction.DisposeAsync();
+            Transaction = null;
+         }
+         finally
+         {
+            if (_transactionOpenedConnection)
+               await CloseAsync(ct);
+         }
       }
       finally
       {
-         await CloseAsync();
+         _transactionLock.Release();
       }
    }
 
@@ -439,7 +542,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       finally
       {
          if (connectionOpened)
-            await CloseAsync();
+            await CloseAsync(ct);
       }
    }
 
@@ -483,7 +586,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       finally
       {
          if (connectionOpened)
-            await CloseAsync();
+            await CloseAsync(ct);
       }
    }
 }
