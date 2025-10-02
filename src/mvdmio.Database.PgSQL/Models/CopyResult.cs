@@ -1,4 +1,5 @@
 ﻿using mvdmio.Database.PgSQL.Connectors;
+using mvdmio.Database.PgSQL.Connectors.Bulk;
 
 namespace mvdmio.Database.PgSQL.Models;
 

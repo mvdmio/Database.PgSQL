@@ -1,4 +1,5 @@
 ﻿using JetBrains.Annotations;
+using mvdmio.Database.PgSQL.Connectors.Bulk;
 
 namespace mvdmio.Database.PgSQL.Connectors;
 

@@ -1,10 +1,9 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using JetBrains.Annotations;
+﻿using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Models;
 using Npgsql;
-using NpgsqlTypes;
+using System.Diagnostics.CodeAnalysis;
 
-namespace mvdmio.Database.PgSQL.Connectors;
+namespace mvdmio.Database.PgSQL.Connectors.Bulk;
 
 /// <summary>
 ///    Connector for bulk-copying data to the database.
@@ -22,54 +21,43 @@ public class BulkConnector
       _db = db;
    }
 
+   public async Task<CopySession<T>> StartCopyAsync<T>(string tableName, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
+   {
+      var copySession = new CopySession<T>(_db, tableName, columnValueMapping);
+      await copySession.StartAsync(ct);
+
+      return copySession;
+   }
+
    /// <summary>
    ///    Perform a binary copy to a given table.
    /// </summary>
    public async Task CopyAsync<T>(string tableName, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
       var errors = new List<Exception>();
-      var sql = $"COPY {tableName} ({string.Join(", ", columnValueMapping.Keys)}) FROM STDIN (FORMAT BINARY)";
-      await _db.OpenConnectionAndExecuteAsync(
-         sql,
-         async connection => {
-            await using var writer = await connection.BeginBinaryImportAsync(sql, ct);
 
-            foreach (var item in items)
-            {
-               try
-               {
-                  await writer.StartRowAsync(ct);
+      await using var copySession = await StartCopyAsync(tableName, columnValueMapping, ct);
 
-                  foreach (var columnValueMap in columnValueMapping)
-                  {
-                     var valueFunc = columnValueMap.Value;
+      foreach (var item in items)
+      {
+         try
+         {
+            await copySession.WriteAsync(item, ct);
+         }
+         catch (PostgresException ex)
+         {
+            errors.Add(ex);
+         }
+      }
 
-                     var value = valueFunc.Invoke(item);
-                     if (value.Value is null)
-                        await writer.WriteNullAsync(ct);
-                     else if (value.Type is NpgsqlDbType.Unknown)
-                        await writer.WriteAsync(value.Value, ct);
-                     else
-                        await writer.WriteAsync(value.Value, value.Type, ct);
-                  }
-               }
-               catch (PostgresException ex)
-               {
-                  errors.Add(ex);
-               }
-            }
-
-            try
-            {
-               await writer.CompleteAsync(ct);
-            }
-            catch (Exception ex)
-            {
-               errors.Add(ex);
-            }
-         },
-         ct
-      );
+      try
+      {
+         await copySession.FlushAsync(ct);
+      }
+      catch (Exception ex)
+      {
+         errors.Add(ex);
+      }
 
       if(errors.Count is not 0)
          throw new AggregateException("Errors occurred during bulk copy.", errors);

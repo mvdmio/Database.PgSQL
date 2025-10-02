@@ -3,6 +3,7 @@ using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Connectors;
+using mvdmio.Database.PgSQL.Connectors.Bulk;
 using mvdmio.Database.PgSQL.Exceptions;
 using Npgsql;
 
@@ -18,6 +19,17 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
 
    private readonly SemaphoreSlim _connectionLock = new(1, 1);
    private NpgsqlConnection? _openConnection;
+
+   internal NpgsqlConnection Connection
+   {
+      get
+      {
+         if (_openConnection is null)
+            Open();
+
+         return _openConnection;
+      }
+   }
 
    /// <inheritdoc cref="DapperDatabaseConnector" />
    public DapperDatabaseConnector Dapper { get; }
