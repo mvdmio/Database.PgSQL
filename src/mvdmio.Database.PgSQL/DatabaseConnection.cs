@@ -31,6 +31,9 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <inheritdoc cref="BulkConnector" />
    public BulkConnector Bulk { get; }
 
+   /// <inheritdoc cref="DatabaseConnectionInfo" />
+   public DatabaseConnectionInfo Info { get; }
+
    private readonly SemaphoreSlim _transactionLock = new(1, 1);
    private bool _transactionOpenedConnection;
    internal NpgsqlTransaction? Transaction { get; private set; }
@@ -54,6 +57,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       Dapper = new DapperDatabaseConnector(this);
       Management = new ManagementDatabaseConnector(this);
       Bulk = new BulkConnector(this);
+      Info = new DatabaseConnectionInfo(dataSource.ConnectionString);
    }
 
    /// <inheritdoc />

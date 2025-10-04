@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Package configuration">
-    <Version>0.3.16</Version>
+    <Version>0.3.17</Version>
     <Title>mvdmio.Database.PgSQL</Title>
     <Description>PostgreSQL database interaction including migrations.</Description>
     <Company>mvdmio</Company>
@@ -44,14 +44,18 @@
 
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.66"/>
-    <PackageReference Include="JetBrains.Annotations" Version="2025.2.2"/>
+
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.9"/>
     <PackageReference Include="Npgsql" Version="9.0.3"/>
+    <PackageReference Include="Portable.System.DateTimeOnly" Version="9.0.1"/>
+
     <PackageReference Include="PolySharp" Version="1.15.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Portable.System.DateTimeOnly" Version="9.0.1"/>
+    <PackageReference Include="JetBrains.Annotations" Version="2025.2.2">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
 </Project>
