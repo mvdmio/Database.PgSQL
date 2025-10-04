@@ -20,16 +20,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    private readonly SemaphoreSlim _connectionLock = new(1, 1);
    private NpgsqlConnection? _openConnection;
 
-   internal NpgsqlConnection Connection
-   {
-      get
-      {
-         if (_openConnection is null)
-            Open();
-
-         return _openConnection;
-      }
-   }
+   internal NpgsqlConnection? Connection => _openConnection;
 
    /// <inheritdoc cref="DapperDatabaseConnector" />
    public DapperDatabaseConnector Dapper { get; }

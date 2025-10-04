@@ -10,6 +10,7 @@ public sealed class CopySession<T> : IAsyncDisposable
    private readonly string _tableName;
    private readonly Dictionary<string, Func<T, DbValue>> _columnValueMapping;
 
+   private bool _connectionOpened;
    private NpgsqlBinaryImporter _writer = null!;
 
    public CopySession(DatabaseConnection db, string tableName, Dictionary<string, Func<T, DbValue>> columnValueMapping)
@@ -19,10 +20,11 @@ public sealed class CopySession<T> : IAsyncDisposable
       _columnValueMapping = columnValueMapping;
    }
 
-   internal async Task StartAsync(CancellationToken ct = default)
+   internal async Task BeginAsync(CancellationToken ct = default)
    {
       var sql = $"COPY {_tableName} ({string.Join(", ", _columnValueMapping.Keys)}) FROM STDIN (FORMAT BINARY)";
-      _writer = await _db.Connection.BeginBinaryImportAsync(sql, ct);
+      _connectionOpened = await _db.OpenAsync(ct);
+      _writer = await _db.Connection!.BeginBinaryImportAsync(sql, ct);
    }
 
    public async Task WriteAsync(T item, CancellationToken ct = default)
@@ -43,14 +45,16 @@ public sealed class CopySession<T> : IAsyncDisposable
       }
    }
 
-   public async Task FlushAsync(CancellationToken ct = default)
+   public async Task CompleteAsync(CancellationToken ct = default)
    {
       await _writer.CompleteAsync(ct);
+
+      if (_connectionOpened)
+         await _db.CloseAsync(ct);
    }
 
    public async ValueTask DisposeAsync()
    {
       await _writer.DisposeAsync();
-      await _db.CloseAsync();
    }
 }

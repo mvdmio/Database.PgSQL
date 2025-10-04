@@ -21,10 +21,13 @@ public class BulkConnector
       _db = db;
    }
 
-   public async Task<CopySession<T>> StartCopyAsync<T>(string tableName, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
+   /// <summary>
+   ///   Begin a binary copy session.
+   /// </summary>
+   public async Task<CopySession<T>> BeginCopyAsync<T>(string tableName, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
       var copySession = new CopySession<T>(_db, tableName, columnValueMapping);
-      await copySession.StartAsync(ct);
+      await copySession.BeginAsync(ct);
 
       return copySession;
    }
@@ -36,7 +39,7 @@ public class BulkConnector
    {
       var errors = new List<Exception>();
 
-      await using var copySession = await StartCopyAsync(tableName, columnValueMapping, ct);
+      await using var copySession = await BeginCopyAsync(tableName, columnValueMapping, ct);
 
       foreach (var item in items)
       {
@@ -52,7 +55,7 @@ public class BulkConnector
 
       try
       {
-         await copySession.FlushAsync(ct);
+         await copySession.CompleteAsync(ct);
       }
       catch (Exception ex)
       {

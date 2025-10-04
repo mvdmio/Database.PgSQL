@@ -5,11 +5,11 @@ using NpgsqlTypes;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.Connectors.BulkConnector;
 
-public class BulkConnectorUpsertTests : TestBase
+public class BulkConnectorInsertOrUpdateTests : TestBase
 {
    private readonly Dictionary<string, Func<TestItem, DbValue>> _columnMapping;
 
-   public BulkConnectorUpsertTests(TestFixture fixture)
+   public BulkConnectorInsertOrUpdateTests(TestFixture fixture)
       : base(fixture)
    {
       _columnMapping = new Dictionary<string, Func<TestItem, DbValue>> {
@@ -80,9 +80,8 @@ public class BulkConnectorUpsertTests : TestBase
          }
       );
 
-      await Db.Bulk.CopyAsync("test_upsert", items, _columnMapping, CancellationToken);
-
       // Act
+      await Db.Bulk.CopyAsync("test_upsert", items, _columnMapping, CancellationToken);
       await Db.Bulk.InsertOrUpdateAsync("test_upsert", [ "integer" ], updateItems, _columnMapping, CancellationToken);
 
       // Assert

@@ -1,50 +1,57 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-   <PropertyGroup>
-      <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
-      <ImplicitUsings>enable</ImplicitUsings>
-      <Nullable>enable</Nullable>
-      <LangVersion>latest</LangVersion>
-      <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-      <DebugType>embedded</DebugType>
-      <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-      <GenerateDocumentationFile>True</GenerateDocumentationFile>
-   </PropertyGroup>
+  <PropertyGroup Label="Project configuration">
+    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+  </PropertyGroup>
 
-   <PropertyGroup>
-      <Version>0.3.15</Version>
-      <Title>mvdmio.Database.PgSQL</Title>
-      <Description>PostgreSQL database interaction including migrations.</Description>
-      <Company>mvdmio</Company>
-      <Authors>Michiel van der Meer</Authors>
-      <PackageReadmeFile>Readme.md</PackageReadmeFile>
-      <PackageLicenseFile>LICENSE</PackageLicenseFile>
-   </PropertyGroup>
+  <PropertyGroup Label="Source link configuration">
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <IncludeSource>true</IncludeSource>
+    <ContinuousIntegrationBuild>True</ContinuousIntegrationBuild>
+  </PropertyGroup>
 
-   <ItemGroup>
-      <None Include="..\..\LICENSE" PackagePath="" Pack="true" />
-      <None Include="..\..\Readme.md" PackagePath="" Pack="true" />
-   </ItemGroup>
+  <PropertyGroup Label="Package configuration">
+    <Version>0.3.16</Version>
+    <Title>mvdmio.Database.PgSQL</Title>
+    <Description>PostgreSQL database interaction including migrations.</Description>
+    <Company>mvdmio</Company>
+    <Authors>Michiel van der Meer</Authors>
+    <PackageReadmeFile>Readme.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+  </PropertyGroup>
 
-   <ItemGroup>
-      <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-         <_Parameter1>mvdmio.Database.PgSQL.Tests.Unit</_Parameter1>
-      </AssemblyAttribute>
-      <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-         <_Parameter1>mvdmio.Database.PgSQL.Tests.Integration</_Parameter1>
-      </AssemblyAttribute>
-   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\LICENSE" PackagePath="" Pack="true"/>
+    <None Include="..\..\Readme.md" PackagePath="" Pack="true"/>
+  </ItemGroup>
 
-   <ItemGroup>
-      <PackageReference Include="Dapper" Version="2.1.66" />
-      <PackageReference Include="JetBrains.Annotations" Version="2025.2.2" />
-      <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.9" />
-      <PackageReference Include="Npgsql" Version="9.0.3" />
-      <PackageReference Include="PolySharp" Version="1.15.0">
-         <PrivateAssets>all</PrivateAssets>
-         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-      <PackageReference Include="Portable.System.DateTimeOnly" Version="9.0.1" />
-   </ItemGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>mvdmio.Database.PgSQL.Tests.Unit</_Parameter1>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>mvdmio.Database.PgSQL.Tests.Integration</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.66"/>
+    <PackageReference Include="JetBrains.Annotations" Version="2025.2.2"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.9"/>
+    <PackageReference Include="Npgsql" Version="9.0.3"/>
+    <PackageReference Include="PolySharp" Version="1.15.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Portable.System.DateTimeOnly" Version="9.0.1"/>
+  </ItemGroup>
 
 </Project>
