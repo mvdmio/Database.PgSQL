@@ -35,8 +35,13 @@ public class BulkConnector
    /// <summary>
    ///    Perform a binary copy to a given table.
    /// </summary>
+   [SuppressMessage("ReSharper",   "PossibleMultipleEnumeration",                                       Justification = "Multiple enumerations are not a problem here.")]
+   [SuppressMessage("Performance", "CA1851:Possible multiple enumerations of 'IEnumerable' collection", Justification = "Multiple enumerations are not a problem here.")]
    public async Task CopyAsync<T>(string tableName, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
+      if (!items.Any())
+         return;
+
       var errors = new List<Exception>();
 
       await using var copySession = await BeginCopyAsync(tableName, columnValueMapping, ct);
