@@ -4,7 +4,7 @@ using NpgsqlTypes;
 
 namespace mvdmio.Database.PgSQL.Connectors.Bulk;
 
-public sealed class CopySession<T> : IAsyncDisposable
+public sealed class CopySession<T>
 {
    private readonly DatabaseConnection _db;
    private readonly string _tableName;
@@ -48,13 +48,9 @@ public sealed class CopySession<T> : IAsyncDisposable
    public async Task CompleteAsync(CancellationToken ct = default)
    {
       await _writer.CompleteAsync(ct);
+      await _writer.DisposeAsync();
 
       if (_connectionOpened)
          await _db.CloseAsync(ct);
-   }
-
-   public async ValueTask DisposeAsync()
-   {
-      await _writer.DisposeAsync();
    }
 }

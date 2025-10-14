@@ -44,7 +44,7 @@ public class BulkConnector
 
       var errors = new List<Exception>();
 
-      await using var copySession = await BeginCopyAsync(tableName, columnValueMapping, ct);
+      var copySession = await BeginCopyAsync(tableName, columnValueMapping, ct);
 
       foreach (var item in items)
       {
