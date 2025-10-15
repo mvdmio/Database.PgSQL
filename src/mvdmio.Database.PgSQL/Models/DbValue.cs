@@ -5,7 +5,7 @@ namespace mvdmio.Database.PgSQL.Models;
 /// <summary>
 /// Represents a value to be written to the database.
 /// </summary>
-public class DbValue
+public readonly struct DbValue : IEquatable<DbValue>
 {
    /// <summary>
    /// The value to write.
@@ -89,4 +89,41 @@ public class DbValue
    ///   Implicit conversion for <see cref="TimeOnly"/> values.
    /// </summary>
    public static implicit operator DbValue(TimeOnly? value) => new(value, NpgsqlDbType.Time);
+
+   /// <inheritdoc />
+   public bool Equals(DbValue other)
+   {
+      return Equals(Value, other.Value) && Type == other.Type;
+   }
+
+   /// <inheritdoc />
+   public override bool Equals(object? obj)
+   {
+      if (obj is not DbValue other)
+         return false;
+
+      return Equals(Value, other.Value) && Type == other.Type;
+   }
+
+   /// <inheritdoc />
+   public override int GetHashCode()
+   {
+      return HashCode.Combine(Value, Type);
+   }
+
+   /// <summary>
+   ///   == operator.
+   /// </summary>
+   public static bool operator ==(DbValue left, DbValue right)
+   {
+      return left.Equals(right);
+   }
+
+   /// <summary>
+   ///   != operator.
+   /// </summary>
+   public static bool operator !=(DbValue left, DbValue right)
+   {
+      return !left.Equals(right);
+   }
 }
