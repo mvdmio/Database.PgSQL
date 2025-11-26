@@ -7,7 +7,7 @@ namespace mvdmio.Database.PgSQL.Exceptions;
 ///   Exception thrown when a query fails.
 /// </summary>
 [PublicAPI]
-public class QueryException : DatabaseException
+public sealed class QueryException : DatabaseException
 {
    /// <summary>
    ///   The SQL query that caused the exception.
@@ -19,6 +19,7 @@ public class QueryException : DatabaseException
       : base("Error while executing SQL.", inner)
    {
       Sql = sql;
+      Data["SQL"] = sql;
    }
 
    public override string ToString()
@@ -29,6 +30,6 @@ public class QueryException : DatabaseException
             {Sql.Indented().TrimIncludingNewLines()}
          Exception:
             {InnerException!.ToString().Indented().TrimIncludingNewLines()}
-         """;
+         """.TrimIncludingNewLines();
    }
 }
