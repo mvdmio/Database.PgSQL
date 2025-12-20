@@ -416,6 +416,31 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
    }
 
+   /// <summary>
+   ///   Execute the given action in a transaction. If the action fails, the transaction will be rolled back.
+   /// </summary>
+   public async Task<T> InTransactionAsync<T>(Func<Task<T>> action)
+   {
+      var transactionStarted = await BeginTransactionAsync();
+
+      try
+      {
+         var result = await action.Invoke();
+
+         if(transactionStarted)
+            await CommitTransactionAsync();
+
+         return result;
+      }
+      catch
+      {
+         if (transactionStarted)
+            await RollbackTransactionAsync();
+
+         throw;
+      }
+   }
+
    /// <inheritdoc cref="NpgsqlConnection.Wait()"/>
    public void Wait(string channel)
    {

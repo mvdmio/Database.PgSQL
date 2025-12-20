@@ -47,24 +47,28 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
       var items = TestItem.Create(10);
 
       // Act
-      await Db.Bulk.InsertOrUpdateAsync("test_upsert", [ "integer" ], items, _columnMapping, CancellationToken);
+      var result = (await Db.Bulk.InsertOrUpdateAsync("test_upsert", [ "integer" ], items, _columnMapping, CancellationToken)).ToArray();
 
       // Assert
-      var result = (await Db.Dapper.QueryAsync<TestItem>(
+      result.Should().HaveCount(10);
+      result.Where(x => x.IsUpdated).Should().HaveCount(0);
+      result.Where(x => x.IsInserted).Should().HaveCount(10);
+
+      var rows = (await Db.Dapper.QueryAsync<TestItem>(
          "SELECT * FROM test_upsert ORDER BY integer"
       )).ToArray();
 
-      result.Should().HaveCount(10);
-      result[0].Text.Should().Be("Test 1");
-      result[1].Text.Should().Be("Test 2");
-      result[2].Text.Should().Be("Test 3");
-      result[3].Text.Should().Be("Test 4");
-      result[4].Text.Should().Be("Test 5");
-      result[5].Text.Should().Be("Test 6");
-      result[6].Text.Should().Be("Test 7");
-      result[7].Text.Should().Be("Test 8");
-      result[8].Text.Should().Be("Test 9");
-      result[9].Text.Should().Be("Test 10");
+      rows.Should().HaveCount(10);
+      rows[0].Text.Should().Be("Test 1");
+      rows[1].Text.Should().Be("Test 2");
+      rows[2].Text.Should().Be("Test 3");
+      rows[3].Text.Should().Be("Test 4");
+      rows[4].Text.Should().Be("Test 5");
+      rows[5].Text.Should().Be("Test 6");
+      rows[6].Text.Should().Be("Test 7");
+      rows[7].Text.Should().Be("Test 8");
+      rows[8].Text.Should().Be("Test 9");
+      rows[9].Text.Should().Be("Test 10");
    }
 
    [Fact]
@@ -82,24 +86,28 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
 
       // Act
       await Db.Bulk.CopyAsync("test_upsert", items, _columnMapping, CancellationToken);
-      await Db.Bulk.InsertOrUpdateAsync("test_upsert", [ "integer" ], updateItems, _columnMapping, CancellationToken);
+      var result = (await Db.Bulk.InsertOrUpdateAsync("test_upsert", [ "integer" ], updateItems, _columnMapping, CancellationToken)).ToArray();
 
       // Assert
-      var result = (await Db.Dapper.QueryAsync<TestItem>(
+      result.Should().HaveCount(10);
+      result.Where(x => x.IsUpdated).Should().HaveCount(10);
+      result.Where(x => x.IsInserted).Should().HaveCount(0);
+
+      var rows = (await Db.Dapper.QueryAsync<TestItem>(
          "SELECT * FROM test_upsert ORDER BY integer"
       )).ToArray();
 
-      result.Should().HaveCount(10);
-      result[0].Text.Should().Be("Test 1 Updated");
-      result[1].Text.Should().Be("Test 2 Updated");
-      result[2].Text.Should().Be("Test 3 Updated");
-      result[3].Text.Should().Be("Test 4 Updated");
-      result[4].Text.Should().Be("Test 5 Updated");
-      result[5].Text.Should().Be("Test 6 Updated");
-      result[6].Text.Should().Be("Test 7 Updated");
-      result[7].Text.Should().Be("Test 8 Updated");
-      result[8].Text.Should().Be("Test 9 Updated");
-      result[9].Text.Should().Be("Test 10 Updated");
+      rows.Should().HaveCount(10);
+      rows[0].Text.Should().Be("Test 1 Updated");
+      rows[1].Text.Should().Be("Test 2 Updated");
+      rows[2].Text.Should().Be("Test 3 Updated");
+      rows[3].Text.Should().Be("Test 4 Updated");
+      rows[4].Text.Should().Be("Test 5 Updated");
+      rows[5].Text.Should().Be("Test 6 Updated");
+      rows[6].Text.Should().Be("Test 7 Updated");
+      rows[7].Text.Should().Be("Test 8 Updated");
+      rows[8].Text.Should().Be("Test 9 Updated");
+      rows[9].Text.Should().Be("Test 10 Updated");
    }
 
    private sealed record TestItem
