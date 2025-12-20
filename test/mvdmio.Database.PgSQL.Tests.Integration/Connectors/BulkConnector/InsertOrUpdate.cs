@@ -72,7 +72,7 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
    }
 
    [Fact]
-   public async Task WithExistingValues()
+   public async Task WithChangedValues()
    {
       // Arrange
       var items = TestItem.Create(10);
@@ -108,6 +108,45 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
       rows[7].Text.Should().Be("Test 8 Updated");
       rows[8].Text.Should().Be("Test 9 Updated");
       rows[9].Text.Should().Be("Test 10 Updated");
+   }
+
+   [Fact]
+   public async Task WithUnchangedValues()
+   {
+      // Arrange
+      var items = TestItem.Create(10);
+      var updateItems = items.Select(x => new TestItem {
+            Integer = x.Integer,
+            Float = x.Float,
+            Double = x.Double,
+            Text = x.Text
+         }
+      );
+
+      // Act
+      await Db.Bulk.CopyAsync("test_upsert", items, _columnMapping, CancellationToken);
+      var result = (await Db.Bulk.InsertOrUpdateAsync("test_upsert", [ "integer" ], updateItems, _columnMapping, CancellationToken)).ToArray();
+
+      // Assert
+      result.Should().HaveCount(0);
+      result.Where(x => x.IsUpdated).Should().HaveCount(0);
+      result.Where(x => x.IsInserted).Should().HaveCount(0);
+
+      var rows = (await Db.Dapper.QueryAsync<TestItem>(
+         "SELECT * FROM test_upsert ORDER BY integer"
+      )).ToArray();
+
+      rows.Should().HaveCount(10);
+      rows[0].Text.Should().Be("Test 1");
+      rows[1].Text.Should().Be("Test 2");
+      rows[2].Text.Should().Be("Test 3");
+      rows[3].Text.Should().Be("Test 4");
+      rows[4].Text.Should().Be("Test 5");
+      rows[5].Text.Should().Be("Test 6");
+      rows[6].Text.Should().Be("Test 7");
+      rows[7].Text.Should().Be("Test 8");
+      rows[8].Text.Should().Be("Test 9");
+      rows[9].Text.Should().Be("Test 10");
    }
 
    private sealed record TestItem

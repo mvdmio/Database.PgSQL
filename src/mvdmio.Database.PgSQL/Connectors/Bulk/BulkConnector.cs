@@ -139,15 +139,18 @@ public class BulkConnector
                ? string.Empty
                : $"WHERE {upsertConfiguration.OnConflictWhereClause}";
 
+            var query = $"""
+               INSERT INTO {tableName} ({string.Join(", ", allColumns)})
+               SELECT {string.Join(", ", allColumns)}
+               FROM {tempTableName}
+               ON CONFLICT ({string.Join(", ", upsertConfiguration.OnConflictColumns)}) {onConflictWhereClause} DO UPDATE
+               SET {string.Join(", ", updateColumns.Select(x => $"{x} = EXCLUDED.{x}"))}
+               WHERE ({string.Join(", ", updateColumns.Select(x => $"{tableName}.{x}"))}) IS DISTINCT FROM ({string.Join(", ", updateColumns.Select(x => $"EXCLUDED.{x}"))})
+               RETURNING *, (xmax = 0) AS is_inserted, (xmax <> 0) AS is_updated
+               """;
+
             return await _db.Dapper.QueryAsync<T, bool, bool, InsertOrUpdateResult<T>>(
-               $"""
-                INSERT INTO {tableName} ({string.Join(", ", allColumns)})
-                SELECT {string.Join(", ", allColumns)}
-                FROM {tempTableName}
-                ON CONFLICT ({string.Join(", ", upsertConfiguration.OnConflictColumns)}) {onConflictWhereClause } DO UPDATE
-                SET {string.Join(", ", updateColumns.Select(x => $"{x} = EXCLUDED.{x}"))}
-                RETURNING *, (xmax = 0) AS is_inserted, (xmax <> 0) AS is_updated
-                """,
+               query,
                splitOn: "is_inserted, is_updated",
                (item, isInserted, isUpdated) => new InsertOrUpdateResult<T> {
                   Item = item,
