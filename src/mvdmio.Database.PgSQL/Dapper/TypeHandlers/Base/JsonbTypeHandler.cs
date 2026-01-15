@@ -1,10 +1,10 @@
-﻿using System.Data;
-using System.Text.Json;
-using Dapper;
+﻿using Dapper;
 using Npgsql;
 using NpgsqlTypes;
+using System.Data;
+using System.Text.Json;
 
-namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers;
+namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers.Base;
 
 /// <summary>
 ///   Generic type handler for mapping JSONB columns to .NET objects.
@@ -31,7 +31,7 @@ public class JsonbTypeHandler<T> : SqlMapper.TypeHandler<T>
 
       if (value is not string stringValue)
          return default;
-      
+
       return JsonSerializer.Deserialize<T>(stringValue);
    }
 }

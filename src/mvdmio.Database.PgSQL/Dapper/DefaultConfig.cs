@@ -10,6 +10,8 @@ internal static class DefaultConfig
       DefaultTypeMap.MatchNamesWithUnderscores = true;
       SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
       SqlMapper.AddTypeHandler(new TimeOnlyTypeHandler());
+      SqlMapper.AddTypeHandler(new JsonDictionaryTypeHandler());
+      SqlMapper.AddTypeHandler(new UriTypeHandler());
    }
 
    public static void EnsureInitialized()

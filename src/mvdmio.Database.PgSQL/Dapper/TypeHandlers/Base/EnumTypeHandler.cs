@@ -1,8 +1,8 @@
-﻿using System.Data;
-using Dapper;
+﻿using Dapper;
+using System.Data;
 using System.Globalization;
 
-namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers;
+namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers.Base;
 
 /// <summary>
 ///   Generic class for mapping enums to strings.

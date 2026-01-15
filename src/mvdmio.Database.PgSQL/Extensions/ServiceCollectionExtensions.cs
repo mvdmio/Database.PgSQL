@@ -3,6 +3,7 @@ using Dapper;
 using JetBrains.Annotations;
 using Microsoft.Extensions.DependencyInjection;
 using mvdmio.Database.PgSQL.Dapper.TypeHandlers;
+using mvdmio.Database.PgSQL.Dapper.TypeHandlers.Base;
 
 namespace mvdmio.Database.PgSQL.Extensions;
 
