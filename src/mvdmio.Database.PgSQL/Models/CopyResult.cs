@@ -1,4 +1,4 @@
-﻿using mvdmio.Database.PgSQL.Connectors;
+﻿using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Connectors.Bulk;
 
 namespace mvdmio.Database.PgSQL.Models;
@@ -6,6 +6,7 @@ namespace mvdmio.Database.PgSQL.Models;
 /// <summary>
 /// Result object for <see cref="BulkConnector.CopyAsync{T}"/>.
 /// </summary>
+[PublicAPI]
 public class CopyResult
 {
    /// <summary>

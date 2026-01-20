@@ -1,4 +1,4 @@
-﻿using Dapper;
+using Dapper;
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using JetBrains.Annotations;
@@ -13,7 +13,7 @@ namespace mvdmio.Database.PgSQL;
 ///    Provides common methods for database access.
 /// </summary>
 [PublicAPI]
-public class DatabaseConnection : IDisposable, IAsyncDisposable
+public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
 {
    private readonly NpgsqlDataSource _datasource;
 
@@ -41,7 +41,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <summary>
    ///    Create a new database connection for a database that is reachable with the given connection string.
    /// </summary>
-   /// <param name="connectionString"></param>
+   /// <param name="connectionString">The PostgreSQL connection string.</param>
    public DatabaseConnection(string connectionString)
       : this(new NpgsqlDataSourceBuilder(connectionString).Build())
    {
@@ -50,6 +50,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <summary>
    ///    Create a new database connection for the given datasource.
    /// </summary>
+   /// <param name="dataSource">The Npgsql data source to use for database connections.</param>
    public DatabaseConnection(NpgsqlDataSource dataSource)
    {
       _datasource = dataSource;
@@ -64,10 +65,14 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    public async ValueTask DisposeAsync()
    {
       await DisposeAsync(true);
-      GC.SuppressFinalize(this);
    }
 
-   protected virtual async ValueTask DisposeAsync(bool disposing)
+   /// <summary>
+   /// Releases the unmanaged resources used by this instance and optionally releases the managed resources.
+   /// </summary>
+   /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
+   /// <returns>A task that represents the asynchronous dispose operation.</returns>
+   public async ValueTask DisposeAsync(bool disposing)
    {
       if (!disposing)
          return;
@@ -86,10 +91,13 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    public void Dispose()
    {
       Dispose(true);
-      GC.SuppressFinalize(this);
    }
 
-   protected virtual void Dispose(bool disposing)
+   /// <summary>
+   /// Releases the unmanaged resources used by this instance and optionally releases the managed resources.
+   /// </summary>
+   /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
+   public void Dispose(bool disposing)
    {
       if (!disposing)
          return;

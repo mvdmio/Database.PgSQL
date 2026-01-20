@@ -1,5 +1,6 @@
 ﻿using System.Data;
 using Dapper;
+using JetBrains.Annotations;
 
 namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers;
 
@@ -10,7 +11,8 @@ namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers;
 ///    Can be removed once Dapper decides to support TimeOnly out-of-the-box.
 ///    See: https://github.com/DapperLib/Dapper/issues/1715
 /// </remarks>
-public class TimeOnlyTypeHandler : SqlMapper.TypeHandler<TimeOnly>
+[PublicAPI]
+public sealed class TimeOnlyTypeHandler : SqlMapper.TypeHandler<TimeOnly>
 {
    /// <inheritdoc />
    public override TimeOnly Parse(object value)

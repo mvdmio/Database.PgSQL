@@ -1,4 +1,4 @@
-﻿using Dapper;
+using Dapper;
 using Npgsql;
 using NpgsqlTypes;
 using System.Data;
@@ -6,8 +6,12 @@ using System.Text.Json;
 
 namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers;
 
-public class JsonDictionaryTypeHandler : SqlMapper.TypeHandler<Dictionary<string, string>>
+/// <summary>
+/// Dapper type handler for mapping JSON columns to <see cref="Dictionary{TKey, TValue}"/> with string keys and values.
+/// </summary>
+public sealed class JsonDictionaryTypeHandler : SqlMapper.TypeHandler<Dictionary<string, string>>
 {
+   /// <inheritdoc />
    public override void SetValue(IDbDataParameter parameter, Dictionary<string, string>? value)
    {
       if (value is null)
@@ -19,6 +23,7 @@ public class JsonDictionaryTypeHandler : SqlMapper.TypeHandler<Dictionary<string
          npgsqlParameter.NpgsqlDbType = NpgsqlDbType.Jsonb;
    }
 
+   /// <inheritdoc />
    public override Dictionary<string, string>? Parse(object value)
    {
       if (value is null or DBNull)

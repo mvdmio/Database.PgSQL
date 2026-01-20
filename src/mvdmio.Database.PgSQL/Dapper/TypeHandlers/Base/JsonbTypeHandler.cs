@@ -1,4 +1,5 @@
 ﻿using Dapper;
+using JetBrains.Annotations;
 using Npgsql;
 using NpgsqlTypes;
 using System.Data;
@@ -9,7 +10,8 @@ namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers.Base;
 /// <summary>
 ///   Generic type handler for mapping JSONB columns to .NET objects.
 /// </summary>
-public class JsonbTypeHandler<T> : SqlMapper.TypeHandler<T>
+[PublicAPI]
+public sealed class JsonbTypeHandler<T> : SqlMapper.TypeHandler<T>
 {
    /// <inheritdoc />
    public override void SetValue(IDbDataParameter parameter, T? value)

@@ -1,4 +1,4 @@
-﻿using JetBrains.Annotations;
+using JetBrains.Annotations;
 using Npgsql;
 
 namespace mvdmio.Database.PgSQL;
@@ -7,7 +7,7 @@ namespace mvdmio.Database.PgSQL;
 ///   Information about the database connection.
 /// </summary>
 [PublicAPI]
-public class DatabaseConnectionInfo
+public sealed class DatabaseConnectionInfo
 {
    private readonly NpgsqlConnectionStringBuilder _builder;
 
@@ -26,6 +26,10 @@ public class DatabaseConnectionInfo
    /// </summary>
    public string Database => _builder.Database ?? "postgres";
 
+   /// <summary>
+   ///   Initializes a new instance of the <see cref="DatabaseConnectionInfo"/> class.
+   /// </summary>
+   /// <param name="connectionString">The connection string to parse for database connection information.</param>
    public DatabaseConnectionInfo(string connectionString)
    {
       _builder = new NpgsqlConnectionStringBuilder(connectionString);

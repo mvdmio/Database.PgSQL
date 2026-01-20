@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers.Interfaces;
 
@@ -7,12 +7,12 @@ namespace mvdmio.Database.PgSQL.Migrations.MigrationRetrievers;
 /// <summary>
 ///    Migration retriever that uses reflection to search for migrations in a given collection of assemblies.
 /// </summary>
-public class ReflectionMigrationRetriever : IMigrationRetriever
+public sealed class ReflectionMigrationRetriever : IMigrationRetriever
 {
    private readonly Assembly[] _assembliesContainingMigrations;
 
    /// <summary>
-   ///    Constructor.
+   ///    Initializes a new instance of the <see cref="ReflectionMigrationRetriever"/> class.
    /// </summary>
    /// <param name="assembliesContainingMigrations">
    ///    List of assemblies to use for searching <see cref="IDbMigration" />

@@ -1,4 +1,5 @@
 ﻿using Dapper;
+using JetBrains.Annotations;
 using System.Data;
 using System.Globalization;
 
@@ -7,7 +8,8 @@ namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers.Base;
 /// <summary>
 ///   Generic class for mapping enums to strings.
 /// </summary>
-public class EnumAsStringTypeHandler<T> : SqlMapper.TypeHandler<T>
+[PublicAPI]
+public sealed class EnumAsStringTypeHandler<T> : SqlMapper.TypeHandler<T>
    where T : struct, Enum
 {
    /// <inheritdoc />

@@ -1,5 +1,6 @@
 ﻿using System.Data;
 using Dapper;
+using JetBrains.Annotations;
 
 namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers;
 
@@ -10,7 +11,8 @@ namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers;
 ///    Can be removed once Dapper decides to support DateOnly out-of-the-box.
 ///    See: https://github.com/DapperLib/Dapper/issues/1715
 /// </remarks>
-public class DateOnlyTypeHandler : SqlMapper.TypeHandler<DateOnly>
+[PublicAPI]
+public sealed class DateOnlyTypeHandler : SqlMapper.TypeHandler<DateOnly>
 {
    /// <inheritdoc />
    public override DateOnly Parse(object value)

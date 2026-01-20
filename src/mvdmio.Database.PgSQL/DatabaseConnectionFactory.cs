@@ -1,4 +1,4 @@
-﻿using JetBrains.Annotations;
+using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Dapper;
 using Npgsql;
 
@@ -14,7 +14,7 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
    private readonly SemaphoreSlim _lock = new(1, 1);
 
    /// <summary>
-   /// Constructor.
+   ///   Initializes a new instance of the <see cref="DatabaseConnectionFactory"/> class.
    /// </summary>
    public DatabaseConnectionFactory()
    {
@@ -24,6 +24,9 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
    /// <summary>
    ///    Creates a new database wrapper for the given connection string.
    /// </summary>
+   /// <param name="connectionString">The PostgreSQL connection string.</param>
+   /// <param name="builderAction">An optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>.</param>
+   /// <returns>A <see cref="DatabaseConnection"/> instance for the specified connection string.</returns>
    public DatabaseConnection ForConnectionString(string connectionString, Action<NpgsqlDataSourceBuilder>? builderAction = null)
    {
       return GetConnection(connectionString, builderAction);

@@ -1,6 +1,4 @@
-﻿using AwesomeAssertions;
-using AwesomeAssertions.Extensions;
-using Dapper;
+﻿using Dapper;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 using Npgsql;
 

@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using Dapper;
 using JetBrains.Annotations;
 using Npgsql;
@@ -10,14 +10,16 @@ namespace mvdmio.Database.PgSQL.Dapper.QueryParameters;
 ///   Custom query parameter for setting PostgreSQL parameter types.
 /// </summary>
 [PublicAPI]
-public class TypedQueryParameter : SqlMapper.ICustomQueryParameter
+public sealed class TypedQueryParameter : SqlMapper.ICustomQueryParameter
 {
    private readonly object? _value;
    private readonly NpgsqlDbType _dbType;
 
    /// <summary>
-   /// Constructor.
+   ///   Initializes a new instance of the <see cref="TypedQueryParameter"/> class.
    /// </summary>
+   /// <param name="value">The value of the parameter.</param>
+   /// <param name="dbType">The PostgreSQL data type of the parameter.</param>
    public TypedQueryParameter(object? value, NpgsqlDbType dbType)
    {
       _value = value;

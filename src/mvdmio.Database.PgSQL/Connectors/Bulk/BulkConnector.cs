@@ -1,4 +1,4 @@
-﻿using JetBrains.Annotations;
+using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Models;
 using Npgsql;
 using System.Diagnostics.CodeAnalysis;
@@ -9,13 +9,14 @@ namespace mvdmio.Database.PgSQL.Connectors.Bulk;
 ///    Connector for bulk-copying data to the database.
 /// </summary>
 [PublicAPI]
-public class BulkConnector
+public sealed class BulkConnector
 {
    private readonly DatabaseConnection _db;
 
    /// <summary>
-   ///    Constructor.
+   ///    Initializes a new instance of the <see cref="BulkConnector"/> class.
    /// </summary>
+   /// <param name="db">The database connection to use for bulk operations.</param>
    public BulkConnector(DatabaseConnection db)
    {
       _db = db;
@@ -24,6 +25,11 @@ public class BulkConnector
    /// <summary>
    ///   Begin a binary copy session.
    /// </summary>
+   /// <typeparam name="T">The type of items to be written to the database.</typeparam>
+   /// <param name="tableName">The name of the target table for the copy operation.</param>
+   /// <param name="columnValueMapping">A dictionary mapping column names to functions that extract values from items of type <typeparamref name="T"/>.</param>
+   /// <param name="ct">A cancellation token to observe while waiting for the task to complete.</param>
+   /// <returns>A <see cref="CopySession{T}"/> that can be used to write items to the database.</returns>
    public async Task<CopySession<T>> BeginCopyAsync<T>(string tableName, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
       var copySession = new CopySession<T>(_db, tableName, columnValueMapping);
@@ -35,6 +41,12 @@ public class BulkConnector
    /// <summary>
    ///    Perform a binary copy to a given table.
    /// </summary>
+   /// <typeparam name="T">The type of items to be written to the database.</typeparam>
+   /// <param name="tableName">The name of the target table for the copy operation.</param>
+   /// <param name="items">The items to copy to the database.</param>
+   /// <param name="columnValueMapping">A dictionary mapping column names to functions that extract values from items of type <typeparamref name="T"/>.</param>
+   /// <param name="ct">A cancellation token to observe while waiting for the task to complete.</param>
+   /// <returns>A task representing the asynchronous copy operation.</returns>
    [SuppressMessage("ReSharper",   "PossibleMultipleEnumeration",                                       Justification = "Multiple enumerations are not a problem here.")]
    [SuppressMessage("Performance", "CA1851:Possible multiple enumerations of 'IEnumerable' collection", Justification = "Multiple enumerations are not a problem here.")]
    public async Task CopyAsync<T>(string tableName, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)

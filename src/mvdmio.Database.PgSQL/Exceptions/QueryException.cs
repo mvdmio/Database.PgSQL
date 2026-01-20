@@ -1,4 +1,4 @@
-﻿using JetBrains.Annotations;
+using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Extensions;
 
 namespace mvdmio.Database.PgSQL.Exceptions;
@@ -22,6 +22,7 @@ public sealed class QueryException : DatabaseException
       Data["SQL"] = sql;
    }
 
+   /// <inheritdoc />
    public override string ToString()
    {
       return $"""

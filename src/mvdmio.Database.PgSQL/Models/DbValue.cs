@@ -1,10 +1,12 @@
-﻿using NpgsqlTypes;
+using JetBrains.Annotations;
+using NpgsqlTypes;
 
 namespace mvdmio.Database.PgSQL.Models;
 
 /// <summary>
 /// Represents a value to be written to the database.
 /// </summary>
+[PublicAPI]
 public readonly struct DbValue : IEquatable<DbValue>
 {
    /// <summary>
@@ -18,8 +20,9 @@ public readonly struct DbValue : IEquatable<DbValue>
    public NpgsqlDbType Type { get; }
 
    /// <summary>
-   ///   Constructor.
+   ///   Initializes a new instance of the <see cref="DbValue"/> struct with an unknown type.
    /// </summary>
+   /// <param name="value">The value to write to the database.</param>
    public DbValue(object? value)
    {
       Value = value;
@@ -27,8 +30,10 @@ public readonly struct DbValue : IEquatable<DbValue>
    }
 
    /// <summary>
-   ///   Constructor.
+   ///   Initializes a new instance of the <see cref="DbValue"/> struct with a specified type.
    /// </summary>
+   /// <param name="value">The value to write to the database.</param>
+   /// <param name="type">The PostgreSQL data type of the value.</param>
    public DbValue(object? value, NpgsqlDbType type)
    {
       Value = value;

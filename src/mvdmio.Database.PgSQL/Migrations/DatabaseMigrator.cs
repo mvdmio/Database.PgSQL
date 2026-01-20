@@ -1,7 +1,6 @@
-﻿using System.Reflection;
+using System.Reflection;
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Exceptions;
-using mvdmio.Database.PgSQL.Internal;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers.Interfaces;
@@ -13,13 +12,13 @@ namespace mvdmio.Database.PgSQL.Migrations;
 ///    Class for running database migrations.
 /// </summary>
 [PublicAPI]
-public class DatabaseMigrator : IDatabaseMigrator
+public sealed class DatabaseMigrator : IDatabaseMigrator
 {
    private readonly DatabaseConnection _connection;
    private readonly IMigrationRetriever _migrationRetriever;
 
    /// <summary>
-   ///    Constructor.
+   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
    /// <param name="assembliesContainingMigrations">
@@ -32,7 +31,7 @@ public class DatabaseMigrator : IDatabaseMigrator
    }
 
    /// <summary>
-   ///    Constructor.
+   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class with a custom migration retriever.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
    /// <param name="migrationRetriever">The migration retriever to use.</param>
@@ -52,7 +51,8 @@ public class DatabaseMigrator : IDatabaseMigrator
             name AS name,
             executed_at AS executedAtUtc
          FROM mvdmio.migrations
-         """
+         """,
+         ct: cancellationToken
       );
    }
 
@@ -94,10 +94,11 @@ public class DatabaseMigrator : IDatabaseMigrator
                      { "identifier", migration.Identifier },
                      { "name", migration.Name },
                      { "executedAtUtc", DateTime.UtcNow }
-                  }
+                  },
+                  ct: cancellationToken
                );
             }
-         );   
+         );
       }
       catch (Exception exception)
       {
