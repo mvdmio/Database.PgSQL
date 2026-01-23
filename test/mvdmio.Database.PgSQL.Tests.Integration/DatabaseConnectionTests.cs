@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration;
 
-public class DatabaseConnectionTests  : TestBase
+public class DatabaseConnectionTests : TestBase
 {
    private readonly TestFixture _fixture;
 
