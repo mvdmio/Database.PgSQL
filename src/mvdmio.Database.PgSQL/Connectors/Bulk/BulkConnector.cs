@@ -79,7 +79,10 @@ public sealed class BulkConnector
          errors.Add(ex);
       }
 
-      if(errors.Count is not 0)
+      if (errors.Count is 1)
+         throw errors[0];
+
+      if(errors.Count > 0)
          throw new AggregateException("Errors occurred during bulk copy.", errors);
    }
 
@@ -143,7 +146,7 @@ public sealed class BulkConnector
 
       return await _db.InTransactionAsync(
          async () => {
-            await _db.Dapper.ExecuteAsync($"CREATE TEMP TABLE {tempTableName} (LIKE {tableName} INCLUDING CONSTRAINTS INCLUDING DEFAULTS INCLUDING GENERATED INCLUDING IDENTITY);");
+            await _db.Dapper.ExecuteAsync($"CREATE TEMP TABLE {tempTableName} (LIKE {tableName} INCLUDING CONSTRAINTS INCLUDING DEFAULTS INCLUDING GENERATED INCLUDING IDENTITY);", ct: ct);
 
             await CopyAsync(tempTableName, items, columnValueMapping, ct);
 
@@ -168,7 +171,8 @@ public sealed class BulkConnector
                   Item = item,
                   IsInserted = isInserted,
                   IsUpdated = isUpdated
-               }
+               },
+               ct: ct
             );
          }
       );

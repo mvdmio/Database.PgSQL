@@ -68,10 +68,16 @@ public sealed class CopySession<T>
    /// <returns>A task representing the asynchronous complete operation.</returns>
    public async Task CompleteAsync(CancellationToken ct = default)
    {
-      await _writer.CompleteAsync(ct);
-      await _writer.DisposeAsync();
+      try
+      {
+         await _writer.CompleteAsync(ct);
+      }
+      finally
+      {
+         await _writer.DisposeAsync();
 
-      if (_connectionOpened)
-         await _db.CloseAsync(ct);
+         if (_connectionOpened)
+            await _db.CloseAsync(ct);
+      }
    }
 }
