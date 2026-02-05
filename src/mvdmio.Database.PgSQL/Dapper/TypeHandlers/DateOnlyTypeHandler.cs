@@ -17,6 +17,9 @@ public sealed class DateOnlyTypeHandler : SqlMapper.TypeHandler<DateOnly>
    /// <inheritdoc />
    public override DateOnly Parse(object value)
    {
+      if (value is DateOnly dateOnly)
+         return dateOnly;
+
       if (value is DateTime dateTime)
          return DateOnly.FromDateTime(dateTime);
 
