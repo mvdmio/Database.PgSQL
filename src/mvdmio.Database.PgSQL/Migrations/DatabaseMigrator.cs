@@ -81,6 +81,33 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    }
 
    /// <inheritdoc />
+   public async Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken = default)
+   {
+      await EnsureMigrationTableExistsAsync();
+
+      var alreadyExecutedMigrations = (await RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
+      var orderedMigrations = _migrationRetriever.RetrieveMigrations()
+         .Where(x => x.Identifier <= targetIdentifier)
+         .OrderBy(x => x.Identifier)
+         .ToArray();
+
+      foreach (var migration in orderedMigrations)
+      {
+         if (alreadyExecutedMigrations.Any(x => x.Identifier == migration.Identifier))
+            continue;
+
+         try
+         {
+            await RunAsync(migration, cancellationToken);
+         }
+         catch (Exception e)
+         {
+            throw new MigrationException(migration, e);
+         }
+      }
+   }
+
+   /// <inheritdoc />
    public async Task RunAsync(IDbMigration migration, CancellationToken cancellationToken = default)
    {
       try

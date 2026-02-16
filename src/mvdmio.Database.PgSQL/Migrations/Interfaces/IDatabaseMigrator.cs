@@ -1,4 +1,4 @@
-﻿using mvdmio.Database.PgSQL.Migrations.Models;
+using mvdmio.Database.PgSQL.Migrations.Models;
 
 namespace mvdmio.Database.PgSQL.Migrations.Interfaces;
 
@@ -16,6 +16,13 @@ public interface IDatabaseMigrator
    ///    Run all migrations that have not yet been executed in order.
    /// </summary>
    Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken);
+
+   /// <summary>
+   ///    Run all pending migrations up to and including the specified identifier.
+   /// </summary>
+   /// <param name="targetIdentifier">The migration identifier to migrate up to (inclusive).</param>
+   /// <param name="cancellationToken">Cancellation token.</param>
+   Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken);
 
    /// <summary>
    ///    Run a migration on the database. Returns true if the migration ran successfully. False otherwise.

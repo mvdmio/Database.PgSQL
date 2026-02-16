@@ -22,13 +22,22 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9
+          dotnet-version: |
+            9
+            10
 
       - name: Restore dependencies
-        run: dotnet restore src/mvdmio.Database.PgSQL
+        run: |
+          dotnet restore src/mvdmio.Database.PgSQL
+          dotnet restore src/mvdmio.Database.PgSQL.Tool
 
       - name: Build
-        run: dotnet build src/mvdmio.Database.PgSQL --no-restore
+        run: |
+          dotnet build src/mvdmio.Database.PgSQL --no-restore
+          dotnet build src/mvdmio.Database.PgSQL.Tool --no-restore
 
-      - name: Push package
-        run: nuget push **\*.nupkg -Source 'https://api.nuget.org/v3/index.json' -NonInteractive -SkipDuplicate -Verbosity normal
+      - name: Pack tool
+        run: dotnet pack src/mvdmio.Database.PgSQL.Tool --no-build
+
+      - name: Push packages
+        run: nuget push **/*.nupkg -Source 'https://api.nuget.org/v3/index.json' -NonInteractive -SkipDuplicate -Verbosity normal
