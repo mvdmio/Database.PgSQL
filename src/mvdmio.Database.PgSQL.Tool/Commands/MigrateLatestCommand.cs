@@ -18,20 +18,39 @@ internal static class MigrateLatestCommand
          Description = "Override the connection string from the configuration file"
       };
 
+      var environmentOption = new Option<string?>("--environment", "-e")
+      {
+         Description = "The environment to use (looks up the connection string from connectionStrings in .mvdmio-migrations.yml)"
+      };
+
       var command = new Command("latest", "Migrate the database to the latest version");
       command.Options.Add(connectionStringOption);
+      command.Options.Add(environmentOption);
 
       command.SetAction(async (parseResult, cancellationToken) =>
       {
          var connectionStringOverride = parseResult.GetValue(connectionStringOption);
+         var environmentOverride = parseResult.GetValue(environmentOption);
 
          var config = ToolConfiguration.Load();
-         var connectionString = connectionStringOverride ?? config.ConnectionString;
+         var connectionString = config.ResolveConnectionString(connectionStringOverride, environmentOverride);
 
          if (string.IsNullOrWhiteSpace(connectionString))
          {
-            Console.Error.WriteLine("Error: No connection string provided.");
-            Console.Error.WriteLine("Specify one in .mvdmio-migrations.yml or use --connection-string.");
+            if (environmentOverride is not null)
+            {
+               var available = config.GetAvailableEnvironments();
+               Console.Error.WriteLine($"Error: Environment '{environmentOverride}' not found in .mvdmio-migrations.yml.");
+
+               if (available.Length > 0)
+                  Console.Error.WriteLine($"Available environments: {string.Join(", ", available)}");
+            }
+            else
+            {
+                Console.Error.WriteLine("Error: No connection string provided.");
+                Console.Error.WriteLine("Specify one via --connection-string, --environment, or add an entry to connectionStrings in .mvdmio-migrations.yml.");
+            }
+
             return;
          }
 

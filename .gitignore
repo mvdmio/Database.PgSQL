@@ -1,5 +1,3 @@
-*.received.*
-
 **/.git
 **/.vs
 **/.idea

@@ -6,7 +6,7 @@ namespace mvdmio.Database.PgSQL.Tool.Configuration;
 /// <summary>
 ///    Configuration model for the migration tool, loaded from .mvdmio-migrations.yml.
 /// </summary>
-internal sealed class ToolConfiguration
+public sealed class ToolConfiguration
 {
    /// <summary>
    ///    The name of the configuration file.
@@ -24,9 +24,10 @@ internal sealed class ToolConfiguration
    public string MigrationsDirectory { get; set; } = "Migrations";
 
    /// <summary>
-   ///    Connection string for database operations.
+   ///    Named connection strings, keyed by environment name (e.g. "local", "acc", "prod").
+   ///    When no --environment flag is passed, the first entry is used as the default.
    /// </summary>
-   public string? ConnectionString { get; set; }
+   public Dictionary<string, string>? ConnectionStrings { get; set; }
 
    /// <summary>
    ///    The directory containing the config file. Used to resolve relative paths.
@@ -49,6 +50,40 @@ internal sealed class ToolConfiguration
    public string GetMigrationsDirectoryPath()
    {
       return Path.GetFullPath(Path.Combine(BasePath, MigrationsDirectory));
+   }
+
+   /// <summary>
+   ///    Resolves the connection string to use based on the provided overrides and configuration.
+   ///    Priority: connectionStringOverride > environmentOverride > first configured environment.
+   /// </summary>
+   /// <param name="connectionStringOverride">Explicit connection string from the --connection-string CLI option.</param>
+   /// <param name="environmentOverride">Environment name from the --environment CLI option.</param>
+   /// <returns>The resolved connection string, or null if none could be resolved.</returns>
+   public string? ResolveConnectionString(string? connectionStringOverride, string? environmentOverride)
+   {
+      if (!string.IsNullOrWhiteSpace(connectionStringOverride))
+         return connectionStringOverride;
+
+      if (ConnectionStrings is null || ConnectionStrings.Count == 0)
+         return null;
+
+      if (environmentOverride is not null)
+      {
+         return ConnectionStrings.TryGetValue(environmentOverride, out var connectionString)
+            ? connectionString
+            : null;
+      }
+
+      // Fall back to the first configured environment
+      return ConnectionStrings.Values.First();
+   }
+
+   /// <summary>
+   ///    Returns the list of available environment names, or an empty array if none are configured.
+   /// </summary>
+   public string[] GetAvailableEnvironments()
+   {
+      return ConnectionStrings?.Keys.ToArray() ?? [];
    }
 
    /// <summary>

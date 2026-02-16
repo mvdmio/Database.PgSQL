@@ -1,4 +1,4 @@
-﻿namespace mvdmio.Database.PgSQL.Tests.Integration.Fixture;
+namespace mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 
 public abstract class TestBase : IAsyncLifetime
 {
@@ -6,16 +6,12 @@ public abstract class TestBase : IAsyncLifetime
    private readonly DatabaseConnectionFactory _databaseConnectionFactory;
 
    protected static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
-   protected VerifySettings VerifySettings { get; }
    protected DatabaseConnection Db { get; private set; } = null!;
 
    protected TestBase(TestFixture fixture)
    {
       _fixture = fixture;
       _databaseConnectionFactory = new DatabaseConnectionFactory();
-
-      VerifySettings = new VerifySettings();
-      VerifySettings.UseDirectory(".verify");
    }
 
    public virtual async ValueTask InitializeAsync()

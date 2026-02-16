@@ -23,7 +23,14 @@ internal static class InitCommand
             return;
          }
 
-         var config = new ToolConfiguration();
+         var config = new ToolConfiguration
+         {
+            ConnectionStrings = new Dictionary<string, string>
+            {
+               ["local"] = "Host=localhost;Database=mydb;Username=postgres;Password=secret"
+            }
+         };
+
          config.Save(currentDir);
 
          Console.WriteLine($"Created configuration file: {configPath}");
@@ -31,9 +38,10 @@ internal static class InitCommand
          Console.WriteLine("Default settings:");
          Console.WriteLine($"  project:             {config.Project}");
          Console.WriteLine($"  migrationsDirectory: {config.MigrationsDirectory}");
-         Console.WriteLine($"  connectionString:    (not set)");
+         Console.WriteLine($"  connectionStrings:   local (placeholder)");
          Console.WriteLine();
-         Console.WriteLine("Edit the file to configure your project settings.");
+         Console.WriteLine("Edit the file to configure your project settings and connection strings.");
+         Console.WriteLine("The first configured environment is used by default when no --environment flag is passed.");
       });
 
       return command;

@@ -12,6 +12,7 @@ This document provides instructions for AI coding assistants working on this cod
 - Always create or modify tests when fixing a bug.
 - Always build the solution and run the tests after making changes. Fix all build errors and test failures before finishing your work.
 - If the build fails because some process is running and locking the file, kill the process.
+- Always update the README.md file so that it reflects the latest state of the project
 
 ## Project Overview
 

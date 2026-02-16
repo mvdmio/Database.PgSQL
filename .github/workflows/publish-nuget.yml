@@ -23,6 +23,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
+            8
             9
             10
 
@@ -33,11 +34,11 @@ jobs:
 
       - name: Build
         run: |
-          dotnet build src/mvdmio.Database.PgSQL --no-restore
-          dotnet build src/mvdmio.Database.PgSQL.Tool --no-restore
+          dotnet build src/mvdmio.Database.PgSQL --no-restore -c Release
+          dotnet build src/mvdmio.Database.PgSQL.Tool --no-restore -c Release
 
       - name: Pack tool
-        run: dotnet pack src/mvdmio.Database.PgSQL.Tool --no-build
+        run: dotnet pack src/mvdmio.Database.PgSQL.Tool --no-build -c Release
 
       - name: Push packages
         run: nuget push **/*.nupkg -Source 'https://api.nuget.org/v3/index.json' -NonInteractive -SkipDuplicate -Verbosity normal

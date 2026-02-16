@@ -1,48 +1,28 @@
 {
-  "$schema": "https://opencode.ai/opencode.schema.json",
-
-  // Project context
+  "$schema": "https://opencode.ai/config.json",
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      ".git/**",
+      "bin/**",
+      "obj/**",
+      "**/bin/**",
+      "**/obj/**",
+      "wwwroot/js/**",
+      "*.user",
+      ".vs/**",
+      ".idea/**",
+      "*.suo",
+      "*.userosscache",
+      "*.sln.docstates"
+    ]
+  },
   "instructions": [
-    "This is a C# NuGet package providing a Dapper wrapper for PostgreSQL.",
-    "Always run `dotnet build` after making changes to verify compilation.",
-    "Run `dotnet test` to verify all tests pass before completing tasks.",
-    "Run `dotnet format` before committing to ensure code style compliance.",
-    "Write tests before implementing features (TDD approach).",
-    "All public methods must have XML documentation comments."
+    "AGENTS.md",
+    "readme.md"
   ],
-
-  // Default model for code generation
-  "model": "claude-sonnet-4-20250514",
-
-  // Code style preferences
-  "codeStyle": {
-    "indentSize": 3,
-    "indentStyle": "space",
-    "namespaceStyle": "file-scoped",
-    "preferVar": true,
-    "bracesForMultiline": true
-  },
-
-  // Commands for common tasks
-  "commands": {
-    "build": "dotnet build",
-    "test": "dotnet test",
-    "format": "dotnet format",
-    "pack": "dotnet pack"
-  },
-
-  // File patterns
-  "include": [
-    "src/**/*.cs",
-    "test/**/*.cs",
-    "*.csproj",
-    "*.sln"
-  ],
-
-  "exclude": [
-    "**/bin/**",
-    "**/obj/**",
-    "**/.vs/**",
-    "**/node_modules/**"
-  ]
+  "compaction": {
+    "auto": true,
+    "prune": true
+  }
 }

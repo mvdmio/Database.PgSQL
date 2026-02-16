@@ -415,13 +415,17 @@ db init
 # Create a new migration (generates a timestamped file)
 db migration create AddUsersTable
 
-# Run all pending migrations
+# Run all pending migrations (uses the first configured environment)
 db migrate latest
+
+# Run migrations against a specific environment
+db migrate latest --environment prod
+db migrate latest -e acc
 
 # Run migrations up to a specific version
 db migrate to 202602161430
 
-# Override connection string
+# Override connection string directly
 db migrate latest --connection-string "Host=localhost;Database=mydb;..."
 ```
 
@@ -432,8 +436,33 @@ Create a `.mvdmio-migrations.yml` file in your project root:
 ```yaml
 project: src/MyApp.Data          # Path to the project containing migrations
 migrationsDirectory: Migrations  # Directory for migration files (default: Migrations)
-connectionString: Host=localhost;Database=mydb;Username=postgres;Password=secret
+connectionStrings:               # The first entry is used when no --environment flag is passed
+  local: Host=localhost;Database=mydb;Username=postgres;Password=secret
+  acc: Host=acc-server;Database=mydb;Username=postgres;Password=secret
+  prod: Host=prod-server;Database=mydb;Username=postgres;Password=secret
 ```
+
+#### Multi-Environment Support
+
+The `connectionStrings` section maps environment names to connection strings. Use the `--environment` (or `-e`) flag to select which environment to run against:
+
+```bash
+# Use the first configured environment (default behavior)
+db migrate latest
+
+# Target a specific environment
+db migrate latest --environment prod
+db migrate to 202602161430 -e acc
+
+# Override the connection string entirely (ignores environments)
+db migrate latest --connection-string "Host=custom;Database=mydb;..."
+```
+
+Connection string resolution priority:
+1. `--connection-string` flag (explicit override)
+2. `--environment` / `-e` flag (looks up from `connectionStrings` in config)
+3. First entry in `connectionStrings` (fallback)
+4. Error if none of the above resolve
 
 The `db migration create` command scaffolds a migration file with the correct namespace and timestamp:
 
