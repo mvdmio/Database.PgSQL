@@ -336,6 +336,40 @@ bool exists = await db.Management.TableExistsAsync("public", "users");
 bool schemaExists = await db.Management.SchemaExistsAsync("analytics");
 ```
 
+### Schema Extraction
+
+Extract the full database schema as an idempotent SQL script, or query individual schema objects programmatically. All methods exclude system schemas (`pg_catalog`, `information_schema`, `pg_toast`) and the `mvdmio` migration tracking schema.
+
+#### Generate a Schema Script
+
+```csharp
+var script = await db.Management.GenerateSchemaScriptAsync();
+File.WriteAllText("schema.sql", script);
+```
+
+The generated script includes extensions, schemas, enum/composite/domain types, sequences, tables, constraints, indexes, functions/procedures, triggers, and views. All statements use idempotent syntax (`IF NOT EXISTS`, `CREATE OR REPLACE`, etc.) so the script can be run repeatedly against the same database without errors.
+
+#### Query Individual Schema Objects
+
+The `db.Management.Schema` property exposes methods for querying individual schema components:
+
+```csharp
+var schemas = await db.Management.Schema.GetUserSchemasAsync();
+var tables = await db.Management.Schema.GetTablesAsync();
+var enums = await db.Management.Schema.GetEnumTypesAsync();
+var sequences = await db.Management.Schema.GetSequencesAsync();
+var constraints = await db.Management.Schema.GetConstraintsAsync();
+var indexes = await db.Management.Schema.GetIndexesAsync();
+var functions = await db.Management.Schema.GetFunctionsAsync();
+var triggers = await db.Management.Schema.GetTriggersAsync();
+var views = await db.Management.Schema.GetViewsAsync();
+var extensions = await db.Management.Schema.GetExtensionsAsync();
+var compositeTypes = await db.Management.Schema.GetCompositeTypesAsync();
+var domainTypes = await db.Management.Schema.GetDomainTypesAsync();
+```
+
+Each method returns strongly-typed records. For example, `GetTablesAsync()` returns `TableInfo` records with full column details including data types, nullability, defaults, and identity generation.
+
 ## PostgreSQL LISTEN/NOTIFY
 
 Wait for notifications on a PostgreSQL channel:
@@ -403,7 +437,7 @@ Each migration runs in its own transaction. If a migration fails, its transactio
 
 ### CLI Tool
 
-The `mvdmio.Database.PgSQL.Tool` package provides a `db` CLI tool for managing migrations:
+The `mvdmio.Database.PgSQL.Tool` package provides a `db` CLI tool for managing migrations and extracting schema:
 
 ```bash
 # Install the tool
@@ -427,6 +461,16 @@ db migrate to 202602161430
 
 # Override connection string directly
 db migrate latest --connection-string "Host=localhost;Database=mydb;..."
+
+# Pull the current database schema into a schema.sql file
+db pull
+
+# Pull from a specific environment
+db pull --environment prod
+db pull -e acc
+
+# Pull using an explicit connection string
+db pull --connection-string "Host=localhost;Database=mydb;..."
 ```
 
 #### Configuration

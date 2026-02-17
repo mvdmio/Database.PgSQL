@@ -13,6 +13,10 @@ This document provides instructions for AI coding assistants working on this cod
 - Always build the solution and run the tests after making changes. Fix all build errors and test failures before finishing your work.
 - If the build fails because some process is running and locking the file, kill the process.
 - Always update the README.md file so that it reflects the latest state of the project
+- Always bump the version number in the .csproj file when making changes to the codebase. Follow semantic versioning principles (MAJOR.MINOR.PATCH):
+  - Increment the MAJOR version when you make incompatible API changes.
+  - Increment the MINOR version when you add functionality in a backward-compatible manner.
+  - Increment the PATCH version when you make backward-compatible bug fixes.
 
 ## Project Overview
 

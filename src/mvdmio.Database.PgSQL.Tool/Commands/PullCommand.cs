@@ -1,0 +1,75 @@
+using System.CommandLine;
+using mvdmio.Database.PgSQL.Tool.Configuration;
+
+namespace mvdmio.Database.PgSQL.Tool.Commands;
+
+/// <summary>
+///    Command: db pull
+/// </summary>
+internal static class PullCommand
+{
+   public static Command Create()
+   {
+      var connectionStringOption = new Option<string?>("--connection-string")
+      {
+         Description = "Override the connection string from the configuration file"
+      };
+
+      var environmentOption = new Option<string?>("--environment", "-e")
+      {
+         Description = "The environment to use (looks up the connection string from connectionStrings in .mvdmio-migrations.yml)"
+      };
+
+      var command = new Command("pull", "Pull the database schema and save it as a schema.sql file");
+      command.Options.Add(connectionStringOption);
+      command.Options.Add(environmentOption);
+
+      command.SetAction(async (parseResult, cancellationToken) =>
+      {
+         var connectionStringOverride = parseResult.GetValue(connectionStringOption);
+         var environmentOverride = parseResult.GetValue(environmentOption);
+
+         var config = ToolConfiguration.Load();
+         var connectionString = config.ResolveConnectionString(connectionStringOverride, environmentOverride);
+
+         if (string.IsNullOrWhiteSpace(connectionString))
+         {
+            if (environmentOverride is not null)
+            {
+               var available = config.GetAvailableEnvironments();
+               Console.Error.WriteLine($"Error: Environment '{environmentOverride}' not found in .mvdmio-migrations.yml.");
+
+               if (available.Length > 0)
+                  Console.Error.WriteLine($"Available environments: {string.Join(", ", available)}");
+            }
+            else
+            {
+                Console.Error.WriteLine("Error: No connection string provided.");
+                Console.Error.WriteLine("Specify one via --connection-string, --environment, or add an entry to connectionStrings in .mvdmio-migrations.yml.");
+            }
+
+            return;
+         }
+
+         var migrationsDir = config.GetMigrationsDirectoryPath();
+         Directory.CreateDirectory(migrationsDir);
+
+         var outputPath = Path.Combine(migrationsDir, "schema.sql");
+
+         Console.WriteLine("Connecting to database...");
+
+         await using var connection = new DatabaseConnection(connectionString);
+
+         Console.WriteLine("Extracting schema...");
+
+         var script = await connection.Management.GenerateSchemaScriptAsync(cancellationToken);
+
+         await File.WriteAllTextAsync(outputPath, script, cancellationToken);
+
+         Console.WriteLine();
+         Console.WriteLine($"Schema written to {outputPath}");
+      });
+
+      return command;
+   }
+}

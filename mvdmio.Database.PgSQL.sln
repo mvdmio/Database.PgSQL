@@ -16,6 +16,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".solution", ".solution", "{
 		.gitattributes = .gitattributes
 		.github\workflows\publish-nuget.yml = .github\workflows\publish-nuget.yml
 		.editorconfig = .editorconfig
+		AGENTS.md = AGENTS.md
+		opencode.jsonc = opencode.jsonc
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "mvdmio.Database.PgSQL.Tool", "src\mvdmio.Database.PgSQL.Tool\mvdmio.Database.PgSQL.Tool.csproj", "{A8B3BFA8-278C-4E0B-A24F-97E5962E8CC8}"

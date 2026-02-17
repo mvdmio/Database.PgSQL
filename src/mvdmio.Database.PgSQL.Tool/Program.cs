@@ -6,6 +6,9 @@ var rootCommand = new RootCommand("PostgreSQL database migration tool");
 // db init
 rootCommand.Subcommands.Add(InitCommand.Create());
 
+// db pull
+rootCommand.Subcommands.Add(PullCommand.Create());
+
 // db migration create <name>
 var migrationCommand = new Command("migration", "Migration scaffolding commands");
 migrationCommand.Subcommands.Add(MigrationCreateCommand.Create());
