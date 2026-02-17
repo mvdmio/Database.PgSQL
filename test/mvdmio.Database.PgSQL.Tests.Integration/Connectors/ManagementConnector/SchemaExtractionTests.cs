@@ -488,6 +488,56 @@ public class SchemaExtractionTests : TestBase
    }
 
    [Fact]
+   public async Task GetConstraintsAsync_ReturnsCheckConstraints()
+   {
+      await Db.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.check_constraint_test (
+            id    bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
+            value integer NOT NULL,
+            PRIMARY KEY (id),
+            CONSTRAINT chk_value_positive CHECK (value > 0)
+         );
+         """,
+         ct: CancellationToken
+      );
+
+      var constraints = (await Db.Management.Schema.GetConstraintsAsync(CancellationToken)).ToArray();
+      var checkConstraints = constraints.Where(c => c.ConstraintType == "c").ToArray();
+
+      checkConstraints.Should().Contain(c => c.ConstraintName == "chk_value_positive" && c.TableName == "check_constraint_test");
+   }
+
+   [Fact]
+   public async Task GenerateSchemaScriptAsync_HandlesConstraintNameWithSpecialCharacters()
+   {
+      // Constraint names with single quotes must be properly escaped in the generated script.
+      await Db.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.special_constraint_test (
+            id    bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
+            value integer NOT NULL,
+            PRIMARY KEY (id)
+         );
+         """,
+         ct: CancellationToken
+      );
+
+      await Db.Dapper.ExecuteAsync(
+         """
+         ALTER TABLE public.special_constraint_test
+            ADD CONSTRAINT "chk_it's_positive" CHECK (value > 0);
+         """,
+         ct: CancellationToken
+      );
+
+      var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
+
+      // The single quote in the constraint name must be escaped as ''
+      script.Should().Contain("chk_it''s_positive");
+   }
+
+   [Fact]
    public async Task GetSequencesAsync_ReturnsUserSequences()
    {
       var sequences = (await Db.Management.Schema.GetSequencesAsync(CancellationToken)).ToArray();

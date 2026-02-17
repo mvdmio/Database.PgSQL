@@ -290,6 +290,10 @@ public sealed partial class SchemaExtractor
 
       foreach (var constraint in ordered)
       {
+         // Skip constraints that have null essential properties — they would produce broken SQL.
+         if (constraint.ConstraintName is null || constraint.Schema is null || constraint.TableName is null || constraint.Definition is null)
+            continue;
+
          // PostgreSQL does not support ALTER TABLE ... ADD CONSTRAINT IF NOT EXISTS,
          // so wrap each constraint in a DO block that checks for its existence first.
          sb.AppendLine("DO $$ BEGIN");
@@ -430,8 +434,8 @@ public sealed partial class SchemaExtractor
       return indexDef;
    }
 
-   private static string EscapeSqlString(string value)
+   internal static string EscapeSqlString(string? value)
    {
-      return value.Replace("'", "''");
+      return value?.Replace("'", "''") ?? string.Empty;
    }
 }

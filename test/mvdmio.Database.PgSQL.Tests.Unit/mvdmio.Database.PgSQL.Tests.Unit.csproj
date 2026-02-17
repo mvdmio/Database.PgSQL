@@ -30,4 +30,8 @@
       <Compile Include="..\..\src\mvdmio.Database.PgSQL.Tool\Configuration\ToolConfiguration.cs" Link="Configuration\ToolConfiguration.cs" />
    </ItemGroup>
 
+   <ItemGroup>
+      <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL\mvdmio.Database.PgSQL.csproj" />
+   </ItemGroup>
+
 </Project>
