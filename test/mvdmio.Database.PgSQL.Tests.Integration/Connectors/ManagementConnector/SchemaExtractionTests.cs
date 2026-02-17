@@ -109,6 +109,15 @@ public class SchemaExtractionTests : TestBase
    }
 
    [Fact]
+   public async Task GenerateSchemaScriptAsync_ContainsMigrationVersion()
+   {
+      var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
+
+      // The test fixture runs migrations, so the latest migration should be in the header
+      script.Should().Contain("Migration version: 202505192230 (ComplexTable)");
+   }
+
+   [Fact]
    public async Task GenerateSchemaScriptAsync_ContainsSchemas()
    {
       var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
@@ -599,5 +608,24 @@ public class SchemaExtractionTests : TestBase
             column.DataType.Should().NotBeNullOrEmpty($"column {column.Name} in table {table.Schema}.{table.Name} should have a data type");
          }
       }
+   }
+
+   [Fact]
+   public async Task GetCurrentMigrationVersionAsync_ReturnsMostRecentMigration()
+   {
+      // Verify the mvdmio schema exists
+      var schemaExists = await Db.Management.SchemaExistsAsync("mvdmio");
+      schemaExists.Should().BeTrue("the mvdmio schema should exist after migrations run");
+
+      // Verify the migrations table exists
+      var tableExists = await Db.Management.TableExistsAsync("mvdmio", "migrations");
+      tableExists.Should().BeTrue("the migrations table should exist after migrations run");
+
+      // The test fixture runs migrations, so the latest migration should be returned
+      var currentMigration = await Db.Management.Schema.GetCurrentMigrationVersionAsync(CancellationToken);
+
+      currentMigration.Should().NotBeNull();
+      currentMigration!.Value.Identifier.Should().Be(202505192230);
+      currentMigration.Value.Name.Should().Be("ComplexTable");
    }
 }

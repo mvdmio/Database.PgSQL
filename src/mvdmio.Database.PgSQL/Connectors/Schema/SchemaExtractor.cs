@@ -1,5 +1,6 @@
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Connectors.Schema.Models;
+using mvdmio.Database.PgSQL.Migrations.Models;
 using System.Text;
 
 namespace mvdmio.Database.PgSQL.Connectors.Schema;
@@ -30,6 +31,35 @@ public sealed partial class SchemaExtractor
    }
 
    /// <summary>
+   ///    Gets the current migration version (the most recently executed migration).
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The latest executed migration, or null if no migrations have been executed or the migration table does not exist.</returns>
+   public async Task<ExecutedMigrationModel?> GetCurrentMigrationVersionAsync(CancellationToken cancellationToken = default)
+   {
+      var schemaExists = await _db.Management.SchemaExistsAsync("mvdmio");
+      if (!schemaExists)
+         return null;
+
+      var tableExists = await _db.Management.TableExistsAsync("mvdmio", "migrations");
+      if (!tableExists)
+         return null;
+
+      return await _db.Dapper.QuerySingleOrDefaultAsync<ExecutedMigrationModel>(
+         """
+         SELECT
+            identifier AS identifier,
+            name AS name,
+            executed_at AS executedAtUtc
+         FROM mvdmio.migrations
+         ORDER BY identifier DESC
+         LIMIT 1
+         """,
+         ct: cancellationToken
+      );
+   }
+
+   /// <summary>
    ///    Generates a complete, idempotent SQL script that recreates the database schema.
    ///    The script includes extensions, schemas, types, sequences, tables, constraints,
    ///    indexes, functions, triggers, and views.
@@ -43,6 +73,13 @@ public sealed partial class SchemaExtractor
       sb.AppendLine("--");
       sb.AppendLine("-- PostgreSQL database schema");
       sb.AppendLine($"-- Generated at {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
+
+      var currentMigration = await GetCurrentMigrationVersionAsync(cancellationToken);
+      if (currentMigration is not null)
+         sb.AppendLine($"-- Migration version: {currentMigration.Value.Identifier} ({currentMigration.Value.Name})");
+      else
+         sb.AppendLine("-- Migration version: (none)");
+
       sb.AppendLine("--");
       sb.AppendLine();
 

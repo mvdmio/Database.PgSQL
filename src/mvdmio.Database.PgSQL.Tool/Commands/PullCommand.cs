@@ -51,12 +51,12 @@ internal static class PullCommand
             return;
          }
 
-          var migrationsDir = config.GetMigrationsDirectoryPath();
-          Directory.CreateDirectory(migrationsDir);
+         var migrationsDir = config.GetMigrationsDirectoryPath();
+         Directory.CreateDirectory(migrationsDir);
 
-          var environmentName = config.ResolveEnvironmentName(connectionStringOverride, environmentOverride);
-          var fileName = environmentName is not null ? $"schema.{environmentName}.sql" : "schema.sql";
-          var outputPath = Path.Combine(migrationsDir, fileName);
+         var environmentName = config.ResolveEnvironmentName(connectionStringOverride, environmentOverride);
+         var fileName = environmentName is not null ? $"schema.{environmentName}.sql" : "schema.sql";
+         var outputPath = Path.Combine(migrationsDir, fileName);
 
          Console.WriteLine("Connecting to database...");
 

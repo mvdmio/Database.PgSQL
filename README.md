@@ -347,7 +347,7 @@ var script = await db.Management.GenerateSchemaScriptAsync();
 File.WriteAllText("schema.sql", script);
 ```
 
-The generated script includes extensions, schemas, enum/composite/domain types, sequences, tables, constraints, indexes, functions/procedures, triggers, and views. All statements use idempotent syntax (`IF NOT EXISTS`, `CREATE OR REPLACE`, etc.) so the script can be run repeatedly against the same database without errors.
+The generated script includes extensions, schemas, enum/composite/domain types, sequences, tables, constraints, indexes, functions/procedures, triggers, and views. The script header includes the current migration version (identifier and name) if migrations have been executed. All statements use idempotent syntax (`IF NOT EXISTS`, `CREATE OR REPLACE`, etc.) so the script can be run repeatedly against the same database without errors.
 
 #### Query Individual Schema Objects
 
@@ -366,6 +366,7 @@ var views = await db.Management.Schema.GetViewsAsync();
 var extensions = await db.Management.Schema.GetExtensionsAsync();
 var compositeTypes = await db.Management.Schema.GetCompositeTypesAsync();
 var domainTypes = await db.Management.Schema.GetDomainTypesAsync();
+var currentMigration = await db.Management.Schema.GetCurrentMigrationVersionAsync();
 ```
 
 Each method returns strongly-typed objects. For example, `GetTablesAsync()` returns `TableInfo` objects with full column details including data types, nullability, defaults, and identity generation.
