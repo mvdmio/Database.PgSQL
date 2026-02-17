@@ -5,27 +5,40 @@ namespace mvdmio.Database.PgSQL.Connectors.Schema.Models;
 /// <summary>
 ///    Represents a PostgreSQL table.
 /// </summary>
-/// <param name="Schema">The schema the table belongs to.</param>
-/// <param name="Name">The name of the table.</param>
-/// <param name="Columns">The columns of the table.</param>
 [PublicAPI]
-public sealed record TableInfo(string Schema, string Name, IReadOnlyList<ColumnInfo> Columns);
+public sealed class TableInfo
+{
+   /// <summary>The schema the table belongs to.</summary>
+   public required string Schema { get; init; }
+
+   /// <summary>The name of the table.</summary>
+   public required string Name { get; init; }
+
+   /// <summary>The columns of the table.</summary>
+   public required IReadOnlyList<ColumnInfo> Columns { get; init; }
+}
 
 /// <summary>
 ///    Represents a column in a PostgreSQL table.
 /// </summary>
-/// <param name="Name">The column name.</param>
-/// <param name="DataType">The full SQL data type (e.g. "character varying(255)", "bigint").</param>
-/// <param name="IsNullable">Whether the column allows NULL values.</param>
-/// <param name="DefaultValue">The default value expression, or null if none.</param>
-/// <param name="IsIdentity">Whether the column is an identity column.</param>
-/// <param name="IdentityGeneration">The identity generation type ("ALWAYS" or "BY DEFAULT"), or null if not an identity column.</param>
 [PublicAPI]
-public sealed record ColumnInfo(
-   string Name,
-   string DataType,
-   bool IsNullable,
-   string? DefaultValue,
-   bool IsIdentity,
-   string? IdentityGeneration
-);
+public sealed class ColumnInfo
+{
+   /// <summary>The column name.</summary>
+   public required string Name { get; init; }
+
+   /// <summary>The full SQL data type (e.g. "character varying(255)", "bigint").</summary>
+   public required string DataType { get; init; }
+
+   /// <summary>Whether the column allows NULL values.</summary>
+   public required bool IsNullable { get; init; }
+
+   /// <summary>The default value expression, or null if none.</summary>
+   public string? DefaultValue { get; init; }
+
+   /// <summary>Whether the column is an identity column.</summary>
+   public required bool IsIdentity { get; init; }
+
+   /// <summary>The identity generation type ("ALWAYS" or "BY DEFAULT"), or null if not an identity column.</summary>
+   public string? IdentityGeneration { get; init; }
+}

@@ -5,8 +5,15 @@ namespace mvdmio.Database.PgSQL.Connectors.Schema.Models;
 /// <summary>
 ///    Represents a PostgreSQL extension installed in the database.
 /// </summary>
-/// <param name="Name">The name of the extension (e.g. "uuid-ossp").</param>
-/// <param name="Schema">The schema the extension is installed in.</param>
-/// <param name="Version">The version of the extension.</param>
 [PublicAPI]
-public sealed record ExtensionInfo(string Name, string Schema, string Version);
+public sealed class ExtensionInfo
+{
+   /// <summary>The name of the extension (e.g. "uuid-ossp").</summary>
+   public required string Name { get; init; }
+
+   /// <summary>The schema the extension is installed in.</summary>
+   public required string Schema { get; init; }
+
+   /// <summary>The version of the extension.</summary>
+   public required string Version { get; init; }
+}

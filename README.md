@@ -368,7 +368,7 @@ var compositeTypes = await db.Management.Schema.GetCompositeTypesAsync();
 var domainTypes = await db.Management.Schema.GetDomainTypesAsync();
 ```
 
-Each method returns strongly-typed records. For example, `GetTablesAsync()` returns `TableInfo` records with full column details including data types, nullability, defaults, and identity generation.
+Each method returns strongly-typed objects. For example, `GetTablesAsync()` returns `TableInfo` objects with full column details including data types, nullability, defaults, and identity generation.
 
 ## PostgreSQL LISTEN/NOTIFY
 

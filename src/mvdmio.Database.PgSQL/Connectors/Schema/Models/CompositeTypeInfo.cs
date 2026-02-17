@@ -5,16 +5,28 @@ namespace mvdmio.Database.PgSQL.Connectors.Schema.Models;
 /// <summary>
 ///    Represents a PostgreSQL composite type.
 /// </summary>
-/// <param name="Schema">The schema the composite type belongs to.</param>
-/// <param name="Name">The name of the composite type.</param>
-/// <param name="Attributes">The attributes (columns) of the composite type.</param>
 [PublicAPI]
-public sealed record CompositeTypeInfo(string Schema, string Name, IReadOnlyList<CompositeTypeAttributeInfo> Attributes);
+public sealed class CompositeTypeInfo
+{
+   /// <summary>The schema the composite type belongs to.</summary>
+   public required string Schema { get; init; }
+
+   /// <summary>The name of the composite type.</summary>
+   public required string Name { get; init; }
+
+   /// <summary>The attributes (columns) of the composite type.</summary>
+   public required IReadOnlyList<CompositeTypeAttributeInfo> Attributes { get; init; }
+}
 
 /// <summary>
 ///    Represents a single attribute of a composite type.
 /// </summary>
-/// <param name="Name">The attribute name.</param>
-/// <param name="DataType">The SQL data type of the attribute.</param>
 [PublicAPI]
-public sealed record CompositeTypeAttributeInfo(string Name, string DataType);
+public sealed class CompositeTypeAttributeInfo
+{
+   /// <summary>The attribute name.</summary>
+   public required string Name { get; init; }
+
+   /// <summary>The SQL data type of the attribute.</summary>
+   public required string DataType { get; init; }
+}

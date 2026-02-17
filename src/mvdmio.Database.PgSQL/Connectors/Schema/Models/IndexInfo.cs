@@ -5,9 +5,18 @@ namespace mvdmio.Database.PgSQL.Connectors.Schema.Models;
 /// <summary>
 ///    Represents a PostgreSQL index that is not backing a constraint.
 /// </summary>
-/// <param name="Schema">The schema of the table the index belongs to.</param>
-/// <param name="TableName">The name of the table the index belongs to.</param>
-/// <param name="IndexName">The name of the index.</param>
-/// <param name="Definition">The full CREATE INDEX statement as returned by pg_get_indexdef().</param>
 [PublicAPI]
-public sealed record IndexInfo(string Schema, string TableName, string IndexName, string Definition);
+public sealed class IndexInfo
+{
+   /// <summary>The schema of the table the index belongs to.</summary>
+   public required string Schema { get; init; }
+
+   /// <summary>The name of the table the index belongs to.</summary>
+   public required string TableName { get; init; }
+
+   /// <summary>The name of the index.</summary>
+   public required string IndexName { get; init; }
+
+   /// <summary>The full CREATE INDEX statement as returned by pg_get_indexdef().</summary>
+   public required string Definition { get; init; }
+}

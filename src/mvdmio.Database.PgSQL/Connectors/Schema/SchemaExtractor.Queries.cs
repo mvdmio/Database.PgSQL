@@ -79,7 +79,7 @@ public sealed partial class SchemaExtractor
 
       return rows
          .GroupBy(r => (r.Schema, r.Name))
-         .Select(g => new EnumTypeInfo(g.Key.Schema, g.Key.Name, g.Select(r => r.Label).ToArray()))
+         .Select(g => new EnumTypeInfo { Schema = g.Key.Schema, Name = g.Key.Name, Labels = g.Select(r => r.Label).ToArray() })
          .ToArray();
    }
 
@@ -112,11 +112,12 @@ public sealed partial class SchemaExtractor
 
       return rows
          .GroupBy(r => (r.Schema, r.TypeName))
-         .Select(g => new CompositeTypeInfo(
-            g.Key.Schema,
-            g.Key.TypeName,
-            g.Select(r => new CompositeTypeAttributeInfo(r.AttributeName, r.DataType)).ToArray()
-         ))
+         .Select(g => new CompositeTypeInfo
+         {
+            Schema = g.Key.Schema,
+            Name = g.Key.TypeName,
+            Attributes = g.Select(r => new CompositeTypeAttributeInfo { Name = r.AttributeName, DataType = r.DataType }).ToArray()
+         })
          .ToArray();
    }
 
@@ -164,7 +165,15 @@ public sealed partial class SchemaExtractor
             ct: cancellationToken
          );
 
-         result.Add(new DomainTypeInfo(row.Schema, row.Name, row.BaseType, row.DefaultValue, row.IsNotNull, checks.ToArray()));
+         result.Add(new DomainTypeInfo
+         {
+            Schema = row.Schema,
+            Name = row.Name,
+            BaseType = row.BaseType,
+            DefaultValue = row.DefaultValue,
+            IsNotNull = row.IsNotNull,
+            CheckConstraints = checks.ToArray()
+         });
       }
 
       return result;
@@ -238,13 +247,22 @@ public sealed partial class SchemaExtractor
 
       return rows
          .GroupBy(r => (r.Schema, r.TableName))
-         .Select(g => new TableInfo(
-            g.Key.Schema,
-            g.Key.TableName,
-            g.OrderBy(r => r.Ordinal)
-               .Select(r => new ColumnInfo(r.ColumnName, r.DataType, r.IsNullable, r.DefaultValue, r.IsIdentity, r.IdentityGeneration))
+         .Select(g => new TableInfo
+         {
+            Schema = g.Key.Schema,
+            Name = g.Key.TableName,
+            Columns = g.OrderBy(r => r.Ordinal)
+               .Select(r => new ColumnInfo
+               {
+                  Name = r.ColumnName,
+                  DataType = r.DataType,
+                  IsNullable = r.IsNullable,
+                  DefaultValue = r.DefaultValue,
+                  IsIdentity = r.IsIdentity,
+                  IdentityGeneration = r.IdentityGeneration
+               })
                .ToArray()
-         ))
+         })
          .ToArray();
    }
 
