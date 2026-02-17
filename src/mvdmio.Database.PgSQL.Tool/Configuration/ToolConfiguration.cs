@@ -79,6 +79,27 @@ public sealed class ToolConfiguration
    }
 
    /// <summary>
+   ///    Resolves the environment name based on the provided overrides and configuration.
+   ///    Returns null when a connection string override is used without an environment name.
+   /// </summary>
+   /// <param name="connectionStringOverride">Explicit connection string from the --connection-string CLI option.</param>
+   /// <param name="environmentOverride">Environment name from the --environment CLI option.</param>
+   /// <returns>The resolved environment name, or null if none could be determined.</returns>
+   public string? ResolveEnvironmentName(string? connectionStringOverride, string? environmentOverride)
+   {
+      if (environmentOverride is not null)
+         return environmentOverride;
+
+      if (!string.IsNullOrWhiteSpace(connectionStringOverride))
+         return null;
+
+      if (ConnectionStrings is null || ConnectionStrings.Count == 0)
+         return null;
+
+      return ConnectionStrings.Keys.First();
+   }
+
+   /// <summary>
    ///    Returns the list of available environment names, or an empty array if none are configured.
    /// </summary>
    public string[] GetAvailableEnvironments()

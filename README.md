@@ -462,14 +462,14 @@ db migrate to 202602161430
 # Override connection string directly
 db migrate latest --connection-string "Host=localhost;Database=mydb;..."
 
-# Pull the current database schema into a schema.sql file
+# Pull the current database schema into a schema.<env>.sql file
 db pull
 
 # Pull from a specific environment
 db pull --environment prod
 db pull -e acc
 
-# Pull using an explicit connection string
+# Pull using an explicit connection string (produces schema.sql)
 db pull --connection-string "Host=localhost;Database=mydb;..."
 ```
 

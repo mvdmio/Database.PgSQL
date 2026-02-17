@@ -20,7 +20,7 @@ internal static class PullCommand
          Description = "The environment to use (looks up the connection string from connectionStrings in .mvdmio-migrations.yml)"
       };
 
-      var command = new Command("pull", "Pull the database schema and save it as a schema.sql file");
+      var command = new Command("pull", "Pull the database schema and save it as a schema.<env>.sql file");
       command.Options.Add(connectionStringOption);
       command.Options.Add(environmentOption);
 
@@ -51,10 +51,12 @@ internal static class PullCommand
             return;
          }
 
-         var migrationsDir = config.GetMigrationsDirectoryPath();
-         Directory.CreateDirectory(migrationsDir);
+          var migrationsDir = config.GetMigrationsDirectoryPath();
+          Directory.CreateDirectory(migrationsDir);
 
-         var outputPath = Path.Combine(migrationsDir, "schema.sql");
+          var environmentName = config.ResolveEnvironmentName(connectionStringOverride, environmentOverride);
+          var fileName = environmentName is not null ? $"schema.{environmentName}.sql" : "schema.sql";
+          var outputPath = Path.Combine(migrationsDir, fileName);
 
          Console.WriteLine("Connecting to database...");
 

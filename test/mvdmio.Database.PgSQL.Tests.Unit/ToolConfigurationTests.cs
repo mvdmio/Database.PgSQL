@@ -279,6 +279,96 @@ public class ToolConfigurationTests
       config.ConnectionStrings!["local"].Should().Be("Host=localhost;Database=mydb");
    }
 
+   [Fact]
+   public void ResolveEnvironmentName_WithEnvironmentOverride_ReturnsOverride()
+   {
+      var config = new ToolConfiguration
+      {
+         ConnectionStrings = new Dictionary<string, string>
+         {
+            ["local"] = "Host=localhost;Database=localdb",
+            ["prod"] = "Host=prod-server;Database=proddb"
+         }
+      };
+
+      var result = config.ResolveEnvironmentName(null, "prod");
+
+      result.Should().Be("prod");
+   }
+
+   [Fact]
+   public void ResolveEnvironmentName_WithConnectionStringOverrideAndNoEnvironment_ReturnsNull()
+   {
+      var config = new ToolConfiguration
+      {
+         ConnectionStrings = new Dictionary<string, string>
+         {
+            ["local"] = "Host=localhost;Database=localdb"
+         }
+      };
+
+      var result = config.ResolveEnvironmentName("Host=override;Database=overridedb", null);
+
+      result.Should().BeNull();
+   }
+
+   [Fact]
+   public void ResolveEnvironmentName_WithConnectionStringOverrideAndEnvironment_ReturnsEnvironment()
+   {
+      var config = new ToolConfiguration
+      {
+         ConnectionStrings = new Dictionary<string, string>
+         {
+            ["local"] = "Host=localhost;Database=localdb",
+            ["prod"] = "Host=prod-server;Database=proddb"
+         }
+      };
+
+      var result = config.ResolveEnvironmentName("Host=override;Database=overridedb", "prod");
+
+      result.Should().Be("prod");
+   }
+
+   [Fact]
+   public void ResolveEnvironmentName_WithNoOverrides_ReturnsFirstConfiguredEnvironment()
+   {
+      var config = new ToolConfiguration
+      {
+         ConnectionStrings = new Dictionary<string, string>
+         {
+            ["local"] = "Host=localhost;Database=localdb",
+            ["prod"] = "Host=prod-server;Database=proddb"
+         }
+      };
+
+      var result = config.ResolveEnvironmentName(null, null);
+
+      result.Should().Be("local");
+   }
+
+   [Fact]
+   public void ResolveEnvironmentName_WithNoConnectionStrings_ReturnsNull()
+   {
+      var config = new ToolConfiguration();
+
+      var result = config.ResolveEnvironmentName(null, null);
+
+      result.Should().BeNull();
+   }
+
+   [Fact]
+   public void ResolveEnvironmentName_WithEmptyConnectionStrings_ReturnsNull()
+   {
+      var config = new ToolConfiguration
+      {
+         ConnectionStrings = new Dictionary<string, string>()
+      };
+
+      var result = config.ResolveEnvironmentName(null, null);
+
+      result.Should().BeNull();
+   }
+
    private static ToolConfiguration Deserialize(string yaml)
    {
       var deserializer = new DeserializerBuilder()
