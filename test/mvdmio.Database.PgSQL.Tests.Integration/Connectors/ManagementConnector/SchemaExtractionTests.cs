@@ -550,4 +550,54 @@ public class SchemaExtractionTests : TestBase
       testSeq.IncrementBy.Should().Be(1);
       testSeq.IsCyclic.Should().BeFalse();
    }
+
+   [Fact]
+   public async Task GetSequencesAsync_ReturnsAllProperties()
+   {
+      var sequences = (await Db.Management.Schema.GetSequencesAsync(CancellationToken)).ToArray();
+      var testSeq = sequences.First(s => s.Name == "test_seq");
+
+      testSeq.DataType.Should().Be("bigint");
+      testSeq.MinValue.Should().Be(1);
+      testSeq.MaxValue.Should().Be(9223372036854775807);
+      testSeq.CacheSize.Should().Be(1);
+   }
+
+   [Fact]
+   public async Task GenerateSchemaScriptAsync_ContainsSequenceProperties()
+   {
+      var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
+
+      // Verify sequence has actual property values, not zeroes
+      script.Should().Contain("INCREMENT BY 1");
+      script.Should().Contain("START WITH 100");
+      script.Should().Contain("AS bigint");
+   }
+
+   [Fact]
+   public async Task GenerateSchemaScriptAsync_ContainsTableColumnDetails()
+   {
+      var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
+
+      // Verify table columns have actual names and types, not empty strings
+      script.Should().Contain("\"id\" bigint");
+      script.Should().Contain("\"name\" text");
+   }
+
+   [Fact]
+   public async Task GetTablesAsync_ColumnsHaveNonEmptyNamesAndTypes()
+   {
+      var tables = (await Db.Management.Schema.GetTablesAsync(CancellationToken)).ToArray();
+
+      foreach (var table in tables)
+      {
+         table.Name.Should().NotBeNullOrEmpty($"table in schema {table.Schema} should have a name");
+
+         foreach (var column in table.Columns)
+         {
+            column.Name.Should().NotBeNullOrEmpty($"column in table {table.Schema}.{table.Name} should have a name");
+            column.DataType.Should().NotBeNullOrEmpty($"column {column.Name} in table {table.Schema}.{table.Name} should have a data type");
+         }
+      }
+   }
 }

@@ -411,7 +411,7 @@ public sealed partial class SchemaExtractor
    // Internal row types for queries that need grouping
    // ========================================================================
 
-   private sealed record EnumTypeRow
+   private sealed class EnumTypeRow
    {
       public required string Schema { get; init; }
       public required string Name { get; init; }
@@ -419,7 +419,7 @@ public sealed partial class SchemaExtractor
       public required float SortOrder { get; init; }
    }
 
-   private sealed record CompositeTypeRow
+   private sealed class CompositeTypeRow
    {
       public required string Schema { get; init; }
       public required string TypeName { get; init; }
@@ -427,7 +427,7 @@ public sealed partial class SchemaExtractor
       public required string DataType { get; init; }
    }
 
-   private sealed record DomainTypeRow
+   private sealed class DomainTypeRow
    {
       public required string Schema { get; init; }
       public required string Name { get; init; }
@@ -436,7 +436,7 @@ public sealed partial class SchemaExtractor
       public required bool IsNotNull { get; init; }
    }
 
-   private sealed record TableColumnRow
+   private sealed class TableColumnRow
    {
       public required string Schema { get; init; }
       public required string TableName { get; init; }

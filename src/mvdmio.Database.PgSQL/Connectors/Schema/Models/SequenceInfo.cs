@@ -6,7 +6,7 @@ namespace mvdmio.Database.PgSQL.Connectors.Schema.Models;
 ///    Represents a PostgreSQL sequence.
 /// </summary>
 [PublicAPI]
-public sealed record SequenceInfo
+public sealed class SequenceInfo
 {
    /// <summary>The schema the sequence belongs to.</summary>
    public required string Schema { get; init; }
