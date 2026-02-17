@@ -39,6 +39,7 @@ internal static class InitCommand
          Console.WriteLine("Default settings:");
          Console.WriteLine($"  project:             {config.Project}");
          Console.WriteLine($"  migrationsDirectory: {config.MigrationsDirectory}");
+         Console.WriteLine($"  schemasDirectory:    {config.SchemasDirectory}");
          Console.WriteLine($"  migrationsSchema:    {config.MigrationsSchema ?? MigrationTableConfiguration.DEFAULT_SCHEMA} (default)");
          Console.WriteLine($"  migrationsTable:     {config.MigrationsTable ?? MigrationTableConfiguration.DEFAULT_TABLE} (default)");
          Console.WriteLine($"  connectionStrings:   local (placeholder)");

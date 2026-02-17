@@ -503,6 +503,7 @@ Create a `.mvdmio-migrations.yml` file in your project root:
 ```yaml
 project: src/MyApp.Data          # Path to the project containing migrations
 migrationsDirectory: Migrations  # Directory for migration files (default: Migrations)
+schemasDirectory: Schemas        # Directory for schema files from db pull (default: Schemas)
 migrationsSchema: mvdmio         # Schema for migration tracking table (default: mvdmio)
 migrationsTable: migrations      # Table name for migration tracking (default: migrations)
 connectionStrings:               # The first entry is used when no --environment flag is passed
