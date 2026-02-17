@@ -1,6 +1,6 @@
-﻿using System.Data;
 using Dapper;
 using JetBrains.Annotations;
+using System.Data;
 
 namespace mvdmio.Database.PgSQL.Dapper.TypeHandlers;
 

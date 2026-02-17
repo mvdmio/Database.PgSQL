@@ -1,6 +1,6 @@
-using System.CommandLine;
 using mvdmio.Database.PgSQL.Tool.Configuration;
 using mvdmio.Database.PgSQL.Tool.Scaffolding;
+using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
 

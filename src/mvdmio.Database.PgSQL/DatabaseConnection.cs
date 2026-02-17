@@ -1,11 +1,11 @@
 using Dapper;
-using System.Data;
-using System.Diagnostics.CodeAnalysis;
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Connectors;
 using mvdmio.Database.PgSQL.Connectors.Bulk;
 using mvdmio.Database.PgSQL.Exceptions;
 using Npgsql;
+using System.Data;
+using System.Diagnostics.CodeAnalysis;
 
 namespace mvdmio.Database.PgSQL;
 
@@ -16,7 +16,7 @@ namespace mvdmio.Database.PgSQL;
 public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
 {
    private readonly NpgsqlDataSource _datasource;
-   private bool _disposeDataSource;
+   private readonly bool _disposeDataSource;
 
    private readonly SemaphoreSlim _connectionLock = new(1, 1);
    private NpgsqlConnection? _openConnection;
@@ -172,7 +172,7 @@ public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
    /// </summary>
    /// <returns>True if the connection was opened. False if it was already open.</returns>
    /// <exception cref="ObjectDisposedException">Thrown when the connection has been disposed.</exception>
-   #pragma warning disable CS8774 // Member must have a non-null value when exiting
+#pragma warning disable CS8774 // Member must have a non-null value when exiting
    [MemberNotNull(nameof(_openConnection))]
    public async Task<bool> OpenAsync(CancellationToken ct = default)
    {
@@ -194,7 +194,7 @@ public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
          _connectionLock.Release();
       }
    }
-   #pragma warning restore CS8774
+#pragma warning restore CS8774
 
    /// <summary>
    ///    Manually close the connection. This is useful when you want to keep the connection open for multiple operations.
@@ -337,7 +337,7 @@ public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
          _connectionLock.Release();
 
          // Close also locks the connection, so don't call this inside the wait block.
-         if(_transactionOpenedConnection)
+         if (_transactionOpenedConnection)
             Close();
       }
    }
@@ -442,7 +442,7 @@ public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
       {
          action.Invoke();
 
-         if(transactionStarted)
+         if (transactionStarted)
             CommitTransaction();
       }
       catch
@@ -465,7 +465,7 @@ public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
       {
          await action.Invoke();
 
-         if(transactionStarted)
+         if (transactionStarted)
             await CommitTransactionAsync();
       }
       catch
@@ -488,7 +488,7 @@ public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
       {
          var result = await action.Invoke();
 
-         if(transactionStarted)
+         if (transactionStarted)
             await CommitTransactionAsync();
 
          return result;

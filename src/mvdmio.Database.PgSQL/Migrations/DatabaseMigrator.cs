@@ -1,10 +1,10 @@
-using System.Reflection;
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Exceptions;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.Models;
+using System.Reflection;
 
 namespace mvdmio.Database.PgSQL.Migrations;
 
@@ -112,19 +112,20 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    {
       try
       {
-         await _connection.InTransactionAsync(async () => {
-               await migration.UpAsync(_connection);
+         await _connection.InTransactionAsync(async () =>
+         {
+            await migration.UpAsync(_connection);
 
-               await _connection.Dapper.ExecuteAsync(
-                  "INSERT INTO mvdmio.migrations (identifier, name, executed_at) VALUES (:identifier, :name, :executedAtUtc)",
-                  new Dictionary<string, object?> {
+            await _connection.Dapper.ExecuteAsync(
+               "INSERT INTO mvdmio.migrations (identifier, name, executed_at) VALUES (:identifier, :name, :executedAtUtc)",
+               new Dictionary<string, object?> {
                      { "identifier", migration.Identifier },
                      { "name", migration.Name },
                      { "executedAtUtc", DateTime.UtcNow }
-                  },
-                  ct: cancellationToken
-               );
-            }
+               },
+               ct: cancellationToken
+            );
+         }
          );
       }
       catch (Exception exception)

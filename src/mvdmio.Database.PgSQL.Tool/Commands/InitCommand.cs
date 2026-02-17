@@ -1,5 +1,5 @@
-using System.CommandLine;
 using mvdmio.Database.PgSQL.Tool.Configuration;
+using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
 

@@ -1,4 +1,4 @@
-﻿using mvdmio.Database.PgSQL.Migrations.Interfaces;
+using mvdmio.Database.PgSQL.Migrations.Interfaces;
 
 namespace mvdmio.Database.PgSQL.Exceptions;
 

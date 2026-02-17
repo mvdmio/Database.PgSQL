@@ -1,4 +1,4 @@
-﻿using Dapper;
+using Dapper;
 using mvdmio.Database.PgSQL.Dapper.TypeHandlers;
 
 namespace mvdmio.Database.PgSQL.Dapper;

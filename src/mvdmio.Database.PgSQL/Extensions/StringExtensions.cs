@@ -1,4 +1,4 @@
-﻿namespace mvdmio.Database.PgSQL.Extensions;
+namespace mvdmio.Database.PgSQL.Extensions;
 
 /// <summary>
 /// Provides extension methods for the <see cref="string"/> type.

@@ -1,8 +1,8 @@
-﻿using mvdmio.Database.PgSQL.Migrations;
+using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 using Testcontainers.PostgreSql;
 
-[assembly:AssemblyFixture(typeof(TestFixture))]
+[assembly: AssemblyFixture(typeof(TestFixture))]
 namespace mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 
 public sealed class TestFixture : IAsyncLifetime

@@ -1,4 +1,4 @@
-﻿namespace mvdmio.Database.PgSQL.Internal;
+namespace mvdmio.Database.PgSQL.Internal;
 
 /// <summary>
 ///    Provides helper methods for dealing with async methods in sync contexts.

@@ -21,8 +21,10 @@ internal static class ProjectBuilder
 
       Console.WriteLine($"Building project: {csprojPath}");
 
-      var process = new Process {
-         StartInfo = new ProcessStartInfo {
+      var process = new Process
+      {
+         StartInfo = new ProcessStartInfo
+         {
             FileName = "dotnet",
             Arguments = $"build \"{csprojPath}\" --nologo --verbosity quiet",
             WorkingDirectory = projectDir,
@@ -75,7 +77,8 @@ internal static class ProjectBuilder
 
       var csprojFiles = Directory.GetFiles(projectPath, "*.csproj");
 
-      return csprojFiles.Length switch {
+      return csprojFiles.Length switch
+      {
          0 => throw new FileNotFoundException($"No .csproj file found in: {projectPath}"),
          1 => csprojFiles[0],
          _ => throw new InvalidOperationException(

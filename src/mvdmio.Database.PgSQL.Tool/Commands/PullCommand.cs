@@ -1,5 +1,5 @@
-using System.CommandLine;
 using mvdmio.Database.PgSQL.Tool.Configuration;
+using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
 
@@ -44,8 +44,8 @@ internal static class PullCommand
             }
             else
             {
-                Console.Error.WriteLine("Error: No connection string provided.");
-                Console.Error.WriteLine("Specify one via --connection-string, --environment, or add an entry to connectionStrings in .mvdmio-migrations.yml.");
+               Console.Error.WriteLine("Error: No connection string provided.");
+               Console.Error.WriteLine("Specify one via --connection-string, --environment, or add an entry to connectionStrings in .mvdmio-migrations.yml.");
             }
 
             return;

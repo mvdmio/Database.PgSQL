@@ -1,8 +1,8 @@
-using System.Data;
 using Dapper;
 using JetBrains.Annotations;
 using Npgsql;
 using NpgsqlTypes;
+using System.Data;
 
 namespace mvdmio.Database.PgSQL.Dapper.QueryParameters;
 
@@ -29,7 +29,8 @@ public sealed class TypedQueryParameter : SqlMapper.ICustomQueryParameter
    /// <inheritdoc />
    public void AddParameter(IDbCommand command, string name)
    {
-      var parameter = new NpgsqlParameter(name, _dbType) {
+      var parameter = new NpgsqlParameter(name, _dbType)
+      {
          Value = _value
       };
 

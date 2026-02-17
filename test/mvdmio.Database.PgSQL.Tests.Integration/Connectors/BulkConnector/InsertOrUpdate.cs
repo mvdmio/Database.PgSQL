@@ -1,4 +1,4 @@
-﻿using AwesomeAssertions;
+using AwesomeAssertions;
 using mvdmio.Database.PgSQL.Models;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 using NpgsqlTypes;
@@ -83,12 +83,12 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
       var items = TestItem.Create(10);
 
       var updateItems = items.Select(x => new TestItem
-         {
-            Integer = x.Integer,
-            Float = x.Float   * 2,
-            Double = x.Double * 2,
-            Text = x.Text + " Updated"
-         }
+      {
+         Integer = x.Integer,
+         Float = x.Float * 2,
+         Double = x.Double * 2,
+         Text = x.Text + " Updated"
+      }
       );
 
       // Act
@@ -134,12 +134,12 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
       var items = TestItem.Create(10);
 
       var updateItems = items.Select(x => new TestItem
-         {
-            Integer = x.Integer,
-            Float = x.Float,
-            Double = x.Double,
-            Text = x.Text
-         }
+      {
+         Integer = x.Integer,
+         Float = x.Float,
+         Double = x.Double,
+         Text = x.Text
+      }
       );
 
       // Act
@@ -189,12 +189,12 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
       {
          return Enumerable.Range(1, count)
             .Select(x => new TestItem
-               {
-                  Integer = x,
-                  Float = x  * 1.1f,
-                  Double = x * 1.1d,
-                  Text = $"Test {x}"
-               }
+            {
+               Integer = x,
+               Float = x * 1.1f,
+               Double = x * 1.1d,
+               Text = $"Test {x}"
+            }
             )
             .ToArray();
       }

@@ -38,7 +38,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       await connection.DisposeAsync();
 
       // Act & Assert
-      Assert.Throws<ObjectDisposedException>(() => {
+      Assert.Throws<ObjectDisposedException>(() =>
+      {
          connection.Open();
       });
    }
@@ -52,7 +53,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       await connection.DisposeAsync();
 
       // Act & Assert
-      await Assert.ThrowsAsync<ObjectDisposedException>(async () => {
+      await Assert.ThrowsAsync<ObjectDisposedException>(async () =>
+      {
          await connection.CloseAsync(CancellationToken);
       });
    }
@@ -80,7 +82,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       await connection.DisposeAsync();
 
       // Act & Assert
-      await Assert.ThrowsAsync<ObjectDisposedException>(async () => {
+      await Assert.ThrowsAsync<ObjectDisposedException>(async () =>
+      {
          await connection.BeginTransactionAsync(ct: CancellationToken);
       });
    }
@@ -93,7 +96,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       await connection.DisposeAsync();
 
       // Act & Assert
-      Assert.Throws<ObjectDisposedException>(() => {
+      Assert.Throws<ObjectDisposedException>(() =>
+      {
          connection.BeginTransaction();
       });
    }
@@ -107,10 +111,12 @@ public class DatabaseConnectionDisposeTests : TestBase
 
       // Act - Dispose multiple times
       await connection.DisposeAsync();
-      var secondDisposeException = await Record.ExceptionAsync(async () => {
+      var secondDisposeException = await Record.ExceptionAsync(async () =>
+      {
          await connection.DisposeAsync();
       });
-      var thirdDisposeException = await Record.ExceptionAsync(async () => {
+      var thirdDisposeException = await Record.ExceptionAsync(async () =>
+      {
          await connection.DisposeAsync();
       });
 
@@ -128,10 +134,12 @@ public class DatabaseConnectionDisposeTests : TestBase
 
       // Act - Dispose multiple times
       connection.Dispose();
-      var secondDisposeException = Record.Exception(() => {
+      var secondDisposeException = Record.Exception(() =>
+      {
          connection.Dispose();
       });
-      var thirdDisposeException = Record.Exception(() => {
+      var thirdDisposeException = Record.Exception(() =>
+      {
          connection.Dispose();
       });
 
@@ -148,7 +156,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       await connection.OpenAsync(CancellationToken);
 
       // Act
-      var disposeException = await Record.ExceptionAsync(async () => {
+      var disposeException = await Record.ExceptionAsync(async () =>
+      {
          await connection.DisposeAsync();
       });
 
@@ -164,7 +173,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       connection.Open();
 
       // Act
-      var disposeException = Record.Exception(() => {
+      var disposeException = Record.Exception(() =>
+      {
          connection.Dispose();
       });
 
@@ -180,7 +190,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       await connection.BeginTransactionAsync(ct: CancellationToken);
 
       // Act
-      var disposeException = await Record.ExceptionAsync(async () => {
+      var disposeException = await Record.ExceptionAsync(async () =>
+      {
          await connection.DisposeAsync();
       });
 
@@ -196,7 +207,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       connection.BeginTransaction();
 
       // Act
-      var disposeException = Record.Exception(() => {
+      var disposeException = Record.Exception(() =>
+      {
          connection.Dispose();
       });
 
@@ -216,7 +228,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       // Start multiple close/open operations in sequence
       // The dispose should wait for any in-progress lock acquisition, or
       // throw ObjectDisposedException if dispose completes first
-      var operations = Task.Run(async () => {
+      var operations = Task.Run(async () =>
+      {
          try
          {
             // These operations acquire and release the lock
@@ -257,7 +270,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       var operationTasks = new List<Task>();
       for (var i = 0; i < operationCount; i++)
       {
-         operationTasks.Add(Task.Run(async () => {
+         operationTasks.Add(Task.Run(async () =>
+         {
             try
             {
                await connection.OpenAsync(CancellationToken);
@@ -312,7 +326,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       await connection.DisposeAsync();
 
       // Act & Assert
-      await Assert.ThrowsAsync<ObjectDisposedException>(async () => {
+      await Assert.ThrowsAsync<ObjectDisposedException>(async () =>
+      {
          await connection.CommitTransactionAsync(CancellationToken);
       });
    }
@@ -326,7 +341,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       connection.Dispose();
 
       // Act & Assert
-      Assert.Throws<ObjectDisposedException>(() => {
+      Assert.Throws<ObjectDisposedException>(() =>
+      {
          connection.CommitTransaction();
       });
    }
@@ -340,7 +356,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       await connection.DisposeAsync();
 
       // Act & Assert
-      await Assert.ThrowsAsync<ObjectDisposedException>(async () => {
+      await Assert.ThrowsAsync<ObjectDisposedException>(async () =>
+      {
          await connection.RollbackTransactionAsync(CancellationToken);
       });
    }
@@ -354,7 +371,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       connection.Dispose();
 
       // Act & Assert
-      Assert.Throws<ObjectDisposedException>(() => {
+      Assert.Throws<ObjectDisposedException>(() =>
+      {
          connection.RollbackTransaction();
       });
    }
@@ -374,7 +392,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       Exception? caughtException = null;
 
       // Start an operation that will hold the connection lock
-      var operationTask = Task.Run(async () => {
+      var operationTask = Task.Run(async () =>
+      {
          try
          {
             // Open acquires the lock
@@ -401,7 +420,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       await operationStarted.Task;
 
       // Now call dispose while the operation holds the lock
-      var disposeTask = Task.Run(async () => {
+      var disposeTask = Task.Run(async () =>
+      {
          try
          {
             await connection.DisposeAsync();
@@ -439,7 +459,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       Exception? caughtException = null;
 
       // Start an operation that will hold the transaction lock
-      var operationTask = Task.Run(async () => {
+      var operationTask = Task.Run(async () =>
+      {
          try
          {
             // BeginTransaction acquires the transaction lock
@@ -466,7 +487,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       await operationStarted.Task;
 
       // Now call dispose while the operation holds the lock
-      var disposeTask = Task.Run(async () => {
+      var disposeTask = Task.Run(async () =>
+      {
          try
          {
             await connection.DisposeAsync();
@@ -506,7 +528,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       var exceptions = new ConcurrentBag<Exception>();
 
       // Create many concurrent operations
-      var operations = Enumerable.Range(0, OPERATIONS).Select(_ => Task.Run(async () => {
+      var operations = Enumerable.Range(0, OPERATIONS).Select(_ => Task.Run(async () =>
+      {
          await startSignal.Task; // Wait for signal to start all at once
 
          try
@@ -569,7 +592,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       Exception? semaphoreException = null;
 
       // First operation acquires the lock and holds it
-      var firstOperation = Task.Run(async () => {
+      var firstOperation = Task.Run(async () =>
+      {
          await connection.OpenAsync(CancellationToken);
          firstOperationStarted.SetResult();
          await firstOperationCanComplete.Task;
@@ -588,7 +612,8 @@ public class DatabaseConnectionDisposeTests : TestBase
 
       // Second operation will be waiting on the semaphore
       var secondOperationStarted = new TaskCompletionSource();
-      var secondOperation = Task.Run(async () => {
+      var secondOperation = Task.Run(async () =>
+      {
          secondOperationStarted.SetResult();
          try
          {
@@ -637,7 +662,8 @@ public class DatabaseConnectionDisposeTests : TestBase
       Exception? caughtException = null;
 
       // Start an operation that will hold the connection lock
-      var operationThread = new Thread(() => {
+      var operationThread = new Thread(() =>
+      {
          try
          {
             connection.Open();
@@ -705,7 +731,8 @@ public class DatabaseConnectionDisposeTests : TestBase
          await connection.OpenAsync(CancellationToken);
 
          // Start close and dispose nearly simultaneously to race the lock
-         var closeTask = Task.Run(async () => {
+         var closeTask = Task.Run(async () =>
+         {
             try
             {
                await connection.CloseAsync(CancellationToken);
@@ -717,7 +744,8 @@ public class DatabaseConnectionDisposeTests : TestBase
             }
          }, CancellationToken);
 
-         var disposeTask = Task.Run(async () => {
+         var disposeTask = Task.Run(async () =>
+         {
             try
             {
                await connection.DisposeAsync();

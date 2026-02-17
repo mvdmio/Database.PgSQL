@@ -14,10 +14,22 @@ internal static class NamespaceResolver
    /// <returns>The resolved namespace string.</returns>
    public static string Resolve(string migrationsDirectory)
    {
+
+<<<<<<< TODO: Unmerged change from project 'mvdmio.Database.PgSQL.Tool(net9.0)', Before:
       var csprojPath = FindNearestCsproj(migrationsDirectory);
 
       if (csprojPath is null)
          throw new InvalidOperationException(
+            $"Could not find a .csproj file in or above '{migrationsDirectory}'. " +
+            "Make sure you are running the tool from within a .NET project."
+         );
+=======
+      var csprojPath = FindNearestCsproj(migrationsDirectory) ?? throw new InvalidOperationException(
+            $"Could not find a .csproj file in or above '{migrationsDirectory}'. " +
+            "Make sure you are running the tool from within a .NET project."
+         );
+>>>>>>> After
+      var csprojPath = FindNearestCsproj(migrationsDirectory) ?? throw new InvalidOperationException(
             $"Could not find a .csproj file in or above '{migrationsDirectory}'. " +
             "Make sure you are running the tool from within a .NET project."
          );

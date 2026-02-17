@@ -47,7 +47,7 @@ public sealed class BulkConnector
    /// <param name="columnValueMapping">A dictionary mapping column names to functions that extract values from items of type <typeparamref name="T"/>.</param>
    /// <param name="ct">A cancellation token to observe while waiting for the task to complete.</param>
    /// <returns>A task representing the asynchronous copy operation.</returns>
-   [SuppressMessage("ReSharper",   "PossibleMultipleEnumeration",                                       Justification = "Multiple enumerations are not a problem here.")]
+   [SuppressMessage("ReSharper", "PossibleMultipleEnumeration", Justification = "Multiple enumerations are not a problem here.")]
    [SuppressMessage("Performance", "CA1851:Possible multiple enumerations of 'IEnumerable' collection", Justification = "Multiple enumerations are not a problem here.")]
    public async Task CopyAsync<T>(string tableName, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
@@ -82,7 +82,7 @@ public sealed class BulkConnector
       if (errors.Count is 1)
          throw errors[0];
 
-      if(errors.Count > 0)
+      if (errors.Count > 0)
          throw new AggregateException("Errors occurred during bulk copy.", errors);
    }
 
@@ -98,7 +98,7 @@ public sealed class BulkConnector
    /// <returns>The inserted and updated rows.</returns>
    public Task<IEnumerable<InsertOrUpdateResult<T>>> InsertOrUpdateAsync<T>(string tableName, string onConflictColumn, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
-      return InsertOrUpdateAsync(tableName, [ onConflictColumn ], items, columnValueMapping, ct);
+      return InsertOrUpdateAsync(tableName, [onConflictColumn], items, columnValueMapping, ct);
    }
 
    /// <summary>
@@ -115,7 +115,8 @@ public sealed class BulkConnector
    {
       return InsertOrUpdateAsync(
          tableName,
-         new UpsertConfiguration {
+         new UpsertConfiguration
+         {
             OnConflictColumns = onConflictColumns
          },
          items,
@@ -145,7 +146,8 @@ public sealed class BulkConnector
       var updateColumns = allColumns.Where(x => !upsertConfiguration.OnConflictColumns.Contains(x)).ToArray();
 
       return await _db.InTransactionAsync(
-         async () => {
+         async () =>
+         {
             await _db.Dapper.ExecuteAsync($"CREATE TEMP TABLE {tempTableName} (LIKE {tableName} INCLUDING CONSTRAINTS INCLUDING DEFAULTS INCLUDING GENERATED INCLUDING IDENTITY);", ct: ct);
 
             await CopyAsync(tempTableName, items, columnValueMapping, ct);
@@ -167,7 +169,8 @@ public sealed class BulkConnector
             return await _db.Dapper.QueryAsync<T, bool, bool, InsertOrUpdateResult<T>>(
                query,
                splitOn: "is_inserted, is_updated",
-               (item, isInserted, isUpdated) => new InsertOrUpdateResult<T> {
+               (item, isInserted, isUpdated) => new InsertOrUpdateResult<T>
+               {
                   Item = item,
                   IsInserted = isInserted,
                   IsUpdated = isUpdated
@@ -190,7 +193,7 @@ public sealed class BulkConnector
    /// <returns>The inserted rows.</returns>
    public Task<IEnumerable<T>> InsertOrSkipAsync<T>(string tableName, string onConflictColumn, IEnumerable<T> items, Dictionary<string, Func<T, DbValue>> columnValueMapping, CancellationToken ct = default)
    {
-      return InsertOrSkipAsync(tableName, [ onConflictColumn ], items, columnValueMapping, ct);
+      return InsertOrSkipAsync(tableName, [onConflictColumn], items, columnValueMapping, ct);
    }
 
    /// <summary>
@@ -207,7 +210,8 @@ public sealed class BulkConnector
    {
       return InsertOrSkipAsync(
          tableName,
-         new UpsertConfiguration {
+         new UpsertConfiguration
+         {
             OnConflictColumns = onConflictColumns
          },
          items,
@@ -236,7 +240,8 @@ public sealed class BulkConnector
       var allColumns = columnValueMapping.Keys;
 
       return await _db.InTransactionAsync(
-         async () => {
+         async () =>
+         {
             await _db.Dapper.ExecuteAsync($"CREATE TEMP TABLE {tempTableName} (LIKE {tableName} INCLUDING CONSTRAINTS INCLUDING DEFAULTS INCLUDING GENERATED INCLUDING IDENTITY);");
 
             await CopyAsync(tempTableName, items, columnValueMapping, ct);
@@ -250,7 +255,7 @@ public sealed class BulkConnector
                 INSERT INTO {tableName} ({string.Join(", ", allColumns)})
                 SELECT {string.Join(", ", allColumns)}
                 FROM {tempTableName}
-                ON CONFLICT ({string.Join(", ", upsertConfiguration.OnConflictColumns)}) {onConflictWhereClause } DO NOTHING
+                ON CONFLICT ({string.Join(", ", upsertConfiguration.OnConflictColumns)}) {onConflictWhereClause} DO NOTHING
                 RETURNING *
                 """
             );

@@ -1,4 +1,4 @@
-﻿using Dapper;
+using Dapper;
 using JetBrains.Annotations;
 using System.Data;
 using System.Globalization;

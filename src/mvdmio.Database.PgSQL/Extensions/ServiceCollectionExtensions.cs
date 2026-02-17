@@ -1,8 +1,8 @@
-using System.Reflection;
 using Dapper;
 using JetBrains.Annotations;
 using Microsoft.Extensions.DependencyInjection;
 using mvdmio.Database.PgSQL.Dapper.TypeHandlers.Base;
+using System.Reflection;
 
 namespace mvdmio.Database.PgSQL.Extensions;
 

@@ -1,6 +1,6 @@
-using System.Text;
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Connectors.Schema.Models;
+using System.Text;
 
 namespace mvdmio.Database.PgSQL.Connectors.Schema;
 

@@ -1,5 +1,5 @@
-using System.CommandLine;
 using mvdmio.Database.PgSQL.Tool.Commands;
+using System.CommandLine;
 
 var rootCommand = new RootCommand("PostgreSQL database migration tool");
 
