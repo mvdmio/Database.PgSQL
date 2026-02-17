@@ -1,5 +1,4 @@
 using JetBrains.Annotations;
-using mvdmio.Database.PgSQL.Dapper;
 using Npgsql;
 
 namespace mvdmio.Database.PgSQL;
@@ -12,14 +11,6 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
 {
    private readonly Dictionary<string, NpgsqlDataSource> _dataSources = new();
    private readonly SemaphoreSlim _lock = new(1, 1);
-
-   /// <summary>
-   ///   Initializes a new instance of the <see cref="DatabaseConnectionFactory"/> class.
-   /// </summary>
-   public DatabaseConnectionFactory()
-   {
-      DefaultConfig.EnsureInitialized();
-   }
 
    /// <summary>
    ///    Creates a new database wrapper for the given connection string.

@@ -2,6 +2,7 @@ using Dapper;
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Connectors;
 using mvdmio.Database.PgSQL.Connectors.Bulk;
+using mvdmio.Database.PgSQL.Dapper;
 using mvdmio.Database.PgSQL.Exceptions;
 using Npgsql;
 using System.Data;
@@ -55,6 +56,8 @@ public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
    /// <param name="dataSource">The Npgsql data source to use for database connections.</param>
    public DatabaseConnection(NpgsqlDataSource dataSource)
    {
+      DefaultConfig.EnsureInitialized();
+
       _datasource = dataSource;
 
       Dapper = new DapperDatabaseConnector(this);
