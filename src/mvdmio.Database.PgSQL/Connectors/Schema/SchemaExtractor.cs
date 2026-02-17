@@ -286,7 +286,7 @@ public sealed partial class SchemaExtractor
 
       // Group by type: primary keys first, then unique, then check, then foreign keys, then exclusion
       var typeOrder = new Dictionary<string, int> { ["p"] = 0, ["u"] = 1, ["c"] = 2, ["f"] = 3, ["x"] = 4 };
-      var ordered = constraints.OrderBy(c => typeOrder.GetValueOrDefault(c.ConstraintType, 99)).ThenBy(c => c.Schema).ThenBy(c => c.TableName).ThenBy(c => c.ConstraintName);
+      var ordered = constraints.OrderBy(c => c.ConstraintType is not null ? typeOrder.GetValueOrDefault(c.ConstraintType, 99) : 99).ThenBy(c => c.Schema).ThenBy(c => c.TableName).ThenBy(c => c.ConstraintName);
 
       foreach (var constraint in ordered)
       {

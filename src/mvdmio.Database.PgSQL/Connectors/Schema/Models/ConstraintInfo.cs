@@ -18,7 +18,7 @@ public sealed class ConstraintInfo
    public required string ConstraintName { get; init; }
 
    /// <summary>The type of constraint: "p" (primary key), "f" (foreign key), "u" (unique), "c" (check), "x" (exclusion).</summary>
-   public required string ConstraintType { get; init; }
+   public string? ConstraintType { get; init; }
 
    /// <summary>The constraint definition as returned by pg_get_constraintdef().</summary>
    public required string Definition { get; init; }

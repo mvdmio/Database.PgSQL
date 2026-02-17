@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Package configuration">
-    <Version>0.9.0</Version>
+    <Version>0.9.1</Version>
     <Title>mvdmio.Database.PgSQL</Title>
     <Description>PostgreSQL database interaction including migrations.</Description>
     <Company>mvdmio</Company>
@@ -45,7 +45,7 @@
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.66"/>
 
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
     <PackageReference Include="Npgsql" Version="10.0.1" />
     <PackageReference Include="Portable.System.DateTimeOnly" Version="9.0.1"/>
 

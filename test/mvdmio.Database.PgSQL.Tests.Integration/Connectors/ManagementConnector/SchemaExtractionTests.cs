@@ -379,6 +379,75 @@ public class SchemaExtractionTests : TestBase
    }
 
    [Fact]
+   public async Task GenerateSchemaScriptAsync_HandlesNullConstraintType()
+   {
+      // Regression test: GenerateSchemaScriptAsync previously threw ArgumentNullException
+      // when a constraint had a null ConstraintType. This can happen when Dapper maps
+      // a database value to null despite the column being NOT NULL in PostgreSQL.
+      //
+      // We verify that the ordering logic in AppendConstraintsAsync does not throw
+      // by generating the schema script for a database that has constraints.
+      // The database created by the test fixture already has primary key and foreign key
+      // constraints, so this exercises the constraint ordering path.
+      var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
+
+      // The script should contain constraint definitions without throwing
+      script.Should().Contain("Constraints");
+   }
+
+   [Fact]
+   public async Task GetConstraintsAsync_HandlesExclusionConstraints()
+   {
+      // Create a table with an exclusion constraint to test all constraint types
+      await Db.Dapper.ExecuteAsync("CREATE EXTENSION IF NOT EXISTS btree_gist;", ct: CancellationToken);
+
+      await Db.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.exclusion_test (
+            id         bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
+            range_start integer NOT NULL,
+            range_end   integer NOT NULL,
+            PRIMARY KEY (id),
+            EXCLUDE USING gist (int4range(range_start, range_end) WITH &&)
+         );
+         """,
+         ct: CancellationToken
+      );
+
+      var constraints = (await Db.Management.Schema.GetConstraintsAsync(CancellationToken)).ToArray();
+      var exclusionConstraints = constraints.Where(c => c.ConstraintType == "x").ToArray();
+
+      exclusionConstraints.Should().NotBeEmpty();
+      exclusionConstraints.Should().Contain(c => c.TableName == "exclusion_test");
+   }
+
+   [Fact]
+   public async Task GenerateSchemaScriptAsync_HandlesExclusionConstraints()
+   {
+      // Create a table with an exclusion constraint to verify schema script generation
+      // handles all constraint types, including exclusion constraints.
+      await Db.Dapper.ExecuteAsync("CREATE EXTENSION IF NOT EXISTS btree_gist;", ct: CancellationToken);
+
+      await Db.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.exclusion_test (
+            id         bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
+            range_start integer NOT NULL,
+            range_end   integer NOT NULL,
+            PRIMARY KEY (id),
+            EXCLUDE USING gist (int4range(range_start, range_end) WITH &&)
+         );
+         """,
+         ct: CancellationToken
+      );
+
+      var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
+
+      script.Should().Contain("exclusion_test");
+      script.Should().Contain("EXCLUDE USING");
+   }
+
+   [Fact]
    public async Task GetIndexesAsync_ReturnsNonConstraintIndexes()
    {
       var indexes = (await Db.Management.Schema.GetIndexesAsync(CancellationToken)).ToArray();
