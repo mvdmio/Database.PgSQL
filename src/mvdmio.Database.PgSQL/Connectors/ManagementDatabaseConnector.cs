@@ -1,5 +1,6 @@
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Connectors.Schema;
+using mvdmio.Database.PgSQL.Migrations;
 
 namespace mvdmio.Database.PgSQL.Connectors;
 
@@ -17,13 +18,23 @@ public sealed class ManagementDatabaseConnector
    public SchemaExtractor Schema { get; }
 
    /// <summary>
-   ///    Initializes a new instance of the <see cref="ManagementDatabaseConnector"/> class.
+   ///    Initializes a new instance of the <see cref="ManagementDatabaseConnector"/> class with the default migration table configuration.
    /// </summary>
    /// <param name="db">The database connection to use for management operations.</param>
    public ManagementDatabaseConnector(DatabaseConnection db)
+      : this(db, MigrationTableConfiguration.Default)
+   {
+   }
+
+   /// <summary>
+   ///    Initializes a new instance of the <see cref="ManagementDatabaseConnector"/> class with a custom migration table configuration.
+   /// </summary>
+   /// <param name="db">The database connection to use for management operations.</param>
+   /// <param name="migrationConfig">The migration table configuration specifying which schema/table to use for migration tracking.</param>
+   public ManagementDatabaseConnector(DatabaseConnection db, MigrationTableConfiguration migrationConfig)
    {
       _db = db;
-      Schema = new SchemaExtractor(db);
+      Schema = new SchemaExtractor(db, migrationConfig);
    }
 
    /// <summary>

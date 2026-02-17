@@ -16,9 +16,11 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 {
    private readonly DatabaseConnection _connection;
    private readonly IMigrationRetriever _migrationRetriever;
+   private readonly MigrationTableConfiguration _tableConfig;
 
    /// <summary>
-   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval.
+   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval
+   ///    with the default migration table configuration.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
    /// <param name="assembliesContainingMigrations">
@@ -26,18 +28,47 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    classes.
    /// </param>
    public DatabaseMigrator(DatabaseConnection connection, params Assembly[] assembliesContainingMigrations)
-      : this(connection, new ReflectionMigrationRetriever(assembliesContainingMigrations))
+      : this(connection, MigrationTableConfiguration.Default, assembliesContainingMigrations)
    {
    }
 
    /// <summary>
-   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class with a custom migration retriever.
+   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval
+   ///    with a custom migration table configuration.
+   /// </summary>
+   /// <param name="connection">The database connection to use for migrations.</param>
+   /// <param name="tableConfig">The configuration for the migration tracking table.</param>
+   /// <param name="assembliesContainingMigrations">
+   ///    List of assemblies to use for searching <see cref="IDbMigration" />
+   ///    classes.
+   /// </param>
+   public DatabaseMigrator(DatabaseConnection connection, MigrationTableConfiguration tableConfig, params Assembly[] assembliesContainingMigrations)
+      : this(connection, tableConfig, new ReflectionMigrationRetriever(assembliesContainingMigrations))
+   {
+   }
+
+   /// <summary>
+   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class with a custom migration retriever
+   ///    and the default migration table configuration.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
    /// <param name="migrationRetriever">The migration retriever to use.</param>
    public DatabaseMigrator(DatabaseConnection connection, IMigrationRetriever migrationRetriever)
+      : this(connection, MigrationTableConfiguration.Default, migrationRetriever)
+   {
+   }
+
+   /// <summary>
+   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class with a custom migration retriever
+   ///    and a custom migration table configuration.
+   /// </summary>
+   /// <param name="connection">The database connection to use for migrations.</param>
+   /// <param name="tableConfig">The configuration for the migration tracking table.</param>
+   /// <param name="migrationRetriever">The migration retriever to use.</param>
+   public DatabaseMigrator(DatabaseConnection connection, MigrationTableConfiguration tableConfig, IMigrationRetriever migrationRetriever)
    {
       _connection = connection;
+      _tableConfig = tableConfig;
       _migrationRetriever = migrationRetriever;
    }
 
@@ -45,12 +76,12 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    public async Task<IEnumerable<ExecutedMigrationModel>> RetrieveAlreadyExecutedMigrationsAsync(CancellationToken cancellationToken = default)
    {
       return await _connection.Dapper.QueryAsync<ExecutedMigrationModel>(
-         """
+         $"""
          SELECT
             identifier AS identifier,
             name AS name,
             executed_at AS executedAtUtc
-         FROM mvdmio.migrations
+         FROM {_tableConfig.FullyQualifiedTableName}
          """,
          ct: cancellationToken
       );
@@ -117,7 +148,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
             await migration.UpAsync(_connection);
 
             await _connection.Dapper.ExecuteAsync(
-               "INSERT INTO mvdmio.migrations (identifier, name, executed_at) VALUES (:identifier, :name, :executedAtUtc)",
+               $"INSERT INTO {_tableConfig.FullyQualifiedTableName} (identifier, name, executed_at) VALUES (:identifier, :name, :executedAtUtc)",
                new Dictionary<string, object?> {
                      { "identifier", migration.Identifier },
                      { "name", migration.Name },
@@ -136,14 +167,14 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 
    private async Task EnsureMigrationTableExistsAsync()
    {
-      if (await _connection.Management.TableExistsAsync("mvdmio", "migrations"))
+      if (await _connection.Management.TableExistsAsync(_tableConfig.Schema, _tableConfig.Table))
          return;
 
-      await _connection.Dapper.ExecuteAsync("CREATE SCHEMA IF NOT EXISTS mvdmio;");
+      await _connection.Dapper.ExecuteAsync($"CREATE SCHEMA IF NOT EXISTS \"{_tableConfig.Schema}\";");
 
       await _connection.Dapper.ExecuteAsync(
-         """
-         CREATE TABLE IF NOT EXISTS mvdmio.migrations (
+         $"""
+         CREATE TABLE IF NOT EXISTS {_tableConfig.FullyQualifiedTableName} (
             identifier  BIGINT      NOT NULL,
             name        TEXT        NOT NULL,
             executed_at TIMESTAMPTZ NOT NULL,

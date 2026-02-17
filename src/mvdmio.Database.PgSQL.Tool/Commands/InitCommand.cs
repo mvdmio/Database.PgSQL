@@ -1,3 +1,4 @@
+using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Tool.Configuration;
 using System.CommandLine;
 
@@ -38,10 +39,16 @@ internal static class InitCommand
          Console.WriteLine("Default settings:");
          Console.WriteLine($"  project:             {config.Project}");
          Console.WriteLine($"  migrationsDirectory: {config.MigrationsDirectory}");
+         Console.WriteLine($"  migrationsSchema:    {config.MigrationsSchema ?? MigrationTableConfiguration.DEFAULT_SCHEMA} (default)");
+         Console.WriteLine($"  migrationsTable:     {config.MigrationsTable ?? MigrationTableConfiguration.DEFAULT_TABLE} (default)");
          Console.WriteLine($"  connectionStrings:   local (placeholder)");
          Console.WriteLine();
          Console.WriteLine("Edit the file to configure your project settings and connection strings.");
          Console.WriteLine("The first configured environment is used by default when no --environment flag is passed.");
+         Console.WriteLine();
+         Console.WriteLine("Migration table settings:");
+         Console.WriteLine("  migrationsSchema and migrationsTable define where migration history is stored.");
+         Console.WriteLine("  These default to 'mvdmio' and 'migrations' respectively.");
       });
 
       return command;

@@ -1,3 +1,4 @@
+using mvdmio.Database.PgSQL.Migrations;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -30,6 +31,18 @@ public sealed class ToolConfiguration
    public Dictionary<string, string>? ConnectionStrings { get; set; }
 
    /// <summary>
+   ///    The schema name where the migration tracking table is stored.
+   ///    Defaults to "mvdmio" when null.
+   /// </summary>
+   public string? MigrationsSchema { get; set; }
+
+   /// <summary>
+   ///    The table name for the migration tracking table.
+   ///    Defaults to "migrations" when null.
+   /// </summary>
+   public string? MigrationsTable { get; set; }
+
+   /// <summary>
    ///    The directory containing the config file. Used to resolve relative paths.
    ///    Not serialized from YAML.
    /// </summary>
@@ -50,6 +63,18 @@ public sealed class ToolConfiguration
    public string GetMigrationsDirectoryPath()
    {
       return Path.GetFullPath(Path.Combine(BasePath, MigrationsDirectory));
+   }
+
+   /// <summary>
+   ///    Gets the migration table configuration based on the configured schema and table names.
+   /// </summary>
+   public MigrationTableConfiguration GetMigrationTableConfiguration()
+   {
+      return new MigrationTableConfiguration
+      {
+         Schema = MigrationsSchema ?? MigrationTableConfiguration.DEFAULT_SCHEMA,
+         Table = MigrationsTable ?? MigrationTableConfiguration.DEFAULT_TABLE
+      };
    }
 
    /// <summary>
@@ -115,7 +140,7 @@ public sealed class ToolConfiguration
    {
       var serializer = new SerializerBuilder()
          .WithNamingConvention(CamelCaseNamingConvention.Instance)
-         .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
+         .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull | DefaultValuesHandling.OmitDefaults)
          .Build();
 
       var yaml = serializer.Serialize(this);

@@ -44,7 +44,7 @@ public sealed partial class SchemaExtractor
          $"""
          SELECT n.nspname
          FROM pg_namespace n
-         WHERE {SCHEMA_FILTER}
+         WHERE {SchemaFilter}
            AND n.nspname <> 'public'
          ORDER BY n.nspname
          """,
@@ -71,7 +71,7 @@ public sealed partial class SchemaExtractor
          JOIN pg_namespace n ON t.typnamespace = n.oid
          JOIN pg_enum e ON e.enumtypid = t.oid
          WHERE t.typtype = 'e'
-           AND {SCHEMA_FILTER}
+           AND {SchemaFilter}
          ORDER BY n.nspname, t.typname, e.enumsortorder
          """,
          ct: cancellationToken
@@ -104,7 +104,7 @@ public sealed partial class SchemaExtractor
          JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
          WHERE t.typtype = 'c'
            AND c.relkind = 'c'
-           AND {SCHEMA_FILTER}
+           AND {SchemaFilter}
          ORDER BY n.nspname, t.typname, a.attnum
          """,
          ct: cancellationToken
@@ -140,7 +140,7 @@ public sealed partial class SchemaExtractor
          FROM pg_type t
          JOIN pg_namespace n ON t.typnamespace = n.oid
          WHERE t.typtype = 'd'
-           AND {SCHEMA_FILTER}
+           AND {SchemaFilter}
          ORDER BY n.nspname, t.typname
          """,
          ct: cancellationToken
@@ -207,7 +207,7 @@ public sealed partial class SchemaExtractor
          LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'a' AND d.classid = 'pg_class'::regclass
          LEFT JOIN pg_class dep_c ON dep_c.oid = d.refobjid AND dep_c.relkind IN ('r', 'p')
          LEFT JOIN pg_attribute dep_a ON dep_a.attrelid = d.refobjid AND dep_a.attnum = d.refobjsubid AND NOT dep_a.attisdropped
-         WHERE {SCHEMA_FILTER}
+         WHERE {SchemaFilter}
          ORDER BY n.nspname, c.relname
          """,
          ct: cancellationToken
@@ -239,7 +239,7 @@ public sealed partial class SchemaExtractor
          JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
          LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
          WHERE c.relkind IN ('r', 'p')
-           AND {SCHEMA_FILTER}
+           AND {SchemaFilter}
          ORDER BY n.nspname, c.relname, a.attnum
          """,
          ct: cancellationToken
@@ -286,7 +286,7 @@ public sealed partial class SchemaExtractor
          JOIN pg_class c ON c.oid = con.conrelid
          JOIN pg_namespace n ON n.oid = c.relnamespace
          WHERE c.relkind IN ('r', 'p')
-           AND {SCHEMA_FILTER}
+           AND {SchemaFilter}
          ORDER BY
             CASE con.contype WHEN 'p' THEN 0 WHEN 'u' THEN 1 WHEN 'c' THEN 2 WHEN 'f' THEN 3 WHEN 'x' THEN 4 ELSE 5 END,
             n.nspname, c.relname, con.conname
@@ -317,7 +317,7 @@ public sealed partial class SchemaExtractor
          WHERE t.relkind IN ('r', 'p')
            AND NOT ix.indisprimary
            AND NOT ix.indisunique
-           AND {SCHEMA_FILTER}
+           AND {SchemaFilter}
            AND NOT EXISTS (
               SELECT 1 FROM pg_constraint con
               WHERE con.conindid = ix.indexrelid
@@ -345,7 +345,7 @@ public sealed partial class SchemaExtractor
             pg_catalog.pg_get_functiondef(p.oid)               AS definition
          FROM pg_proc p
          JOIN pg_namespace n ON n.oid = p.pronamespace
-         WHERE {SCHEMA_FILTER}
+         WHERE {SchemaFilter}
            AND p.prokind IN ('f', 'p')
            AND NOT EXISTS (
               SELECT 1 FROM pg_depend d
@@ -376,7 +376,7 @@ public sealed partial class SchemaExtractor
          JOIN pg_class c ON c.oid = t.tgrelid
          JOIN pg_namespace n ON n.oid = c.relnamespace
          WHERE NOT t.tgisinternal
-           AND {SCHEMA_FILTER}
+           AND {SchemaFilter}
          ORDER BY n.nspname, c.relname, t.tgname
          """,
          ct: cancellationToken
@@ -400,7 +400,7 @@ public sealed partial class SchemaExtractor
          FROM pg_class c
          JOIN pg_namespace n ON n.oid = c.relnamespace
          WHERE c.relkind = 'v'
-           AND {SCHEMA_FILTER}
+           AND {SchemaFilter}
          ORDER BY n.nspname, c.relname
          """,
          ct: cancellationToken

@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Tool.Configuration;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -367,6 +368,173 @@ public class ToolConfigurationTests
       var result = config.ResolveEnvironmentName(null, null);
 
       result.Should().BeNull();
+   }
+
+   [Fact]
+   public void MigrationsSchema_DefaultsToNull()
+   {
+      var config = new ToolConfiguration();
+
+      config.MigrationsSchema.Should().BeNull();
+   }
+
+   [Fact]
+   public void MigrationsTable_DefaultsToNull()
+   {
+      var config = new ToolConfiguration();
+
+      config.MigrationsTable.Should().BeNull();
+   }
+
+   [Fact]
+   public void GetMigrationTableConfiguration_WithDefaults_ReturnsDefaultConfiguration()
+   {
+      var config = new ToolConfiguration();
+
+      var tableConfig = config.GetMigrationTableConfiguration();
+
+      tableConfig.Schema.Should().Be("mvdmio");
+      tableConfig.Table.Should().Be("migrations");
+      tableConfig.FullyQualifiedTableName.Should().Be("\"mvdmio\".\"migrations\"");
+   }
+
+   [Fact]
+   public void GetMigrationTableConfiguration_WithCustomValues_ReturnsCustomConfiguration()
+   {
+      var config = new ToolConfiguration
+      {
+         MigrationsSchema = "custom_schema",
+         MigrationsTable = "custom_migrations"
+      };
+
+      var tableConfig = config.GetMigrationTableConfiguration();
+
+      tableConfig.Schema.Should().Be("custom_schema");
+      tableConfig.Table.Should().Be("custom_migrations");
+      tableConfig.FullyQualifiedTableName.Should().Be("\"custom_schema\".\"custom_migrations\"");
+   }
+
+   [Fact]
+   public void Deserialize_WithMigrationsSchemaAndTable_ParsesCorrectly()
+   {
+      var yaml = """
+         project: src/MyApp.Data
+         migrationsDirectory: Migrations
+         migrationsSchema: my_schema
+         migrationsTable: schema_versions
+         connectionStrings:
+           local: Host=localhost;Database=mydb
+         """;
+
+      var config = Deserialize(yaml);
+
+      config.MigrationsSchema.Should().Be("my_schema");
+      config.MigrationsTable.Should().Be("schema_versions");
+   }
+
+   [Fact]
+   public void Deserialize_WithoutMigrationsSchemaAndTable_ReturnsNullForBoth()
+   {
+      var yaml = """
+         project: src/MyApp.Data
+         migrationsDirectory: Migrations
+         connectionStrings:
+           local: Host=localhost;Database=mydb
+         """;
+
+      var config = Deserialize(yaml);
+
+      config.MigrationsSchema.Should().BeNull();
+      config.MigrationsTable.Should().BeNull();
+   }
+
+   [Fact]
+   public void GetMigrationTableConfiguration_WithNullSchemaAndTable_UsesDefaults()
+   {
+      var yaml = """
+         project: src/MyApp.Data
+         migrationsDirectory: Migrations
+         connectionStrings:
+           local: Host=localhost;Database=mydb
+         """;
+
+      var config = Deserialize(yaml);
+      var tableConfig = config.GetMigrationTableConfiguration();
+
+      tableConfig.Schema.Should().Be("mvdmio");
+      tableConfig.Table.Should().Be("migrations");
+   }
+
+   [Fact]
+   public void Serialize_WithDefaultMigrationsSchemaAndTable_OmitsDefaults()
+   {
+      var config = new ToolConfiguration
+      {
+         Project = "src/MyApp.Data",
+         MigrationsDirectory = "Migrations"
+      };
+
+      var serializer = new SerializerBuilder()
+         .WithNamingConvention(CamelCaseNamingConvention.Instance)
+         .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull | DefaultValuesHandling.OmitDefaults)
+         .Build();
+
+      var yaml = serializer.Serialize(config);
+
+      yaml.Should().NotContain("migrationsSchema");
+      yaml.Should().NotContain("migrationsTable");
+   }
+
+   [Fact]
+   public void Serialize_WithCustomMigrationsSchemaAndTable_IncludesValues()
+   {
+      var config = new ToolConfiguration
+      {
+         Project = "src/MyApp.Data",
+         MigrationsDirectory = "Migrations",
+         MigrationsSchema = "custom_schema",
+         MigrationsTable = "custom_table"
+      };
+
+      var serializer = new SerializerBuilder()
+         .WithNamingConvention(CamelCaseNamingConvention.Instance)
+         .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull | DefaultValuesHandling.OmitDefaults)
+         .Build();
+
+      var yaml = serializer.Serialize(config);
+
+      yaml.Should().Contain("migrationsSchema: custom_schema");
+      yaml.Should().Contain("migrationsTable: custom_table");
+   }
+
+   [Fact]
+   public void RoundTrip_WithMigrationTableConfiguration_PreservesValues()
+   {
+      var originalConfig = new ToolConfiguration
+      {
+         Project = "src/MyApp.Data",
+         MigrationsDirectory = "Migrations",
+         MigrationsSchema = "my_schema",
+         MigrationsTable = "my_migrations",
+         ConnectionStrings = new Dictionary<string, string>
+         {
+            ["local"] = "Host=localhost;Database=mydb"
+         }
+      };
+
+      var serializer = new SerializerBuilder()
+         .WithNamingConvention(CamelCaseNamingConvention.Instance)
+         .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull | DefaultValuesHandling.OmitDefaults)
+         .Build();
+
+      var yaml = serializer.Serialize(originalConfig);
+      var roundTripped = Deserialize(yaml);
+
+      roundTripped.MigrationsSchema.Should().Be("my_schema");
+      roundTripped.MigrationsTable.Should().Be("my_migrations");
+
+      var tableConfig = roundTripped.GetMigrationTableConfiguration();
+      tableConfig.FullyQualifiedTableName.Should().Be("\"my_schema\".\"my_migrations\"");
    }
 
    private static ToolConfiguration Deserialize(string yaml)

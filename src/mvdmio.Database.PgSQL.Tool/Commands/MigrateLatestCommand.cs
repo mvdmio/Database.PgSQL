@@ -56,6 +56,7 @@ internal static class MigrateLatestCommand
 
          var projectPath = config.GetProjectPath();
          var assembly = ProjectBuilder.BuildAndLoadAssembly(projectPath);
+         var migrationTableConfig = config.GetMigrationTableConfiguration();
 
          var migrationRetriever = new ReflectionMigrationRetriever(assembly);
          var allMigrations = migrationRetriever.RetrieveMigrations().OrderBy(x => x.Identifier).ToArray();
@@ -63,7 +64,7 @@ internal static class MigrateLatestCommand
          Console.WriteLine();
 
          await using var connection = new DatabaseConnection(connectionString);
-         var migrator = new DatabaseMigrator(connection, migrationRetriever);
+         var migrator = new DatabaseMigrator(connection, migrationTableConfig, migrationRetriever);
 
          var alreadyExecuted = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
          var pendingCount = allMigrations.Count(m => alreadyExecuted.All(e => e.Identifier != m.Identifier));

@@ -1,3 +1,4 @@
+using mvdmio.Database.PgSQL.Connectors.Schema;
 using mvdmio.Database.PgSQL.Tool.Configuration;
 using System.CommandLine;
 
@@ -64,7 +65,11 @@ internal static class PullCommand
 
          Console.WriteLine("Extracting schema...");
 
-         var script = await connection.Management.GenerateSchemaScriptAsync(cancellationToken);
+         // Use a SchemaExtractor with the configured migration table settings
+         // so the migration schema is excluded from the output
+         var migrationTableConfig = config.GetMigrationTableConfiguration();
+         var schemaExtractor = new SchemaExtractor(connection, migrationTableConfig);
+         var script = await schemaExtractor.GenerateSchemaScriptAsync(cancellationToken);
 
          await File.WriteAllTextAsync(outputPath, script, cancellationToken);
 
