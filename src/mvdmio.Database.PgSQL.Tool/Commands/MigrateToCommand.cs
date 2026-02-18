@@ -64,14 +64,15 @@ internal static class MigrateToCommand
          var projectPath = config.GetProjectPath();
          var assembly = ProjectBuilder.BuildAndLoadAssembly(projectPath);
          var migrationTableConfig = config.GetMigrationTableConfiguration();
+         var schemaFilePath = config.GetSchemaFilePath(connectionStringOverride, environmentOverride);
 
          var migrationRetriever = new ReflectionMigrationRetriever(assembly);
-         var allMigrations = migrationRetriever.RetrieveMigrations()
+         var allMigrationsUpToTarget = migrationRetriever.RetrieveMigrations()
             .Where(m => m.Identifier <= targetIdentifier)
             .OrderBy(x => x.Identifier)
             .ToArray();
 
-         if (allMigrations.Length == 0)
+         if (allMigrationsUpToTarget.Length == 0)
          {
             Console.Error.WriteLine($"Error: No migrations found with identifier <= {targetIdentifier}.");
             return;
@@ -80,35 +81,50 @@ internal static class MigrateToCommand
          Console.WriteLine();
 
          await using var connection = new DatabaseConnection(connectionString);
-         var migrator = new DatabaseMigrator(connection, migrationTableConfig, migrationRetriever);
+         var migrator = new DatabaseMigrator(connection, migrationTableConfig, schemaFilePath, migrationRetriever);
 
-         var alreadyExecuted = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
-         var pendingCount = allMigrations.Count(m => alreadyExecuted.All(e => e.Identifier != m.Identifier));
+         // Check status before migrating
+         var isDatabaseEmpty = await migrator.IsDatabaseEmptyAsync(cancellationToken);
+         var alreadyExecuted = isDatabaseEmpty
+            ? []
+            : (await migrator.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
 
-         Console.WriteLine($"Found {allMigrations.Length} migration(s) up to {targetIdentifier}, {alreadyExecuted.Length} already applied.");
-
-         if (pendingCount == 0)
+         if (isDatabaseEmpty && schemaFilePath is not null)
          {
-            Console.WriteLine("Database is already up to date for the specified target.");
-            return;
+            var migrationInfo = await SchemaFileParser.ParseMigrationVersionFromFileAsync(schemaFilePath, cancellationToken);
+
+            if (migrationInfo is not null && migrationInfo.Value.Identifier <= targetIdentifier)
+            {
+               Console.WriteLine($"Empty database detected. Will apply schema file: {Path.GetFileName(schemaFilePath)}");
+               Console.WriteLine($"Schema file contains migration version: {migrationInfo.Value.Identifier} ({migrationInfo.Value.Name})");
+               Console.WriteLine();
+            }
+            else if (migrationInfo is not null)
+            {
+               Console.WriteLine($"Schema file version ({migrationInfo.Value.Identifier}) is newer than target ({targetIdentifier}). Running migrations instead.");
+               Console.WriteLine();
+            }
+         }
+         else
+         {
+            var pendingCount = allMigrationsUpToTarget.Count(m => alreadyExecuted.All(e => e.Identifier != m.Identifier));
+            Console.WriteLine($"Found {allMigrationsUpToTarget.Length} migration(s) up to {targetIdentifier}, {alreadyExecuted.Length} already applied.");
+
+            if (pendingCount == 0)
+            {
+               Console.WriteLine("Database is already up to date for the specified target.");
+               return;
+            }
+
+            Console.WriteLine();
          }
 
-         Console.WriteLine();
+         // The migrator handles schema-first logic internally
+         await migrator.MigrateDatabaseToAsync(targetIdentifier, cancellationToken);
 
-         var appliedCount = 0;
+         var finalExecuted = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
+         var appliedCount = finalExecuted.Length - alreadyExecuted.Length;
 
-         foreach (var migration in allMigrations)
-         {
-            if (alreadyExecuted.Any(e => e.Identifier == migration.Identifier))
-               continue;
-
-            Console.Write($"Applying migration {migration.Identifier} - {migration.Name}...");
-            await migrator.RunAsync(migration, cancellationToken);
-            Console.WriteLine(" done");
-            appliedCount++;
-         }
-
-         Console.WriteLine();
          Console.WriteLine($"Migration complete. {appliedCount} migration(s) applied.");
       });
 

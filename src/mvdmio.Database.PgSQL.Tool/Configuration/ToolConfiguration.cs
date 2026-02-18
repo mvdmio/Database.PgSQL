@@ -146,6 +146,27 @@ public sealed class ToolConfiguration
    }
 
    /// <summary>
+   ///    Resolves the path to the schema file for the given environment.
+   ///    Returns null if the schema file does not exist.
+   /// </summary>
+   /// <param name="connectionStringOverride">Explicit connection string from the --connection-string CLI option.</param>
+   /// <param name="environmentOverride">Environment name from the --environment CLI option.</param>
+   /// <returns>The path to the schema file if it exists, or null if not found.</returns>
+   public string? GetSchemaFilePath(string? connectionStringOverride, string? environmentOverride)
+   {
+      var schemasDir = GetSchemasDirectoryPath();
+
+      if (!Directory.Exists(schemasDir))
+         return null;
+
+      var environmentName = ResolveEnvironmentName(connectionStringOverride, environmentOverride);
+      var fileName = environmentName is not null ? $"schema.{environmentName}.sql" : "schema.sql";
+      var schemaFilePath = Path.Combine(schemasDir, fileName);
+
+      return File.Exists(schemaFilePath) ? schemaFilePath : null;
+   }
+
+   /// <summary>
    ///    Saves the configuration to a .mvdmio-migrations.yml file in the specified directory.
    /// </summary>
    /// <param name="directory">The directory to write the config file to.</param>

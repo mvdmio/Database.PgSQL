@@ -536,6 +536,93 @@ Connection string resolution priority:
 3. First entry in `connectionStrings` (fallback)
 4. Error if none of the above resolve
 
+#### Schema-First Migrations
+
+When migrating an empty database (one with no migrations applied), the CLI tool can automatically apply a schema file instead of running all migrations individually. This significantly speeds up provisioning new database instances.
+
+**How it works:**
+
+1. When `db migrate latest` or `db migrate to <version>` is run, the tool checks if the database is empty (no migrations applied).
+2. If empty, it looks for a schema file in the `schemasDirectory` (default: `Schemas/`):
+   - For environment-based runs: `schema.<environment>.sql` (e.g., `schema.local.sql`)
+   - For explicit connection strings: `schema.sql`
+3. If a schema file is found, it is applied instead of running individual migrations.
+4. The migration version from the schema file header is recorded in the migrations table.
+5. Any migrations newer than the schema version are then applied normally.
+
+**Generating schema files:**
+
+Use `db pull` to generate a schema file from an existing database:
+
+```bash
+# Pull schema from the default environment
+db pull
+
+# Pull from a specific environment
+db pull --environment prod
+```
+
+The generated schema file includes a header comment with the current migration version:
+
+```sql
+--
+-- PostgreSQL database schema
+-- Generated at 2026-02-18 10:30:45 UTC
+-- Migration version: 202602161430 (AddUsersTable)
+--
+
+CREATE TABLE users (...);
+-- ... rest of schema
+```
+
+**Workflow example:**
+
+```bash
+# On your production database (after migrations are applied)
+db pull --environment prod
+# Creates Schemas/schema.prod.sql
+
+# On a new development database
+db migrate latest --environment local
+# Detects empty database, applies schema.local.sql (if present),
+# then runs any migrations newer than the schema version
+```
+
+**Programmatic usage:**
+
+```csharp
+using mvdmio.Database.PgSQL.Migrations;
+
+await using var db = new DatabaseConnection(connectionString);
+
+// Pass the schema file path to the constructor
+// The migrator will automatically apply it if the database is empty
+var migrator = new DatabaseMigrator(
+    db,
+    MigrationTableConfiguration.Default,
+    schemaFilePath: "path/to/schema.sql",
+    typeof(AddUsersTable).Assembly
+);
+
+// This will:
+// 1. Check if the database is empty
+// 2. If empty and schema file exists, apply the schema file first
+// 3. Record the migration version from the schema file header
+// 4. Run any remaining migrations after the schema version
+await migrator.MigrateDatabaseToLatestAsync();
+
+// Or migrate to a specific version (schema is only applied if its version <= target)
+await migrator.MigrateDatabaseToAsync(202602161430);
+```
+
+If no schema file path is provided, the migrator runs migrations normally:
+
+```csharp
+// Without schema file - runs all migrations from scratch
+var migrator = new DatabaseMigrator(db, typeof(AddUsersTable).Assembly);
+await migrator.MigrateDatabaseToLatestAsync();
+```
+
 The `db migration create` command scaffolds a migration file with the correct namespace and timestamp:
 
 ```csharp
