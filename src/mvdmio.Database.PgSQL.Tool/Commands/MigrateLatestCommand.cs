@@ -56,7 +56,6 @@ internal static class MigrateLatestCommand
 
          var projectPath = config.GetProjectPath();
          var assembly = ProjectBuilder.BuildAndLoadAssembly(projectPath);
-         var migrationTableConfig = config.GetMigrationTableConfiguration();
          var environmentName = config.ResolveEnvironmentName(connectionStringOverride, environmentOverride);
 
          var migrationRetriever = new ReflectionMigrationRetriever(assembly);
@@ -65,7 +64,7 @@ internal static class MigrateLatestCommand
          Console.WriteLine();
 
          await using var connection = new DatabaseConnection(connectionString);
-         var migrator = new DatabaseMigrator(connection, migrationTableConfig, environmentName, [assembly], migrationRetriever);
+         var migrator = new DatabaseMigrator(connection, environmentName, [assembly], migrationRetriever);
 
          // Check status before migrating
          var isDatabaseEmpty = await migrator.IsDatabaseEmptyAsync(cancellationToken);

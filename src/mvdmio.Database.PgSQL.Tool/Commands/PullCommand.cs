@@ -65,10 +65,7 @@ internal static class PullCommand
 
          Console.WriteLine("Extracting schema...");
 
-         // Use a SchemaExtractor with the configured migration table settings
-         // so the migration schema is excluded from the output
-         var migrationTableConfig = config.GetMigrationTableConfiguration();
-         var schemaExtractor = new SchemaExtractor(connection, migrationTableConfig);
+         var schemaExtractor = new SchemaExtractor(connection);
          var script = await schemaExtractor.GenerateSchemaScriptAsync(cancellationToken);
 
          await File.WriteAllTextAsync(outputPath, script, cancellationToken);

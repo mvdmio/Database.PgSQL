@@ -1,6 +1,5 @@
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Connectors.Schema.Models;
-using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.Models;
 using System.Text;
 
@@ -9,39 +8,31 @@ namespace mvdmio.Database.PgSQL.Connectors.Schema;
 /// <summary>
 ///    Extracts the database schema from a PostgreSQL database by querying the system catalogs.
 ///    All methods exclude system schemas (pg_catalog, information_schema, pg_toast) and the
-///    migration tracking schema (configurable, defaults to mvdmio).
+///    migration tracking schema (mvdmio).
 /// </summary>
 [PublicAPI]
 public sealed partial class SchemaExtractor
 {
+   private const string MIGRATIONS_SCHEMA = "mvdmio";
+   private const string MIGRATIONS_TABLE = "migrations";
+   private const string MIGRATIONS_TABLE_FULLY_QUALIFIED = "\"mvdmio\".\"migrations\"";
+
    private readonly DatabaseConnection _db;
-   private readonly MigrationTableConfiguration _migrationConfig;
 
    /// <summary>
-   ///    Initializes a new instance of the <see cref="SchemaExtractor"/> class with the default migration table configuration.
+   ///    Initializes a new instance of the <see cref="SchemaExtractor"/> class.
    /// </summary>
    /// <param name="db">The database connection to use for schema extraction.</param>
    public SchemaExtractor(DatabaseConnection db)
-      : this(db, MigrationTableConfiguration.Default)
-   {
-   }
-
-   /// <summary>
-   ///    Initializes a new instance of the <see cref="SchemaExtractor"/> class with a custom migration table configuration.
-   /// </summary>
-   /// <param name="db">The database connection to use for schema extraction.</param>
-   /// <param name="migrationConfig">The migration table configuration specifying which schema/table to exclude and query for migration version.</param>
-   public SchemaExtractor(DatabaseConnection db, MigrationTableConfiguration migrationConfig)
    {
       _db = db;
-      _migrationConfig = migrationConfig;
    }
 
    /// <summary>
    ///    Gets the schema filter SQL clause that excludes system schemas and the migration tracking schema.
    /// </summary>
-   private string SchemaFilter => $"""
-      n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', '{EscapeSqlString(_migrationConfig.Schema)}')
+   private static string SchemaFilter => $"""
+      n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', '{EscapeSqlString(MIGRATIONS_SCHEMA)}')
       AND n.nspname NOT LIKE 'pg\_temp\_%'
       AND n.nspname NOT LIKE 'pg\_toast\_temp\_%'
       """;
@@ -53,11 +44,11 @@ public sealed partial class SchemaExtractor
    /// <returns>The latest executed migration, or null if no migrations have been executed or the migration table does not exist.</returns>
    public async Task<ExecutedMigrationModel?> GetCurrentMigrationVersionAsync(CancellationToken cancellationToken = default)
    {
-      var schemaExists = await _db.Management.SchemaExistsAsync(_migrationConfig.Schema);
+      var schemaExists = await _db.Management.SchemaExistsAsync(MIGRATIONS_SCHEMA);
       if (!schemaExists)
          return null;
 
-      var tableExists = await _db.Management.TableExistsAsync(_migrationConfig.Schema, _migrationConfig.Table);
+      var tableExists = await _db.Management.TableExistsAsync(MIGRATIONS_SCHEMA, MIGRATIONS_TABLE);
       if (!tableExists)
          return null;
 
@@ -67,7 +58,7 @@ public sealed partial class SchemaExtractor
             identifier AS identifier,
             name AS name,
             executed_at AS executedAtUtc
-         FROM {_migrationConfig.FullyQualifiedTableName}
+         FROM {MIGRATIONS_TABLE_FULLY_QUALIFIED}
          ORDER BY identifier DESC
          LIMIT 1
          """,

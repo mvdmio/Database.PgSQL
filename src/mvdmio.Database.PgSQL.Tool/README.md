@@ -46,9 +46,9 @@ Default settings:
   project:             .
   migrationsDirectory: Migrations
   schemasDirectory:    Schemas
-  migrationsSchema:    mvdmio (default)
-  migrationsTable:     migrations (default)
   connectionStrings:   local (placeholder)
+
+Migrations are tracked in the 'mvdmio.migrations' table.
 ```
 
 ### `db migration create <name>`
@@ -173,18 +173,14 @@ migrationsDirectory: Migrations
 # Directory for schema files from db pull (relative to this file)
 schemasDirectory: Schemas
 
-# Schema for migration tracking table (default: mvdmio)
-migrationsSchema: mvdmio
-
-# Table name for migration tracking (default: migrations)
-migrationsTable: migrations
-
 # Named connection strings
 connectionStrings:
   local: Host=localhost;Database=mydb;Username=postgres;Password=secret
   acc: Host=acc-server;Database=mydb;Username=postgres;Password=secret
   prod: Host=prod-server;Database=mydb;Username=postgres;Password=secret
 ```
+
+Migrations are tracked in the `mvdmio.migrations` table (automatically created).
 
 The configuration file is searched from the current directory upward, allowing you to run the tool from any subdirectory of your project.
 

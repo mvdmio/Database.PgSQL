@@ -14,15 +14,17 @@ namespace mvdmio.Database.PgSQL.Migrations;
 [PublicAPI]
 public sealed class DatabaseMigrator : IDatabaseMigrator
 {
+   private const string MIGRATIONS_SCHEMA = "mvdmio";
+   private const string MIGRATIONS_TABLE = "migrations";
+   private const string MIGRATIONS_TABLE_FULLY_QUALIFIED = "\"mvdmio\".\"migrations\"";
+
    private readonly DatabaseConnection _connection;
    private readonly IMigrationRetriever _migrationRetriever;
-   private readonly MigrationTableConfiguration _tableConfig;
    private readonly string? _environment;
    private readonly Assembly[] _assemblies;
 
    /// <summary>
-   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval
-   ///    with the default migration table configuration.
+   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
    /// <param name="assembliesContainingMigrations">
@@ -30,31 +32,15 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    classes. These assemblies are also searched for embedded schema resources.
    /// </param>
    public DatabaseMigrator(DatabaseConnection connection, params Assembly[] assembliesContainingMigrations)
-      : this(connection, MigrationTableConfiguration.Default, environment: null, assembliesContainingMigrations)
+      : this(connection, environment: null, assembliesContainingMigrations)
    {
    }
 
    /// <summary>
    ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval
-   ///    with a custom migration table configuration.
+   ///    with environment-based schema discovery.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
-   /// <param name="tableConfig">The configuration for the migration tracking table.</param>
-   /// <param name="assembliesContainingMigrations">
-   ///    List of assemblies to use for searching <see cref="IDbMigration" />
-   ///    classes. These assemblies are also searched for embedded schema resources.
-   /// </param>
-   public DatabaseMigrator(DatabaseConnection connection, MigrationTableConfiguration tableConfig, params Assembly[] assembliesContainingMigrations)
-      : this(connection, tableConfig, environment: null, assembliesContainingMigrations)
-   {
-   }
-
-   /// <summary>
-   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval
-   ///    with a custom migration table configuration and environment-based schema discovery.
-   /// </summary>
-   /// <param name="connection">The database connection to use for migrations.</param>
-   /// <param name="tableConfig">The configuration for the migration tracking table.</param>
    /// <param name="environment">
    ///    Optional environment name for schema discovery. If specified, looks for an embedded
    ///    schema.{environment}.sql resource (case-insensitive). Falls back to schema.sql if not found.
@@ -64,40 +50,26 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    List of assemblies to use for searching <see cref="IDbMigration" />
    ///    classes. These assemblies are also searched for embedded schema resources.
    /// </param>
-   public DatabaseMigrator(DatabaseConnection connection, MigrationTableConfiguration tableConfig, string? environment, params Assembly[] assembliesContainingMigrations)
-      : this(connection, tableConfig, environment, assembliesContainingMigrations, new ReflectionMigrationRetriever(assembliesContainingMigrations))
+   public DatabaseMigrator(DatabaseConnection connection, string? environment, params Assembly[] assembliesContainingMigrations)
+      : this(connection, environment, assembliesContainingMigrations, new ReflectionMigrationRetriever(assembliesContainingMigrations))
    {
    }
 
    /// <summary>
-   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class with a custom migration retriever
-   ///    and the default migration table configuration.
+   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class with a custom migration retriever.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
    /// <param name="migrationRetriever">The migration retriever to use.</param>
    public DatabaseMigrator(DatabaseConnection connection, IMigrationRetriever migrationRetriever)
-      : this(connection, MigrationTableConfiguration.Default, environment: null, [], migrationRetriever)
+      : this(connection, environment: null, [], migrationRetriever)
    {
    }
 
    /// <summary>
    ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class with a custom migration retriever
-   ///    and a custom migration table configuration.
+   ///    and environment-based schema discovery.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
-   /// <param name="tableConfig">The configuration for the migration tracking table.</param>
-   /// <param name="migrationRetriever">The migration retriever to use.</param>
-   public DatabaseMigrator(DatabaseConnection connection, MigrationTableConfiguration tableConfig, IMigrationRetriever migrationRetriever)
-      : this(connection, tableConfig, environment: null, [], migrationRetriever)
-   {
-   }
-
-   /// <summary>
-   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class with a custom migration retriever,
-   ///    a custom migration table configuration, and environment-based schema discovery.
-   /// </summary>
-   /// <param name="connection">The database connection to use for migrations.</param>
-   /// <param name="tableConfig">The configuration for the migration tracking table.</param>
    /// <param name="environment">
    ///    Optional environment name for schema discovery. If specified, looks for an embedded
    ///    schema.{environment}.sql resource (case-insensitive). Falls back to schema.sql if not found.
@@ -109,13 +81,11 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <param name="migrationRetriever">The migration retriever to use.</param>
    public DatabaseMigrator(
       DatabaseConnection connection,
-      MigrationTableConfiguration tableConfig,
       string? environment,
       Assembly[] assembliesForSchemaDiscovery,
       IMigrationRetriever migrationRetriever)
    {
       _connection = connection;
-      _tableConfig = tableConfig;
       _environment = environment;
       _assemblies = assembliesForSchemaDiscovery;
       _migrationRetriever = migrationRetriever;
@@ -130,7 +100,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
             identifier AS identifier,
             name AS name,
             executed_at AS executedAtUtc
-         FROM {_tableConfig.FullyQualifiedTableName}
+         FROM {MIGRATIONS_TABLE_FULLY_QUALIFIED}
          """,
          ct: cancellationToken
       );
@@ -178,7 +148,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
             await migration.UpAsync(_connection);
 
             await _connection.Dapper.ExecuteAsync(
-               $"INSERT INTO {_tableConfig.FullyQualifiedTableName} (identifier, name, executed_at) VALUES (:identifier, :name, :executedAtUtc)",
+               $"INSERT INTO {MIGRATIONS_TABLE_FULLY_QUALIFIED} (identifier, name, executed_at) VALUES (:identifier, :name, :executedAtUtc)",
                new Dictionary<string, object?> {
                      { "identifier", migration.Identifier },
                      { "name", migration.Name },
@@ -198,13 +168,13 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <inheritdoc />
    public async Task<bool> IsDatabaseEmptyAsync(CancellationToken cancellationToken = default)
    {
-      var tableExists = await _connection.Management.TableExistsAsync(_tableConfig.Schema, _tableConfig.Table);
+      var tableExists = await _connection.Management.TableExistsAsync(MIGRATIONS_SCHEMA, MIGRATIONS_TABLE);
 
       if (!tableExists)
          return true;
 
       var count = await _connection.Dapper.ExecuteScalarAsync<long>(
-         $"SELECT COUNT(*) FROM {_tableConfig.FullyQualifiedTableName}",
+         $"SELECT COUNT(*) FROM {MIGRATIONS_TABLE_FULLY_QUALIFIED}",
          ct: cancellationToken
       );
 
@@ -271,7 +241,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
          if (migrationInfo is not null)
          {
             await _connection.Dapper.ExecuteAsync(
-               $"INSERT INTO {_tableConfig.FullyQualifiedTableName} (identifier, name, executed_at) VALUES (:identifier, :name, :executedAtUtc)",
+               $"INSERT INTO {MIGRATIONS_TABLE_FULLY_QUALIFIED} (identifier, name, executed_at) VALUES (:identifier, :name, :executedAtUtc)",
                new Dictionary<string, object?> {
                   { "identifier", migrationInfo.Value.Identifier },
                   { "name", migrationInfo.Value.Name },
@@ -315,14 +285,14 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 
    private async Task EnsureMigrationTableExistsAsync()
    {
-      if (await _connection.Management.TableExistsAsync(_tableConfig.Schema, _tableConfig.Table))
+      if (await _connection.Management.TableExistsAsync(MIGRATIONS_SCHEMA, MIGRATIONS_TABLE))
          return;
 
-      await _connection.Dapper.ExecuteAsync($"CREATE SCHEMA IF NOT EXISTS \"{_tableConfig.Schema}\";");
+      await _connection.Dapper.ExecuteAsync($"CREATE SCHEMA IF NOT EXISTS \"{MIGRATIONS_SCHEMA}\";");
 
       await _connection.Dapper.ExecuteAsync(
          $"""
-         CREATE TABLE IF NOT EXISTS {_tableConfig.FullyQualifiedTableName} (
+         CREATE TABLE IF NOT EXISTS {MIGRATIONS_TABLE_FULLY_QUALIFIED} (
             identifier  BIGINT      NOT NULL,
             name        TEXT        NOT NULL,
             executed_at TIMESTAMPTZ NOT NULL,

@@ -434,29 +434,7 @@ await migrator.MigrateDatabaseToAsync(202602161430);
 var executed = await migrator.RetrieveAlreadyExecutedMigrationsAsync();
 ```
 
-Each migration runs in its own transaction. If a migration fails, its transaction is rolled back and a `MigrationException` is thrown. Executed migrations are tracked in a migration table (by default `mvdmio.migrations`, automatically created).
-
-### Custom Migration Table Location
-
-By default, migrations are tracked in `mvdmio.migrations`. To use a different schema or table name, pass a `MigrationTableConfiguration`:
-
-```csharp
-using mvdmio.Database.PgSQL.Migrations;
-
-var tableConfig = new MigrationTableConfiguration
-{
-    Schema = "my_schema",
-    Table = "schema_versions"
-};
-
-var migrator = new DatabaseMigrator(db, tableConfig, typeof(AddUsersTable).Assembly);
-await migrator.MigrateDatabaseToLatestAsync();
-```
-
-This is useful when:
-- Your organization has naming conventions for internal tables
-- You need to avoid the `mvdmio` schema
-- Multiple applications share a database and need separate migration tracking
+Each migration runs in its own transaction. If a migration fails, its transaction is rolled back and a `MigrationException` is thrown. Executed migrations are tracked in the `mvdmio.migrations` table (automatically created).
 
 ### CLI Tool
 
@@ -504,15 +482,13 @@ Create a `.mvdmio-migrations.yml` file in your project root:
 project: src/MyApp.Data          # Path to the project containing migrations
 migrationsDirectory: Migrations  # Directory for migration files (default: Migrations)
 schemasDirectory: Schemas        # Directory for schema files from db pull (default: Schemas)
-migrationsSchema: mvdmio         # Schema for migration tracking table (default: mvdmio)
-migrationsTable: migrations      # Table name for migration tracking (default: migrations)
 connectionStrings:               # The first entry is used when no --environment flag is passed
   local: Host=localhost;Database=mydb;Username=postgres;Password=secret
   acc: Host=acc-server;Database=mydb;Username=postgres;Password=secret
   prod: Host=prod-server;Database=mydb;Username=postgres;Password=secret
 ```
 
-The `migrationsSchema` and `migrationsTable` settings are optional and default to `mvdmio` and `migrations` respectively. These settings are used by all CLI commands and correspond to the `MigrationTableConfiguration` class in the library.
+Migrations are tracked in the `mvdmio.migrations` table (automatically created).
 
 #### Multi-Environment Support
 
@@ -609,7 +585,6 @@ await using var db = new DatabaseConnection(connectionString);
 // Looks for schema.local.sql, falls back to schema.sql
 var migrator = new DatabaseMigrator(
     db,
-    MigrationTableConfiguration.Default,
     environment: "local",
     typeof(AddUsersTable).Assembly
 );

@@ -105,8 +105,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
-         MigrationTableConfiguration.Default,
-         environment: null, // Will pick up schema.sql
+         null, // Will pick up schema.sql
          [TestAssembly],
          migrationRetriever);
 
@@ -130,8 +129,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
-         MigrationTableConfiguration.Default,
-         environment: "local", // Will pick up schema.local.sql
+         "local", // Will pick up schema.local.sql
          [TestAssembly],
          migrationRetriever);
 
@@ -155,8 +153,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
-         MigrationTableConfiguration.Default,
-         environment: "LOCAL", // Case-insensitive lookup
+         "LOCAL", // Case-insensitive lookup
          [TestAssembly],
          migrationRetriever);
 
@@ -182,8 +179,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migratorWithSchema = new DatabaseMigrator(
          db,
-         MigrationTableConfiguration.Default,
-         environment: null,
+         null,
          [TestAssembly],
          migrationRetriever);
 
@@ -205,8 +201,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
-         MigrationTableConfiguration.Default,
-         environment: null,
+         null,
          [TestAssembly],
          migrationRetriever);
 
@@ -232,8 +227,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
-         MigrationTableConfiguration.Default,
-         environment: null,
+         null,
          [], // No assemblies for schema discovery
          migrationRetriever);
 
@@ -253,8 +247,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
-         MigrationTableConfiguration.Default,
-         environment: "nonexistent", // No schema.nonexistent.sql exists
+         "nonexistent", // No schema.nonexistent.sql exists
          [TestAssembly],
          migrationRetriever);
 
