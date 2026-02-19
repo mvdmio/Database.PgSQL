@@ -538,15 +538,20 @@ Connection string resolution priority:
 
 #### Schema-First Migrations
 
-When migrating an empty database (one with no migrations applied), the CLI tool can automatically apply a schema file instead of running all migrations individually. This significantly speeds up provisioning new database instances.
+When migrating an empty database (one with no migrations applied), the migrator can automatically apply an embedded schema file instead of running all migrations individually. This significantly speeds up provisioning new database instances.
+
+**Automatic embedding:**
+
+The NuGet package includes a `.props` file that automatically embeds any `.sql` files in your `Schemas/` folder as assembly resources. No manual configuration is needed - just place schema files in the `Schemas/` folder and they are embedded on build.
 
 **How it works:**
 
-1. When `db migrate latest` or `db migrate to <version>` is run, the tool checks if the database is empty (no migrations applied).
-2. If empty, it looks for a schema file in the `schemasDirectory` (default: `Schemas/`):
-   - For environment-based runs: `schema.<environment>.sql` (e.g., `schema.local.sql`)
-   - For explicit connection strings: `schema.sql`
-3. If a schema file is found, it is applied instead of running individual migrations.
+1. When `db migrate latest` or `db migrate to <version>` is run, the migrator checks if the database is empty (no migrations applied).
+2. If empty, it scans the migrations assembly for embedded schema resources:
+   - For environment-based runs: looks for `schema.<environment>.sql` (case-insensitive, e.g., `schema.local.sql`)
+   - Falls back to `schema.sql` if no environment-specific file is found
+   - If no environment specified, picks the first available schema
+3. If an embedded schema is found, it is applied instead of running individual migrations.
 4. The migration version from the schema file header is recorded in the migrations table.
 5. Any migrations newer than the schema version are then applied normally.
 
@@ -562,7 +567,7 @@ db pull
 db pull --environment prod
 ```
 
-The generated schema file includes a header comment with the current migration version:
+The generated schema file is written to the `Schemas/` directory and includes a header comment with the current migration version:
 
 ```sql
 --
@@ -575,6 +580,8 @@ CREATE TABLE users (...);
 -- ... rest of schema
 ```
 
+On the next build, this file is automatically embedded as an assembly resource.
+
 **Workflow example:**
 
 ```bash
@@ -582,10 +589,13 @@ CREATE TABLE users (...);
 db pull --environment prod
 # Creates Schemas/schema.prod.sql
 
+# Build the project to embed the schema
+dotnet build
+
 # On a new development database
 db migrate latest --environment local
-# Detects empty database, applies schema.local.sql (if present),
-# then runs any migrations newer than the schema version
+# Detects empty database, discovers embedded schema.local.sql,
+# applies it, then runs any migrations newer than the schema version
 ```
 
 **Programmatic usage:**
@@ -595,18 +605,18 @@ using mvdmio.Database.PgSQL.Migrations;
 
 await using var db = new DatabaseConnection(connectionString);
 
-// Pass the schema file path to the constructor
-// The migrator will automatically apply it if the database is empty
+// Specify an environment to select the appropriate embedded schema
+// Looks for schema.local.sql, falls back to schema.sql
 var migrator = new DatabaseMigrator(
     db,
     MigrationTableConfiguration.Default,
-    schemaFilePath: "path/to/schema.sql",
+    environment: "local",
     typeof(AddUsersTable).Assembly
 );
 
 // This will:
 // 1. Check if the database is empty
-// 2. If empty and schema file exists, apply the schema file first
+// 2. If empty, discover and apply the embedded schema file
 // 3. Record the migration version from the schema file header
 // 4. Run any remaining migrations after the schema version
 await migrator.MigrateDatabaseToLatestAsync();
@@ -615,10 +625,10 @@ await migrator.MigrateDatabaseToLatestAsync();
 await migrator.MigrateDatabaseToAsync(202602161430);
 ```
 
-If no schema file path is provided, the migrator runs migrations normally:
+Without an environment, the migrator picks the first available embedded schema:
 
 ```csharp
-// Without schema file - runs all migrations from scratch
+// Uses first available embedded schema, or runs migrations if none found
 var migrator = new DatabaseMigrator(db, typeof(AddUsersTable).Assembly);
 await migrator.MigrateDatabaseToLatestAsync();
 ```

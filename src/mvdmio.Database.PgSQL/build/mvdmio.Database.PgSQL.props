@@ -1,0 +1,6 @@
+<Project>
+  <!-- Auto-embed schema files from the Schemas directory -->
+  <ItemGroup>
+    <EmbeddedResource Include="Schemas\**\*.sql" LogicalName="%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

@@ -81,4 +81,20 @@ public static partial class SchemaFileParser
       var content = await File.ReadAllTextAsync(schemaFilePath, cancellationToken);
       return ParseMigrationVersion(content);
    }
+
+   /// <summary>
+   ///    Asynchronously parses the migration version from a stream containing schema file content.
+   /// </summary>
+   /// <param name="stream">The stream containing the schema file content.</param>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>
+   ///    A <see cref="SchemaFileMigrationInfo"/> containing the identifier and name of the migration
+   ///    that was current when the schema file was generated, or null if no migration version could be found.
+   /// </returns>
+   public static async Task<SchemaFileMigrationInfo?> ParseMigrationVersionFromStreamAsync(Stream stream, CancellationToken cancellationToken = default)
+   {
+      using var reader = new StreamReader(stream, leaveOpen: true);
+      var content = await reader.ReadToEndAsync(cancellationToken);
+      return ParseMigrationVersion(content);
+   }
 }

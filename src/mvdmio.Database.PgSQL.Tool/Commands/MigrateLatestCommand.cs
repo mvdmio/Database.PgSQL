@@ -57,7 +57,7 @@ internal static class MigrateLatestCommand
          var projectPath = config.GetProjectPath();
          var assembly = ProjectBuilder.BuildAndLoadAssembly(projectPath);
          var migrationTableConfig = config.GetMigrationTableConfiguration();
-         var schemaFilePath = config.GetSchemaFilePath(connectionStringOverride, environmentOverride);
+         var environmentName = config.ResolveEnvironmentName(connectionStringOverride, environmentOverride);
 
          var migrationRetriever = new ReflectionMigrationRetriever(assembly);
          var allMigrations = migrationRetriever.RetrieveMigrations().OrderBy(x => x.Identifier).ToArray();
@@ -65,7 +65,7 @@ internal static class MigrateLatestCommand
          Console.WriteLine();
 
          await using var connection = new DatabaseConnection(connectionString);
-         var migrator = new DatabaseMigrator(connection, migrationTableConfig, schemaFilePath, migrationRetriever);
+         var migrator = new DatabaseMigrator(connection, migrationTableConfig, environmentName, [assembly], migrationRetriever);
 
          // Check status before migrating
          var isDatabaseEmpty = await migrator.IsDatabaseEmptyAsync(cancellationToken);
@@ -73,13 +73,20 @@ internal static class MigrateLatestCommand
             ? []
             : (await migrator.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
 
-         if (isDatabaseEmpty && schemaFilePath is not null)
+         if (isDatabaseEmpty && EmbeddedSchemaDiscovery.SchemaResourceExists([assembly], environmentName))
          {
-            var migrationInfo = await SchemaFileParser.ParseMigrationVersionFromFileAsync(schemaFilePath, cancellationToken);
-            Console.WriteLine($"Empty database detected. Will apply schema file: {Path.GetFileName(schemaFilePath)}");
+            var schemaResourceName = EmbeddedSchemaDiscovery.GetSchemaResourceName([assembly], environmentName);
+            var schemaContent = await EmbeddedSchemaDiscovery.ReadSchemaContentAsync([assembly], environmentName, cancellationToken);
 
-            if (migrationInfo is not null)
-               Console.WriteLine($"Schema file contains migration version: {migrationInfo.Value.Identifier} ({migrationInfo.Value.Name})");
+            Console.WriteLine($"Empty database detected. Will apply embedded schema: {schemaResourceName}");
+
+            if (schemaContent is not null)
+            {
+               var migrationInfo = SchemaFileParser.ParseMigrationVersion(schemaContent);
+
+               if (migrationInfo is not null)
+                  Console.WriteLine($"Schema contains migration version: {migrationInfo.Value.Identifier} ({migrationInfo.Value.Name})");
+            }
 
             Console.WriteLine();
          }

@@ -1,10 +1,10 @@
+using System.Reflection;
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Exceptions;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.Models;
-using System.Reflection;
 
 namespace mvdmio.Database.PgSQL.Migrations;
 
@@ -17,7 +17,8 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    private readonly DatabaseConnection _connection;
    private readonly IMigrationRetriever _migrationRetriever;
    private readonly MigrationTableConfiguration _tableConfig;
-   private readonly string? _schemaFilePath;
+   private readonly string? _environment;
+   private readonly Assembly[] _assemblies;
 
    /// <summary>
    ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval
@@ -26,10 +27,10 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <param name="connection">The database connection to use for migrations.</param>
    /// <param name="assembliesContainingMigrations">
    ///    List of assemblies to use for searching <see cref="IDbMigration" />
-   ///    classes.
+   ///    classes. These assemblies are also searched for embedded schema resources.
    /// </param>
    public DatabaseMigrator(DatabaseConnection connection, params Assembly[] assembliesContainingMigrations)
-      : this(connection, MigrationTableConfiguration.Default, schemaFilePath: null, assembliesContainingMigrations)
+      : this(connection, MigrationTableConfiguration.Default, environment: null, assembliesContainingMigrations)
    {
    }
 
@@ -41,29 +42,30 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <param name="tableConfig">The configuration for the migration tracking table.</param>
    /// <param name="assembliesContainingMigrations">
    ///    List of assemblies to use for searching <see cref="IDbMigration" />
-   ///    classes.
+   ///    classes. These assemblies are also searched for embedded schema resources.
    /// </param>
    public DatabaseMigrator(DatabaseConnection connection, MigrationTableConfiguration tableConfig, params Assembly[] assembliesContainingMigrations)
-      : this(connection, tableConfig, schemaFilePath: null, assembliesContainingMigrations)
+      : this(connection, tableConfig, environment: null, assembliesContainingMigrations)
    {
    }
 
    /// <summary>
    ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval
-   ///    with a custom migration table configuration and an optional schema file for empty databases.
+   ///    with a custom migration table configuration and environment-based schema discovery.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
    /// <param name="tableConfig">The configuration for the migration tracking table.</param>
-   /// <param name="schemaFilePath">
-   ///    Optional path to a schema SQL file. If provided and the database is empty,
-   ///    the schema file is applied before running migrations.
+   /// <param name="environment">
+   ///    Optional environment name for schema discovery. If specified, looks for an embedded
+   ///    schema.{environment}.sql resource (case-insensitive). Falls back to schema.sql if not found.
+   ///    If the database is empty, the embedded schema is applied before running migrations.
    /// </param>
    /// <param name="assembliesContainingMigrations">
    ///    List of assemblies to use for searching <see cref="IDbMigration" />
-   ///    classes.
+   ///    classes. These assemblies are also searched for embedded schema resources.
    /// </param>
-   public DatabaseMigrator(DatabaseConnection connection, MigrationTableConfiguration tableConfig, string? schemaFilePath, params Assembly[] assembliesContainingMigrations)
-      : this(connection, tableConfig, schemaFilePath, new ReflectionMigrationRetriever(assembliesContainingMigrations))
+   public DatabaseMigrator(DatabaseConnection connection, MigrationTableConfiguration tableConfig, string? environment, params Assembly[] assembliesContainingMigrations)
+      : this(connection, tableConfig, environment, assembliesContainingMigrations, new ReflectionMigrationRetriever(assembliesContainingMigrations))
    {
    }
 
@@ -74,7 +76,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <param name="connection">The database connection to use for migrations.</param>
    /// <param name="migrationRetriever">The migration retriever to use.</param>
    public DatabaseMigrator(DatabaseConnection connection, IMigrationRetriever migrationRetriever)
-      : this(connection, MigrationTableConfiguration.Default, schemaFilePath: null, migrationRetriever)
+      : this(connection, MigrationTableConfiguration.Default, environment: null, [], migrationRetriever)
    {
    }
 
@@ -86,26 +88,36 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <param name="tableConfig">The configuration for the migration tracking table.</param>
    /// <param name="migrationRetriever">The migration retriever to use.</param>
    public DatabaseMigrator(DatabaseConnection connection, MigrationTableConfiguration tableConfig, IMigrationRetriever migrationRetriever)
-      : this(connection, tableConfig, schemaFilePath: null, migrationRetriever)
+      : this(connection, tableConfig, environment: null, [], migrationRetriever)
    {
    }
 
    /// <summary>
    ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class with a custom migration retriever,
-   ///    a custom migration table configuration, and an optional schema file for empty databases.
+   ///    a custom migration table configuration, and environment-based schema discovery.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
    /// <param name="tableConfig">The configuration for the migration tracking table.</param>
-   /// <param name="schemaFilePath">
-   ///    Optional path to a schema SQL file. If provided and the database is empty,
-   ///    the schema file is applied before running migrations.
+   /// <param name="environment">
+   ///    Optional environment name for schema discovery. If specified, looks for an embedded
+   ///    schema.{environment}.sql resource (case-insensitive). Falls back to schema.sql if not found.
+   ///    If the database is empty, the embedded schema is applied before running migrations.
+   /// </param>
+   /// <param name="assembliesForSchemaDiscovery">
+   ///    Assemblies to search for embedded schema resources. Pass empty array if schema discovery is not needed.
    /// </param>
    /// <param name="migrationRetriever">The migration retriever to use.</param>
-   public DatabaseMigrator(DatabaseConnection connection, MigrationTableConfiguration tableConfig, string? schemaFilePath, IMigrationRetriever migrationRetriever)
+   public DatabaseMigrator(
+      DatabaseConnection connection,
+      MigrationTableConfiguration tableConfig,
+      string? environment,
+      Assembly[] assembliesForSchemaDiscovery,
+      IMigrationRetriever migrationRetriever)
    {
       _connection = connection;
       _tableConfig = tableConfig;
-      _schemaFilePath = schemaFilePath;
+      _environment = environment;
+      _assemblies = assembliesForSchemaDiscovery;
       _migrationRetriever = migrationRetriever;
    }
 
@@ -127,10 +139,10 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <inheritdoc />
    public async Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken = default)
    {
-      // Check if database is empty and we have a schema file to apply
-      if (await ShouldApplySchemaFileAsync(targetIdentifier: null, cancellationToken))
+      // Check if database is empty and we have a schema resource to apply
+      if (await ShouldApplySchemaAsync(targetIdentifier: null, cancellationToken))
       {
-         await ApplySchemaFileAsync(cancellationToken);
+         await ApplySchemaAsync(cancellationToken);
       }
       else
       {
@@ -143,10 +155,10 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <inheritdoc />
    public async Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken = default)
    {
-      // Check if database is empty and we have a schema file to apply
-      if (await ShouldApplySchemaFileAsync(targetIdentifier, cancellationToken))
+      // Check if database is empty and we have a schema resource to apply
+      if (await ShouldApplySchemaAsync(targetIdentifier, cancellationToken))
       {
-         await ApplySchemaFileAsync(cancellationToken);
+         await ApplySchemaAsync(cancellationToken);
       }
       else
       {
@@ -200,19 +212,19 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    }
 
    /// <summary>
-   ///    Determines whether a schema file should be applied.
+   ///    Determines whether an embedded schema should be applied.
    ///    Returns true if:
-   ///    - A schema file path is configured
-   ///    - The schema file exists
+   ///    - Assemblies are configured for schema discovery
+   ///    - An embedded schema resource exists
    ///    - The database is empty
    ///    - If targetIdentifier is specified, the schema version must be &lt;= targetIdentifier
    /// </summary>
-   private async Task<bool> ShouldApplySchemaFileAsync(long? targetIdentifier, CancellationToken cancellationToken)
+   private async Task<bool> ShouldApplySchemaAsync(long? targetIdentifier, CancellationToken cancellationToken)
    {
-      if (string.IsNullOrEmpty(_schemaFilePath))
+      if (_assemblies.Length == 0)
          return false;
 
-      if (!File.Exists(_schemaFilePath))
+      if (!EmbeddedSchemaDiscovery.SchemaResourceExists(_assemblies, _environment))
          return false;
 
       if (!await IsDatabaseEmptyAsync(cancellationToken))
@@ -221,31 +233,32 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
       // If we have a target identifier, check that the schema version is <= target
       if (targetIdentifier.HasValue)
       {
-         var migrationInfo = await SchemaFileParser.ParseMigrationVersionFromFileAsync(_schemaFilePath, cancellationToken);
+         var schemaContent = await EmbeddedSchemaDiscovery.ReadSchemaContentAsync(_assemblies, _environment, cancellationToken);
 
-         if (migrationInfo is not null && migrationInfo.Value.Identifier > targetIdentifier.Value)
-            return false;
+         if (schemaContent is not null)
+         {
+            var migrationInfo = SchemaFileParser.ParseMigrationVersion(schemaContent);
+
+            if (migrationInfo is not null && migrationInfo.Value.Identifier > targetIdentifier.Value)
+               return false;
+         }
       }
 
       return true;
    }
 
    /// <summary>
-   ///    Applies the configured schema file to the database.
+   ///    Applies the embedded schema resource to the database.
    /// </summary>
-   private async Task ApplySchemaFileAsync(CancellationToken cancellationToken)
+   private async Task ApplySchemaAsync(CancellationToken cancellationToken)
    {
-      if (string.IsNullOrEmpty(_schemaFilePath))
-         throw new InvalidOperationException("No schema file path configured.");
+      var schemaContent = await EmbeddedSchemaDiscovery.ReadSchemaContentAsync(_assemblies, _environment, cancellationToken);
 
-      if (!File.Exists(_schemaFilePath))
-         throw new FileNotFoundException($"Schema file not found: {_schemaFilePath}", _schemaFilePath);
+      if (string.IsNullOrEmpty(schemaContent))
+         throw new InvalidOperationException("No embedded schema resource found.");
 
-      // Parse the schema file to extract migration version
-      var migrationInfo = await SchemaFileParser.ParseMigrationVersionFromFileAsync(_schemaFilePath, cancellationToken);
-
-      // Read and execute the schema file
-      var schemaContent = await File.ReadAllTextAsync(_schemaFilePath, cancellationToken);
+      // Parse the schema content to extract migration version
+      var migrationInfo = SchemaFileParser.ParseMigrationVersion(schemaContent);
 
       await _connection.InTransactionAsync(async () =>
       {
@@ -254,7 +267,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
          // Ensure migration table exists (it should have been created by the schema, but ensure it's there)
          await EnsureMigrationTableExistsAsync();
 
-         // Record the migration version from the schema file
+         // Record the migration version from the schema
          if (migrationInfo is not null)
          {
             await _connection.Dapper.ExecuteAsync(

@@ -19,18 +19,19 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Package configuration">
-    <Version>0.12.0</Version>
+    <Version>0.13.0</Version>
     <Title>mvdmio.Database.PgSQL</Title>
     <Description>PostgreSQL database interaction including migrations.</Description>
     <Company>mvdmio</Company>
     <Authors>Michiel van der Meer</Authors>
-    <PackageReadmeFile>Readme.md</PackageReadmeFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="README.md" PackagePath="" Pack="true"/>
     <None Include="..\..\LICENSE" PackagePath="" Pack="true"/>
-    <None Include="..\..\Readme.md" PackagePath="" Pack="true"/>
+    <None Include="build\**" Pack="true" PackagePath="build\"/>
   </ItemGroup>
 
   <ItemGroup>

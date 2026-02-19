@@ -30,4 +30,9 @@
       <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL\mvdmio.Database.PgSQL.csproj" />
    </ItemGroup>
 
+   <!-- Embed schema files for testing embedded schema discovery -->
+   <ItemGroup>
+      <EmbeddedResource Include="Schemas\**\*.sql" LogicalName="%(Filename)%(Extension)" />
+   </ItemGroup>
+
 </Project>
