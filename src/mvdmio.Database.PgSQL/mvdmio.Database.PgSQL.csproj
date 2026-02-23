@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Package configuration">
-    <Version>0.14.0</Version>
+    <Version>0.15.0</Version>
     <Title>mvdmio.Database.PgSQL</Title>
     <Description>PostgreSQL database interaction including migrations.</Description>
     <Company>mvdmio</Company>
@@ -44,6 +44,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Reference the analyzer so it ships inside the NuGet package and runs for consumers -->
+    <ProjectReference Include="..\mvdmio.Database.PgSQL.Analyzers\mvdmio.Database.PgSQL.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer"
+                      SetTargetFramework="TargetFramework=netstandard2.0"
+                      PrivateAssets="contentfiles;analyzers" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.66"/>
 
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
@@ -57,6 +66,20 @@
     <PackageReference Include="JetBrains.Annotations" Version="2025.2.4">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>mvdmio.Database.PgSQL.Tests.Integration</_Parameter1>
+    </AssemblyAttribute>
+
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>mvdmio.Database.PgSQL.Tests.Unit</_Parameter1>
+    </AssemblyAttribute>
+
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
+    </AssemblyAttribute>
   </ItemGroup>
 
 </Project>

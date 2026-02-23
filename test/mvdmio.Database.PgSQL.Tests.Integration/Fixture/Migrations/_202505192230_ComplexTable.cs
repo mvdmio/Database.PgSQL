@@ -4,9 +4,6 @@ namespace mvdmio.Database.PgSQL.Tests.Integration.Fixture.Migrations;
 
 public class _202505192230_ComplexTable : IDbMigration
 {
-   public long Identifier { get; } = 202505192230;
-   public string Name { get; } = "ComplexTable";
-
    public async Task UpAsync(DatabaseConnection db)
    {
       await db.Dapper.ExecuteAsync(

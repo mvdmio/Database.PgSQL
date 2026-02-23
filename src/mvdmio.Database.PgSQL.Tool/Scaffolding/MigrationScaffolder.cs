@@ -22,9 +22,6 @@ internal static class MigrationScaffolder
 
                public class _{{identifier}}_{{name}} : IDbMigration
                {
-                  public long Identifier { get; } = {{identifier}};
-                  public string Name { get; } = "{{name}}";
-
                   public async Task UpAsync(DatabaseConnection db)
                   {
                      await db.Dapper.ExecuteAsync(

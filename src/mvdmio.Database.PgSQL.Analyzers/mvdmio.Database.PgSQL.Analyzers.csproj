@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Project configuration">
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <!-- Required for Roslyn analyzers -->
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <!-- Do not output a regular library — this is an analyzer-only assembly -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Package configuration">
+    <Version>0.1.0</Version>
+    <Title>mvdmio.Database.PgSQL.Analyzers</Title>
+    <Description>Roslyn analyzers for mvdmio.Database.PgSQL — validates migration class naming conventions.</Description>
+    <Company>mvdmio</Company>
+    <Authors>Michiel van der Meer</Authors>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <DevelopmentDependency>true</DevelopmentDependency>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Place the analyzer dll in the analyzers/dotnet/cs folder inside the NuGet package -->
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
+    <!-- Release tracking files required by RS2008 -->
+    <AdditionalFiles Include="AnalyzerReleases.*.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" PrivateAssets="all"/>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

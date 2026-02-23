@@ -389,17 +389,15 @@ A separate dedicated connection is used for notifications, so they don't interfe
 
 ### Creating Migrations
 
-Migrations implement `IDbMigration` with a timestamp-based identifier:
+Migrations implement `IDbMigration`. Name the class `_{YYYYMMddHHmm}_{MigrationName}` — the `Identifier` and `Name` properties are automatically extracted from the class name at runtime, so no manual property declarations are needed:
 
 ```csharp
 using mvdmio.Database.PgSQL;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 
-public class AddUsersTable : IDbMigration
+// Class name drives both Identifier (202602161430) and Name ("AddUsersTable")
+public class _202602161430_AddUsersTable : IDbMigration
 {
-   public long Identifier => 202602161430;  // YYYYMMDDHHmm format
-   public string Name => "AddUsersTable";
-
    public async Task UpAsync(DatabaseConnection db)
    {
       await db.Dapper.ExecuteAsync(
@@ -414,6 +412,9 @@ public class AddUsersTable : IDbMigration
       );
    }
 }
+```
+
+A Roslyn analyzer (`PGSQL0001`) will emit a **warning** if the class name does not match the required format `_{YYYYMMddHHmm}_{MigrationName}`. You can still override `Identifier` and `Name` manually if needed.
 ```
 
 ### Running Migrations Programmatically
@@ -619,9 +620,6 @@ namespace MyApp.Data.Migrations;
 
 public class _202602161430_AddUsersTable : IDbMigration
 {
-   public long Identifier { get; } = 202602161430;
-   public string Name { get; } = "AddUsersTable";
-
    public async Task UpAsync(DatabaseConnection db)
    {
       await db.Dapper.ExecuteAsync(
