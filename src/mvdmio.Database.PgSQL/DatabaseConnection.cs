@@ -14,7 +14,7 @@ namespace mvdmio.Database.PgSQL;
 ///    Provides common methods for database access.
 /// </summary>
 [PublicAPI]
-public sealed class DatabaseConnection : IDisposable, IAsyncDisposable
+public class DatabaseConnection : IDisposable, IAsyncDisposable
 {
    private readonly NpgsqlDataSource _datasource;
    private readonly bool _disposeDataSource;
