@@ -40,7 +40,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task IsDatabaseEmptyAsync_WithNoMigrationsTable_ReturnsTrue()
    {
-      await using var db = _connectionFactory.ForConnectionString(_dbContainer.GetConnectionString());
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
       var migrator = new DatabaseMigrator(db, typeof(TestFixture).Assembly);
 
       var isEmpty = await migrator.IsDatabaseEmptyAsync(CancellationToken);
@@ -51,7 +51,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task IsDatabaseEmptyAsync_WithEmptyMigrationsTable_ReturnsTrue()
    {
-      await using var db = _connectionFactory.ForConnectionString(_dbContainer.GetConnectionString());
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       // Create the migrations table but don't add any entries
       await db.Dapper.ExecuteAsync("""
@@ -74,7 +74,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task IsDatabaseEmptyAsync_WithMigrationsApplied_ReturnsFalse()
    {
-      await using var db = _connectionFactory.ForConnectionString(_dbContainer.GetConnectionString());
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       // Create the migrations table and add an entry
       await db.Dapper.ExecuteAsync("""
@@ -99,7 +99,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithEmbeddedSchema_AppliesSchemaAndRecordsMigration()
    {
-      await using var db = _connectionFactory.ForConnectionString(_dbContainer.GetConnectionString());
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       // Use the embedded schema.sql from the test assembly
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
@@ -123,7 +123,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithEnvironmentSpecificSchema_AppliesCorrectSchema()
    {
-      await using var db = _connectionFactory.ForConnectionString(_dbContainer.GetConnectionString());
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       // Use the embedded schema.local.sql from the test assembly
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
@@ -147,7 +147,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithCaseInsensitiveEnvironment_FindsSchema()
    {
-      await using var db = _connectionFactory.ForConnectionString(_dbContainer.GetConnectionString());
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       // Use uppercase environment name - should still find schema.local.sql
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
@@ -167,7 +167,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithDatabaseAlreadyHasMigrations_DoesNotApplyEmbeddedSchema()
    {
-      await using var db = _connectionFactory.ForConnectionString(_dbContainer.GetConnectionString());
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       // First apply some migrations normally (without embedded schema)
       var migratorWithoutSchema = new DatabaseMigrator(db, typeof(TestFixture).Assembly);
@@ -194,7 +194,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithSchemaAndPendingMigrations_AppliesBoth()
    {
-      await using var db = _connectionFactory.ForConnectionString(_dbContainer.GetConnectionString());
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       // The embedded schema contains migration 202505181000 (SimpleTable)
       // The TestFixture assembly has migrations 202505181000 and 202505192230 (ComplexTable)
@@ -221,7 +221,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithNoEmbeddedSchema_RunsMigrationsNormally()
    {
-      await using var db = _connectionFactory.ForConnectionString(_dbContainer.GetConnectionString());
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       // Pass an empty array for schema assemblies - no embedded schema will be found
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
@@ -241,7 +241,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithNonExistentEnvironment_FallsBackToDefaultSchema()
    {
-      await using var db = _connectionFactory.ForConnectionString(_dbContainer.GetConnectionString());
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       // Use an environment that doesn't have a specific schema file
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);

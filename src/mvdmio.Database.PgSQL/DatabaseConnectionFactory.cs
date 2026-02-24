@@ -13,14 +13,26 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
    private readonly SemaphoreSlim _lock = new(1, 1);
 
    /// <summary>
+   ///   Builds a new data source for the given connection string.
+   ///   Data sources are cached, so multiple calls with the same connection string will return the same instance.
+   /// </summary>
+   /// <param name="connectionString">The PostgreSQL connection string.</param>
+   /// <param name="builderAction">An optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>.</param>
+   /// <returns>A <see cref="DatabaseConnection"/> instance for the specified connection string.</returns>
+   public NpgsqlDataSource BuildDataSource(string connectionString, Action<NpgsqlDataSourceBuilder>? builderAction = null)
+   {
+      return RetrieveOrCreate(connectionString, builderAction);
+   }
+
+   /// <summary>
    ///    Creates a new database wrapper for the given connection string.
    /// </summary>
    /// <param name="connectionString">The PostgreSQL connection string.</param>
    /// <param name="builderAction">An optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>.</param>
    /// <returns>A <see cref="DatabaseConnection"/> instance for the specified connection string.</returns>
-   public DatabaseConnection ForConnectionString(string connectionString, Action<NpgsqlDataSourceBuilder>? builderAction = null)
+   public DatabaseConnection BuildConnection(string connectionString, Action<NpgsqlDataSourceBuilder>? builderAction = null)
    {
-      return GetConnection(connectionString, builderAction);
+      return new DatabaseConnection(RetrieveOrCreate(connectionString, builderAction));
    }
 
    /// <inheritdoc />
@@ -41,17 +53,17 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
       _lock.Dispose();
    }
 
-   private DatabaseConnection GetConnection(string connectionString, Action<NpgsqlDataSourceBuilder>? builderAction = null)
+   private NpgsqlDataSource RetrieveOrCreate(string connectionString, Action<NpgsqlDataSourceBuilder>? builderAction = null)
    {
       if (_dataSources.TryGetValue(connectionString, out var dataSource))
-         return new DatabaseConnection(dataSource);
+         return dataSource;
 
       _lock.Wait();
 
       try
       {
          if (_dataSources.TryGetValue(connectionString, out dataSource))
-            return new DatabaseConnection(dataSource);
+            return dataSource;
 
          var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString)
          {
@@ -67,7 +79,7 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
          dataSource = dataSourceBuilder.Build();
 
          _dataSources.Add(connectionString, dataSource);
-         return new DatabaseConnection(dataSource);
+         return dataSource;
       }
       finally
       {

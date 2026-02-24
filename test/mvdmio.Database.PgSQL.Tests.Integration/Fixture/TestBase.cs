@@ -16,7 +16,7 @@ public abstract class TestBase : IAsyncLifetime
 
    public virtual async ValueTask InitializeAsync()
    {
-      Db = _databaseConnectionFactory.ForConnectionString(_fixture.DbContainer.GetConnectionString());
+      Db = _databaseConnectionFactory.BuildConnection(_fixture.DbContainer.GetConnectionString());
 
       await Db.BeginTransactionAsync();
    }
