@@ -1,6 +1,7 @@
 using Dapper;
 using JetBrains.Annotations;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using mvdmio.Database.PgSQL.Dapper.TypeHandlers.Base;
 using System.Reflection;
 
@@ -20,7 +21,7 @@ public static class ServiceCollectionExtensions
       /// <returns>The service collection for chaining.</returns>
       public IServiceCollection AddDatabase()
       {
-         services.AddSingleton<DatabaseConnectionFactory>();
+         services.TryAddSingleton<DatabaseConnectionFactory>();
          return services;
       }
 
