@@ -467,6 +467,9 @@ db migrate latest --connection-string "Host=localhost;Database=mydb;..."
 # Pull the current database schema into a schema.<env>.sql file
 db pull
 
+# Pull all environment schemas and remove obsolete migration files
+db cleanup
+
 # Pull from a specific environment
 db pull --environment prod
 db pull -e acc
@@ -558,6 +561,16 @@ CREATE TABLE users (...);
 ```
 
 On the next build, this file is automatically embedded as an assembly resource.
+
+#### Cleaning up obsolete migrations
+
+Once every environment has advanced beyond a set of old migrations, you can remove those migration source files:
+
+```bash
+db cleanup
+```
+
+`db cleanup` pulls fresh schema files for every configured environment, parses the migration version from each schema header, finds the lowest migration version still present anywhere, and deletes migration `.cs` files older than that version. If any environment has no recorded migration version, cleanup is skipped so no required migrations are removed.
 
 **Workflow example:**
 

@@ -26,9 +26,10 @@
       <Using Include="Xunit" />
    </ItemGroup>
 
-   <ItemGroup>
-      <Compile Include="..\..\src\mvdmio.Database.PgSQL.Tool\Configuration\ToolConfiguration.cs" Link="Configuration\ToolConfiguration.cs" />
-   </ItemGroup>
+    <ItemGroup>
+       <Compile Include="..\..\src\mvdmio.Database.PgSQL.Tool\Configuration\ToolConfiguration.cs" Link="Configuration\ToolConfiguration.cs" />
+       <Compile Include="..\..\src\mvdmio.Database.PgSQL.Tool\Cleanup\MigrationCleanupPlanner.cs" Link="Cleanup\MigrationCleanupPlanner.cs" />
+    </ItemGroup>
 
    <ItemGroup>
       <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL\mvdmio.Database.PgSQL.csproj" />

@@ -26,6 +26,9 @@ db migrate latest
 
 # Pull the current database schema
 db pull
+
+# Pull schemas from all environments and delete obsolete migrations
+db cleanup
 ```
 
 ## Commands
@@ -159,6 +162,23 @@ The generated schema file includes:
 - Views
 - A header comment with the current migration version
 
+### `db cleanup`
+
+Pulls fresh schema files for every configured environment, reads the migration version from each schema header, finds the lowest migration version still needed anywhere, and deletes migration source files older than that version.
+
+```bash
+db cleanup
+```
+
+The command:
+1. Requires `connectionStrings` to contain all environments you want to consider
+2. Writes `Schemas/schema.<environment>.sql` for each configured environment
+3. Parses the migration version from each generated schema file
+4. Finds the lowest migration version across those environments
+5. Deletes migration `.cs` files in `migrationsDirectory` that are older than that version
+
+Cleanup is skipped when any environment has no recorded migration version yet, because in that case older migrations may still be needed.
+
 ## Configuration
 
 The `.mvdmio-migrations.yml` file configures the tool:
@@ -228,7 +248,10 @@ When the migrator encounters an empty database:
 mvdmio.Database.PgSQL.Tool/
 ├── Building/
 │   └── ProjectBuilder.cs          # Builds projects and loads assemblies
+├── Cleanup/
+│   └── MigrationCleanupPlanner.cs # Determines obsolete migration files
 ├── Commands/
+│   ├── CleanupCommand.cs          # db cleanup
 │   ├── InitCommand.cs             # db init
 │   ├── MigrationCreateCommand.cs  # db migration create
 │   ├── MigrateLatestCommand.cs    # db migrate latest

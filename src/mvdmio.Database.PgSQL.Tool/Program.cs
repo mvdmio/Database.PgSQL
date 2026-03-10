@@ -9,6 +9,9 @@ rootCommand.Subcommands.Add(InitCommand.Create());
 // db pull
 rootCommand.Subcommands.Add(PullCommand.Create());
 
+// db cleanup
+rootCommand.Subcommands.Add(CleanupCommand.Create());
+
 // db migration create <name>
 var migrationCommand = new Command("migration", "Migration scaffolding commands");
 migrationCommand.Subcommands.Add(MigrationCreateCommand.Create());
