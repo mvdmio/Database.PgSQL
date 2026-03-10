@@ -2,6 +2,7 @@
 
   <PropertyGroup Label="Project configuration">
     <TargetFramework>netstandard2.0</TargetFramework>
+    <IsRoslynComponent>true</IsRoslynComponent>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -13,7 +14,7 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Package configuration">
-    <Version>0.1.0</Version>
+    <Version>0.2.1</Version>
     <Title>mvdmio.Database.PgSQL.Analyzers</Title>
     <Description>Roslyn analyzers for mvdmio.Database.PgSQL — validates migration class naming conventions.</Description>
     <Company>mvdmio</Company>

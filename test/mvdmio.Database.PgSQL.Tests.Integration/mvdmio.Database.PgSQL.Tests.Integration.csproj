@@ -26,9 +26,14 @@
       <Using Include="Xunit" />
    </ItemGroup>
 
-   <ItemGroup>
-      <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL\mvdmio.Database.PgSQL.csproj" />
-   </ItemGroup>
+    <ItemGroup>
+       <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL\mvdmio.Database.PgSQL.csproj" />
+       <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL.Analyzers\mvdmio.Database.PgSQL.Analyzers.csproj"
+                         ReferenceOutputAssembly="false"
+                         OutputItemType="Analyzer"
+                         SetTargetFramework="TargetFramework=netstandard2.0"
+                         PrivateAssets="contentfiles;analyzers" />
+    </ItemGroup>
 
    <!-- Embed schema files for testing embedded schema discovery -->
    <ItemGroup>

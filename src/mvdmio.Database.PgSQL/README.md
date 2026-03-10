@@ -162,6 +162,83 @@ var result = await db.Dapper.QueryAsync<Report>(
 
 The library automatically maps `snake_case` database columns to `PascalCase` C# properties. A column named `first_name` maps to a property named `FirstName` without any configuration.
 
+## Generated Repositories
+
+Define a partial table class and let the package generate CRUD DTOs and a repository for you.
+
+```csharp
+using mvdmio.Database.PgSQL;
+using mvdmio.Database.PgSQL.Attributes;
+
+[Table("public.users")]
+public partial class UserTable
+{
+    [PrimaryKey]
+    [Generated]
+    public long UserId { get; set; }
+
+    [Unique]
+    public string UserName { get; set; } = string.Empty;
+
+    [Column("first_name")]
+    public string FirstName { get; set; } = string.Empty;
+}
+```
+
+This generates:
+
+- `UserData` for read operations
+- `CreateUserCommand` for inserts
+- `UpdateUserCommand` for updates
+- `IUserRepository` for mocking and unit testing
+- `UserRepository` for CRUD operations
+
+Example usage:
+
+```csharp
+await using var db = new DatabaseConnection("Host=localhost;Database=mydb;...");
+
+var repository = new UserRepository(db);
+
+var created = await repository.CreateAsync(new CreateUserCommand
+{
+    UserName = "alice",
+    FirstName = "Alice"
+});
+
+var user = await repository.GetByUserNameAsync("alice");
+
+var updated = await repository.UpdateAsync(new UpdateUserCommand
+{
+    UserId = created.UserId,
+    UserName = "alice-updated",
+    FirstName = "Alicia"
+});
+
+await repository.DeleteByUserIdAsync(updated.UserId);
+```
+
+Rules:
+
+- table classes should end with `Table`; a warning is produced otherwise
+- table classes must be `partial`
+- exactly one property must have `[PrimaryKey]`
+- `[Unique]` generates `GetBy...Async` and `DeleteBy...Async` methods
+- `[Generated]` excludes columns from create/update payload generation where appropriate
+- `[Column(...)]` overrides default `snake_case` column naming
+
+Generated repositories can also be registered automatically with dependency injection:
+
+```csharp
+services.AddUserDatabase();
+```
+
+That generated extension method is emitted into the root namespace of the consuming assembly and registers `DatabaseConnectionFactory` plus all generated repository abstractions such as `IUserRepository` -> `UserRepository`, so application services can depend on interfaces without reflection-based scanning.
+
+Extra diagnostics now catch unsupported table property shapes and collisions with generated type names such as `UserRepository` or `UserData` in the same namespace.
+
+The package ships its Roslyn analyzer/source generator as a Roslyn component so IDEs can discover generated repository types more reliably during design-time analysis.
+
 ## Transactions
 
 ### Automatic Transaction Management

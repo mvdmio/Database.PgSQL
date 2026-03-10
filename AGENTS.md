@@ -7,7 +7,7 @@ This document provides instructions for AI coding assistants working on this cod
 - Ask questions if you need clarification.
 - Search early; quote exact errors; prefer newer sources.
 - Style: telegraph. Drop filler/grammar. Min tokens (global AGENTS + replies).
-- Keep files shorter than ~500 LOC; split/refactor as needed.
+- Keep files shorter than ~500 LOC; split/refactor as needed. Does not apply to test files.
 - Always add tests when adding functionality.
 - Always create or modify tests when fixing a bug.
 - Always build the solution and run the tests after making changes. Fix all build errors and test failures before finishing your work.
