@@ -414,7 +414,7 @@ public class _202602161430_AddUsersTable : IDbMigration
 }
 ```
 
-A Roslyn analyzer (`PGSQL0001`) will emit a **warning** if the class name does not match the required format `_{YYYYMMddHHmm}_{MigrationName}`. You can still override `Identifier` and `Name` manually if needed.
+A Roslyn analyzer (`PGSQL0001`) will emit a **warning** if the class name does not match the required format `_{YYYYMMddHHmm}_{MigrationName}`. The solution keeps the analyzer test dependencies aligned with Roslyn 4.14 so builds stay restore-warning free. You can still override `Identifier` and `Name` manually if needed.
 ```
 
 ### Running Migrations Programmatically
