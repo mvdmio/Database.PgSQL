@@ -206,7 +206,9 @@ public static class EmbeddedSchemaDiscovery
          if (manifestResourceNames.Any(name =>
                 name.EndsWith("." + resourceName, StringComparison.OrdinalIgnoreCase) ||
                 name.EndsWith(resourceName, StringComparison.OrdinalIgnoreCase)))
+         {
             return true;
+         }
       }
 
       return false;
@@ -224,7 +226,9 @@ public static class EmbeddedSchemaDiscovery
                return fileName.StartsWith(SCHEMA_PREFIX, StringComparison.OrdinalIgnoreCase) &&
                       fileName.EndsWith(SCHEMA_SUFFIX, StringComparison.OrdinalIgnoreCase);
             }))
+         {
             return true;
+         }
       }
 
       return false;

@@ -1,7 +1,4 @@
-using mvdmio.Database.PgSQL.Migrations;
-using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers;
-using mvdmio.Database.PgSQL.Tool.Building;
-using mvdmio.Database.PgSQL.Tool.Configuration;
+using mvdmio.Database.PgSQL.Tool.Migrations;
 using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
@@ -13,6 +10,8 @@ internal static class MigrateLatestCommand
 {
    public static Command Create()
    {
+      var handler = new MigrateHandler();
+
       var connectionStringOption = new Option<string?>("--connection-string")
       {
          Description = "Override the connection string from the configuration file"
@@ -29,87 +28,12 @@ internal static class MigrateLatestCommand
 
       command.SetAction(async (parseResult, cancellationToken) =>
       {
-         var connectionStringOverride = parseResult.GetValue(connectionStringOption);
-         var environmentOverride = parseResult.GetValue(environmentOption);
-
-         var config = ToolConfigurationLoader.Load();
-         var connectionString = ConnectionStringResolver.ResolveConnectionString(config, connectionStringOverride, environmentOverride);
-
-         if (string.IsNullOrWhiteSpace(connectionString))
-         {
-            if (environmentOverride is not null)
-            {
-               var available = ConnectionStringResolver.GetAvailableEnvironments(config);
-               Console.Error.WriteLine($"Error: Environment '{environmentOverride}' not found in .mvdmio-migrations.yml.");
-
-               if (available.Length > 0)
-                  Console.Error.WriteLine($"Available environments: {string.Join(", ", available)}");
-            }
-            else
-            {
-               Console.Error.WriteLine("Error: No connection string provided.");
-               Console.Error.WriteLine("Specify one via --connection-string, --environment, or add an entry to connectionStrings in .mvdmio-migrations.yml.");
-            }
-
-            return;
-         }
-
-         var projectPath = ToolPathResolver.GetProjectPath(config);
-         var assembly = ProjectBuilder.BuildAndLoadAssembly(projectPath);
-         var environmentName = ConnectionStringResolver.ResolveEnvironmentName(config, connectionStringOverride, environmentOverride);
-
-         var migrationRetriever = new ReflectionMigrationRetriever(assembly);
-         var allMigrations = migrationRetriever.RetrieveMigrations().OrderBy(x => x.Identifier).ToArray();
-
-         Console.WriteLine();
-
-         await using var connection = new DatabaseConnection(connectionString);
-         var migrator = new DatabaseMigrator(connection, environmentName, [assembly], migrationRetriever);
-
-         // Check status before migrating
-         var isDatabaseEmpty = await migrator.IsDatabaseEmptyAsync(cancellationToken);
-         var alreadyExecuted = isDatabaseEmpty
-            ? []
-            : (await migrator.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
-
-         if (isDatabaseEmpty && EmbeddedSchemaDiscovery.SchemaResourceExists([assembly], environmentName))
-         {
-            var schemaResourceName = EmbeddedSchemaDiscovery.GetSchemaResourceName([assembly], environmentName);
-            var schemaContent = await EmbeddedSchemaDiscovery.ReadSchemaContentAsync([assembly], environmentName, cancellationToken);
-
-            Console.WriteLine($"Empty database detected. Will apply embedded schema: {schemaResourceName}");
-
-            if (schemaContent is not null)
-            {
-               var migrationInfo = SchemaFileParser.ParseMigrationVersion(schemaContent);
-
-               if (migrationInfo is not null)
-                  Console.WriteLine($"Schema contains migration version: {migrationInfo.Value.Identifier} ({migrationInfo.Value.Name})");
-            }
-
-            Console.WriteLine();
-         }
-         else
-         {
-            var pendingCount = allMigrations.Count(m => alreadyExecuted.All(e => e.Identifier != m.Identifier));
-            Console.WriteLine($"Found {allMigrations.Length} migration(s), {alreadyExecuted.Length} already applied.");
-
-            if (pendingCount == 0)
-            {
-               Console.WriteLine("Database is already up to date.");
-               return;
-            }
-
-            Console.WriteLine();
-         }
-
-         // The migrator handles schema-first logic internally
-         await migrator.MigrateDatabaseToLatestAsync(cancellationToken);
-
-         var finalExecuted = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
-         var appliedCount = finalExecuted.Length - alreadyExecuted.Length;
-
-         Console.WriteLine($"Migration complete. {appliedCount} migration(s) applied.");
+         await handler.HandleAsync(
+            MigrateRequest.Latest,
+            parseResult.GetValue(connectionStringOption),
+            parseResult.GetValue(environmentOption),
+            cancellationToken
+         );
       });
 
       return command;

@@ -118,6 +118,8 @@ The command:
 3. Compares with already-executed migrations
 4. Applies pending migrations in order
 
+Internally, both `db migrate latest` and `db migrate to` now share the same orchestration pipeline, so target selection is the only behavioral difference between the commands.
+
 When an empty database is detected and an embedded schema file exists, the schema is applied instead of running all migrations individually. See [Schema-First Migrations](#schema-first-migrations).
 
 ### `db migrate to <identifier>`
@@ -212,7 +214,11 @@ Migrations are tracked in the `mvdmio.migrations` table (automatically created).
 
 The configuration file is searched from the current directory upward, allowing you to run the tool from any subdirectory of your project.
 
-Internally, configuration loading, path resolution, and connection-string resolution are separated so command handlers can stay focused on orchestration.
+Internally, configuration loading, path resolution, connection-string resolution, schema export, and table-definition writing are separated so command handlers can stay focused on orchestration.
+
+Migrate command orchestration is also split into dedicated services for project loading, target selection, schema-resource reporting, and migration execution.
+
+Table-definition scaffolding is now split into focused helpers for naming, constraint analysis, and file content generation so output behavior stays stable while the code stays easier to maintain.
 
 ### Connection String Resolution
 
@@ -268,10 +274,26 @@ mvdmio.Database.PgSQL.Tool/
 │   ├── MigrateToCommand.cs        # db migrate to
 │   └── PullCommand.cs             # db pull
 ├── Configuration/
-│   └── ToolConfiguration.cs       # YAML config loading/saving
+│   ├── ConnectionStringResolver.cs
+│   ├── ToolConfiguration.cs
+│   ├── ToolConfigurationLoader.cs
+│   └── ToolPathResolver.cs
+├── Pull/
+│   ├── PullHandler.cs
+│   ├── SchemaExportService.cs
+│   └── TableDefinitionWriter.cs
+├── Migrations/
+│   ├── MigrateHandler.cs
+│   ├── MigrateRequest.cs
+│   ├── MigrationExecutionService.cs
+│   └── MigrationProjectLoader.cs
 ├── Scaffolding/
-│   ├── MigrationScaffolder.cs     # Generates migration file content
-│   └── NamespaceResolver.cs       # Resolves namespace from .csproj
+│   ├── MigrationScaffolder.cs
+│   ├── NamespaceResolver.cs
+│   ├── TableDefinitionConstraintAnalyzer.cs
+│   ├── TableDefinitionContentBuilder.cs
+│   ├── TableDefinitionNameResolver.cs
+│   └── TableDefinitionScaffolder.cs
 └── Program.cs                     # CLI entry point
 ```
 

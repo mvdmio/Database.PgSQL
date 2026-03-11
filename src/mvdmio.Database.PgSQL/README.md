@@ -639,6 +639,12 @@ CREATE TABLE users (...);
 
 On the next build, this file is automatically embedded as an assembly resource.
 
+The CLI implementation now keeps `db pull` thin by delegating configuration lookup, schema export, and table-definition file generation to dedicated services, which also makes those seams easier to unit test.
+
+The migrate commands now follow the same pattern: command parsing stays thin while shared services handle project loading, schema-resource inspection, and migration execution for both `db migrate latest` and `db migrate to`.
+
+The table-definition scaffolder used by `db pull` is also now split into smaller internal helpers so naming, constraint parsing, and generated-file rendering can evolve independently without changing generated output.
+
 #### Cleaning up obsolete migrations
 
 Once every environment has advanced beyond a set of old migrations, you can remove those migration source files:
