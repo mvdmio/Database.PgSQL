@@ -151,6 +151,8 @@ The schema is written to the `Schemas/` directory (configurable via `schemasDire
 - With an environment: `schema.<environment>.sql` (e.g., `schema.local.sql`)
 - Without an environment: `schema.sql`
 
+The command also scaffolds table definition classes into a `Tables/` directory inside the configured project. These generated classes use the attributes from `mvdmio.Database.PgSQL.Attributes` and are ready for repository generation when the table has a single-column primary key.
+
 The generated schema file includes:
 - Extensions
 - Schemas (excluding system schemas)
@@ -161,6 +163,12 @@ The generated schema file includes:
 - Triggers
 - Views
 - A header comment with the current migration version
+
+Generated table definition files:
+- are written to `Tables/*.cs`
+- use the project root namespace plus `.Tables`
+- add `[PrimaryKey]`, `[Unique]`, `[Generated]`, and `[Column]` when those can be inferred safely
+- skip repository-ready attributes for tables without a single-column primary key, while still generating the class
 
 ### `db cleanup`
 
@@ -203,6 +211,8 @@ connectionStrings:
 Migrations are tracked in the `mvdmio.migrations` table (automatically created).
 
 The configuration file is searched from the current directory upward, allowing you to run the tool from any subdirectory of your project.
+
+Internally, configuration loading, path resolution, and connection-string resolution are separated so command handlers can stay focused on orchestration.
 
 ### Connection String Resolution
 

@@ -1,5 +1,4 @@
 using JetBrains.Annotations;
-using mvdmio.Database.PgSQL.Connectors.Schema.Models;
 using mvdmio.Database.PgSQL.Migrations.Models;
 using System.Text;
 

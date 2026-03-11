@@ -1,9 +1,8 @@
 using mvdmio.Database.PgSQL.Connectors.Schema;
 using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Tool.Cleanup;
+using mvdmio.Database.PgSQL.Tool.Configuration;
 using System.CommandLine;
-
-using ToolConfig = mvdmio.Database.PgSQL.Tool.Configuration.ToolConfiguration;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
 
@@ -18,7 +17,7 @@ internal static class CleanupCommand
 
       command.SetAction(async (_, cancellationToken) =>
       {
-         var config = ToolConfig.Load();
+         var config = ToolConfigurationLoader.Load();
 
          if (config.ConnectionStrings is null || config.ConnectionStrings.Count == 0)
          {
@@ -27,8 +26,8 @@ internal static class CleanupCommand
             return;
          }
 
-         var schemasDirectory = config.GetSchemasDirectoryPath();
-         var migrationsDirectory = config.GetMigrationsDirectoryPath();
+         var schemasDirectory = ToolPathResolver.GetSchemasDirectoryPath(config);
+         var migrationsDirectory = ToolPathResolver.GetMigrationsDirectoryPath(config);
          Directory.CreateDirectory(schemasDirectory);
 
          var environmentMigrationIdentifiers = new List<long?>();

@@ -1,4 +1,4 @@
-using mvdmio.Database.PgSQL.Migrations;
+using mvdmio.Database.PgSQL.Internal;
 
 namespace mvdmio.Database.PgSQL.Migrations.Interfaces;
 
@@ -18,14 +18,14 @@ public interface IDbMigration
    ///    Defaults to the numeric timestamp extracted from the class name (e.g. <c>202310191050</c> from
    ///    <c>_202310191050_AddUsersTable</c>).
    /// </summary>
-   long Identifier => Internal.MigrationClassNameParser.ParseIdentifier(GetType().Name);
+   long Identifier => MigrationClassNameParser.ParseIdentifier(GetType().Name);
 
    /// <summary>
    ///    Human-readable name for this migration.
    ///    Defaults to the name portion extracted from the class name (e.g. <c>AddUsersTable</c> from
    ///    <c>_202310191050_AddUsersTable</c>).
    /// </summary>
-   string Name => Internal.MigrationClassNameParser.ParseName(GetType().Name);
+   string Name => MigrationClassNameParser.ParseName(GetType().Name);
 
    /// <summary>
    ///    Method for executing the migration on the database.

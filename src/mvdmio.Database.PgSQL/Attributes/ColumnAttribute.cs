@@ -6,7 +6,7 @@ namespace mvdmio.Database.PgSQL.Attributes;
 ///    Overrides the database column name for a property.
 /// </summary>
 [PublicAPI]
-[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Property)]
 public sealed class ColumnAttribute : Attribute
 {
    /// <summary>

@@ -1,5 +1,4 @@
 using mvdmio.Database.PgSQL.Attributes;
-using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 

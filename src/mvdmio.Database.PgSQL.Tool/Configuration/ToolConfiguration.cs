@@ -39,86 +39,7 @@ public sealed class ToolConfiguration
    ///    Not serialized from YAML.
    /// </summary>
    [YamlIgnore]
-   public string BasePath { get; private set; } = Directory.GetCurrentDirectory();
-
-   /// <summary>
-   ///    Resolves the absolute path to the project directory.
-   /// </summary>
-   public string GetProjectPath()
-   {
-      return Path.GetFullPath(Path.Combine(BasePath, Project));
-   }
-
-   /// <summary>
-   ///    Resolves the absolute path to the migrations output directory.
-   /// </summary>
-   public string GetMigrationsDirectoryPath()
-   {
-      return Path.GetFullPath(Path.Combine(BasePath, MigrationsDirectory));
-   }
-
-   /// <summary>
-   ///    Resolves the absolute path to the schemas output directory.
-   /// </summary>
-   public string GetSchemasDirectoryPath()
-   {
-      return Path.GetFullPath(Path.Combine(BasePath, SchemasDirectory));
-   }
-
-   /// <summary>
-   ///    Resolves the connection string to use based on the provided overrides and configuration.
-   ///    Priority: connectionStringOverride > environmentOverride > first configured environment.
-   /// </summary>
-   /// <param name="connectionStringOverride">Explicit connection string from the --connection-string CLI option.</param>
-   /// <param name="environmentOverride">Environment name from the --environment CLI option.</param>
-   /// <returns>The resolved connection string, or null if none could be resolved.</returns>
-   public string? ResolveConnectionString(string? connectionStringOverride, string? environmentOverride)
-   {
-      if (!string.IsNullOrWhiteSpace(connectionStringOverride))
-         return connectionStringOverride;
-
-      if (ConnectionStrings is null || ConnectionStrings.Count == 0)
-         return null;
-
-      if (environmentOverride is not null)
-      {
-         return ConnectionStrings.TryGetValue(environmentOverride, out var connectionString)
-            ? connectionString
-            : null;
-      }
-
-      // Fall back to the first configured environment
-      return ConnectionStrings.Values.First();
-   }
-
-   /// <summary>
-   ///    Resolves the environment name based on the provided overrides and configuration.
-   ///    Returns null when a connection string override is used without an environment name.
-   /// </summary>
-   /// <param name="connectionStringOverride">Explicit connection string from the --connection-string CLI option.</param>
-   /// <param name="environmentOverride">Environment name from the --environment CLI option.</param>
-   /// <returns>The resolved environment name, or null if none could be determined.</returns>
-   public string? ResolveEnvironmentName(string? connectionStringOverride, string? environmentOverride)
-   {
-      if (environmentOverride is not null)
-         return environmentOverride;
-
-      if (!string.IsNullOrWhiteSpace(connectionStringOverride))
-         return null;
-
-      if (ConnectionStrings is null || ConnectionStrings.Count == 0)
-         return null;
-
-      return ConnectionStrings.Keys.First();
-   }
-
-   /// <summary>
-   ///    Returns the list of available environment names, or an empty array if none are configured.
-   /// </summary>
-   public string[] GetAvailableEnvironments()
-   {
-      return ConnectionStrings?.Keys.ToArray() ?? [];
-   }
+   public string BasePath { get; set; } = Directory.GetCurrentDirectory();
 
    /// <summary>
    ///    Saves the configuration to a .mvdmio-migrations.yml file in the specified directory.
@@ -134,47 +55,5 @@ public sealed class ToolConfiguration
       var yaml = serializer.Serialize(this);
       var filePath = Path.Combine(directory, CONFIG_FILE_NAME);
       File.WriteAllText(filePath, yaml);
-   }
-
-   /// <summary>
-   ///    Loads the configuration from the nearest .mvdmio-migrations.yml file,
-   ///    searching from the current directory upward. Returns defaults if no file is found.
-   /// </summary>
-   public static ToolConfiguration Load()
-   {
-      var configFilePath = FindConfigFile();
-
-      if (configFilePath is null)
-      {
-         return new ToolConfiguration();
-      }
-
-      var yaml = File.ReadAllText(configFilePath);
-      var deserializer = new DeserializerBuilder()
-         .WithNamingConvention(CamelCaseNamingConvention.Instance)
-         .IgnoreUnmatchedProperties()
-         .Build();
-
-      var config = deserializer.Deserialize<ToolConfiguration>(yaml) ?? new ToolConfiguration();
-      config.BasePath = Path.GetDirectoryName(configFilePath)!;
-
-      return config;
-   }
-
-   private static string? FindConfigFile()
-   {
-      var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
-
-      while (directory is not null)
-      {
-         var configPath = Path.Combine(directory.FullName, CONFIG_FILE_NAME);
-
-         if (File.Exists(configPath))
-            return configPath;
-
-         directory = directory.Parent;
-      }
-
-      return null;
    }
 }

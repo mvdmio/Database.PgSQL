@@ -6,7 +6,7 @@ namespace mvdmio.Database.PgSQL.Attributes;
 ///    Declares the database table mapped by a table definition class.
 /// </summary>
 [PublicAPI]
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class TableAttribute : Attribute
 {
    /// <summary>

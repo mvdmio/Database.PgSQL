@@ -2,7 +2,6 @@ using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
-using mvdmio.Database.PgSQL.Analyzers;
 
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 

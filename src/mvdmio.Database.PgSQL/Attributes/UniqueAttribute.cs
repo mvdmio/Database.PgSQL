@@ -6,5 +6,5 @@ namespace mvdmio.Database.PgSQL.Attributes;
 ///    Marks a property as uniquely queryable for generated repository methods.
 /// </summary>
 [PublicAPI]
-[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Property)]
 public sealed class UniqueAttribute : Attribute;

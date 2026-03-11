@@ -363,7 +363,10 @@ public class SchemaExtractionTests : TestBase
 
       var testStatus = enums.First(e => e.Name == "test_status");
       testStatus.Schema.Should().Be("public");
-      testStatus.Labels.Should().BeEquivalentTo(["active", "inactive", "pending"]);
+      testStatus.Labels.Should().BeEquivalentTo(
+         "active", "inactive",
+         "pending"
+      );
    }
 
    [Fact]

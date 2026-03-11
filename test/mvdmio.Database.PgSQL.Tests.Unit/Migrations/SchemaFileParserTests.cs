@@ -192,7 +192,7 @@ public class SchemaFileParserTests
    [Fact]
    public async Task ParseMigrationVersionFromFileAsync_WithMissingFile_ThrowsFileNotFoundException()
    {
-      var nonExistentPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + ".sql");
+      var nonExistentPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".sql");
 
       var action = async () => await SchemaFileParser.ParseMigrationVersionFromFileAsync(nonExistentPath, CancellationToken);
 
@@ -228,7 +228,7 @@ public class SchemaFileParserTests
    [Fact]
    public void ParseMigrationVersionFromFile_WithMissingFile_ThrowsFileNotFoundException()
    {
-      var nonExistentPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + ".sql");
+      var nonExistentPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".sql");
 
       var action = () => SchemaFileParser.ParseMigrationVersionFromFile(nonExistentPath);
 

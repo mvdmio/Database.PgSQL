@@ -23,14 +23,14 @@ internal static class MigrationCreateCommand
       {
          var name = parseResult.GetValue(nameArgument)!;
 
-         var config = ToolConfiguration.Load();
-         var migrationsDir = config.GetMigrationsDirectoryPath();
+         var config = ToolConfigurationLoader.Load();
+         var migrationsDir = ToolPathResolver.GetMigrationsDirectoryPath(config);
 
          // Ensure migrations directory exists
          Directory.CreateDirectory(migrationsDir);
 
          var identifier = MigrationScaffolder.GenerateIdentifier();
-         var migrationNamespace = NamespaceResolver.Resolve(migrationsDir);
+          var migrationNamespace = NamespaceResolver.Resolve(migrationsDir);
          var content = MigrationScaffolder.GenerateContent(migrationNamespace, identifier, name);
          var fileName = MigrationScaffolder.GenerateFileName(identifier, name);
          var filePath = Path.Combine(migrationsDir, fileName);

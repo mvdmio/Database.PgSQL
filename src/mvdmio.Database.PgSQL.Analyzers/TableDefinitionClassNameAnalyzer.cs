@@ -1,7 +1,6 @@
-using System;
-using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
+using System.Collections.Immutable;
 
 namespace mvdmio.Database.PgSQL.Analyzers;
 

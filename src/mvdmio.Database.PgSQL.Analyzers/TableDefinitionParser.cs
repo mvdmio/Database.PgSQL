@@ -1,8 +1,8 @@
-using System.Collections.Immutable;
-using System.Linq;
-using System.Threading;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Collections.Immutable;
+using System.Text;
 
 namespace mvdmio.Database.PgSQL.Analyzers;
 
@@ -211,7 +211,7 @@ internal static class TableDefinitionParser
       return classSymbol.DeclaringSyntaxReferences
          .Select(x => x.GetSyntax())
          .OfType<ClassDeclarationSyntax>()
-         .Any(x => x.Modifiers.Any(m => m.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword)));
+         .Any(x => x.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)));
    }
 
    private static bool IsSupportedProperty(IPropertySymbol property)
@@ -274,7 +274,7 @@ internal static class TableDefinitionParser
       return type.DeclaringSyntaxReferences
          .Select(x => x.GetSyntax())
          .OfType<ClassDeclarationSyntax>()
-         .All(x => x.Modifiers.Any(m => m.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword)));
+         .All(x => x.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)));
    }
 
    private static string GetEntityName(string className)
@@ -321,7 +321,7 @@ internal static class TableDefinitionParser
       if (string.IsNullOrEmpty(value))
          return value;
 
-      var builder = new System.Text.StringBuilder(value.Length + 5);
+      var builder = new StringBuilder(value.Length + 5);
       for (var i = 0; i < value.Length; i++)
       {
          var current = value[i];

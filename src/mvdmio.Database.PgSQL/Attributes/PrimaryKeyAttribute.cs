@@ -6,5 +6,5 @@ namespace mvdmio.Database.PgSQL.Attributes;
 ///    Marks the primary key property of a table definition.
 /// </summary>
 [PublicAPI]
-[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Property)]
 public sealed class PrimaryKeyAttribute : Attribute;

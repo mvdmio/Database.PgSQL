@@ -60,7 +60,7 @@ public class MigrationCleanupPlannerTests : IDisposable
       var plan = MigrationCleanupPlanner.Plan(migrationsDirectory, [202602171500, 202602161430, 202602191200]);
 
       plan.LowestMigrationIdentifier.Should().Be(202602161430);
-      plan.FilesToDelete.Should().BeEquivalentTo([obsoleteNested, obsoleteRoot]);
+      plan.FilesToDelete.Should().BeEquivalentTo(obsoleteNested, obsoleteRoot);
       plan.FilesToDelete.Should().NotContain(current);
       plan.FilesToDelete.Should().NotContain(newer);
       plan.SkipReason.Should().BeNull();

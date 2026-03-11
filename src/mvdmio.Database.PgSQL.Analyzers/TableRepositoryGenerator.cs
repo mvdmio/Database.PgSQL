@@ -1,6 +1,6 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Immutable;
-using System.Linq;
 
 namespace mvdmio.Database.PgSQL.Analyzers;
 
@@ -17,7 +17,7 @@ public sealed class TableRepositoryGenerator : IIncrementalGenerator
    {
       var tableDefinitions = context.SyntaxProvider.ForAttributeWithMetadataName(
          TABLE_ATTRIBUTE_FULL_NAME,
-         predicate: static (node, _) => node is Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax,
+         predicate: static (node, _) => node is ClassDeclarationSyntax,
          transform: static (syntaxContext, cancellationToken) => TableDefinitionParser.Parse(syntaxContext, cancellationToken)
       );
 

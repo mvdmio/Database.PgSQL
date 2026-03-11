@@ -1,6 +1,6 @@
-using System.Text.RegularExpressions;
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Migrations.Models;
+using System.Text.RegularExpressions;
 
 namespace mvdmio.Database.PgSQL.Migrations;
 

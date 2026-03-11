@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Package configuration">
-    <Version>0.13.0</Version>
+    <Version>0.14.1</Version>
     <Title>mvdmio.Database.PgSQL.Tool</Title>
     <Description>CLI tool for PostgreSQL database migration operations.</Description>
     <Company>mvdmio</Company>
@@ -31,6 +31,12 @@
   <ItemGroup>
     <None Include="README.md" PackagePath="" Pack="true"/>
     <None Include="..\..\LICENSE" PackagePath="" Pack="true"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>mvdmio.Database.PgSQL.Tests.Unit</_Parameter1>
+    </AssemblyAttribute>
   </ItemGroup>
 
   <ItemGroup>

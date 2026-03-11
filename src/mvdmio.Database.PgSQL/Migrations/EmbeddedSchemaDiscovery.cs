@@ -1,5 +1,5 @@
-using System.Reflection;
 using JetBrains.Annotations;
+using System.Reflection;
 
 namespace mvdmio.Database.PgSQL.Migrations;
 

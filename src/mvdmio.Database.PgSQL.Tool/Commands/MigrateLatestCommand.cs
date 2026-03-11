@@ -32,14 +32,14 @@ internal static class MigrateLatestCommand
          var connectionStringOverride = parseResult.GetValue(connectionStringOption);
          var environmentOverride = parseResult.GetValue(environmentOption);
 
-         var config = ToolConfiguration.Load();
-         var connectionString = config.ResolveConnectionString(connectionStringOverride, environmentOverride);
+         var config = ToolConfigurationLoader.Load();
+         var connectionString = ConnectionStringResolver.ResolveConnectionString(config, connectionStringOverride, environmentOverride);
 
          if (string.IsNullOrWhiteSpace(connectionString))
          {
             if (environmentOverride is not null)
             {
-               var available = config.GetAvailableEnvironments();
+               var available = ConnectionStringResolver.GetAvailableEnvironments(config);
                Console.Error.WriteLine($"Error: Environment '{environmentOverride}' not found in .mvdmio-migrations.yml.");
 
                if (available.Length > 0)
@@ -54,9 +54,9 @@ internal static class MigrateLatestCommand
             return;
          }
 
-         var projectPath = config.GetProjectPath();
+         var projectPath = ToolPathResolver.GetProjectPath(config);
          var assembly = ProjectBuilder.BuildAndLoadAssembly(projectPath);
-         var environmentName = config.ResolveEnvironmentName(connectionStringOverride, environmentOverride);
+         var environmentName = ConnectionStringResolver.ResolveEnvironmentName(config, connectionStringOverride, environmentOverride);
 
          var migrationRetriever = new ReflectionMigrationRetriever(assembly);
          var allMigrations = migrationRetriever.RetrieveMigrations().OrderBy(x => x.Identifier).ToArray();
