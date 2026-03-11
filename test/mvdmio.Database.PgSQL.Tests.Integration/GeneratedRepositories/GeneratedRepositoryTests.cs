@@ -1,7 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Mvdmio.Database.PgSQL.Tests.Integration;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
+using Mvdmio.Database.PgSQL.Tests.Integration;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 

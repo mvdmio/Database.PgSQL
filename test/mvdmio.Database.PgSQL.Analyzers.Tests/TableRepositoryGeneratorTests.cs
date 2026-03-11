@@ -202,7 +202,7 @@ public class TableRepositoryGeneratorTests
 
    private static IEnumerable<MetadataReference> GetMetadataReferences()
    {
-      var trustedAssemblies = ((string) AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator);
+      var trustedAssemblies = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator);
       return trustedAssemblies.Select(path => MetadataReference.CreateFromFile(path));
    }
 }

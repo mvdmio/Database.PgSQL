@@ -40,8 +40,8 @@ internal static class TableDefinitionParser
    {
       cancellationToken.ThrowIfCancellationRequested();
 
-      var classSymbol = (INamedTypeSymbol) context.TargetSymbol;
-      var classSyntax = (ClassDeclarationSyntax) context.TargetNode;
+      var classSymbol = (INamedTypeSymbol)context.TargetSymbol;
+      var classSyntax = (ClassDeclarationSyntax)context.TargetNode;
       var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
 
       var tableAttribute = classSymbol.GetAttributes().FirstOrDefault(x => x.AttributeClass?.ToDisplayString() == TABLE_ATTRIBUTE_FULL_NAME);

@@ -26,7 +26,7 @@ public sealed class TableDefinitionClassNameAnalyzer : DiagnosticAnalyzer
 
    private static void AnalyzeNamedType(SymbolAnalysisContext context)
    {
-      var namedType = (INamedTypeSymbol) context.Symbol;
+      var namedType = (INamedTypeSymbol)context.Symbol;
 
       if (namedType.TypeKind != TypeKind.Class || namedType.IsAbstract)
          return;

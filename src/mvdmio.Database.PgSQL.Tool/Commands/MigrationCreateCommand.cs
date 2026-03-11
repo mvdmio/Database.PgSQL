@@ -30,7 +30,7 @@ internal static class MigrationCreateCommand
          Directory.CreateDirectory(migrationsDir);
 
          var identifier = MigrationScaffolder.GenerateIdentifier();
-          var migrationNamespace = NamespaceResolver.Resolve(migrationsDir);
+         var migrationNamespace = NamespaceResolver.Resolve(migrationsDir);
          var content = MigrationScaffolder.GenerateContent(migrationNamespace, identifier, name);
          var fileName = MigrationScaffolder.GenerateFileName(identifier, name);
          var filePath = Path.Combine(migrationsDir, fileName);

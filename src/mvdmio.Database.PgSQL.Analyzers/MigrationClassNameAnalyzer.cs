@@ -53,7 +53,7 @@ public sealed class MigrationClassNameAnalyzer : DiagnosticAnalyzer
 
    private static void AnalyzeNamedType(SymbolAnalysisContext context)
    {
-      var namedType = (INamedTypeSymbol) context.Symbol;
+      var namedType = (INamedTypeSymbol)context.Symbol;
 
       // Only care about concrete classes (not abstract, not interfaces, not structs)
       if (namedType.TypeKind != TypeKind.Class || namedType.IsAbstract)
