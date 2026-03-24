@@ -65,8 +65,7 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
          if (_dataSources.TryGetValue(connectionString, out dataSource))
             return dataSource;
 
-         var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString)
-         {
+         var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString) {
             ConnectionStringBuilder = {
                IncludeErrorDetail = true,
                LogParameters = true

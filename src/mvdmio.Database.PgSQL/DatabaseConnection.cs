@@ -44,8 +44,15 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    ///    Create a new database connection for a database that is reachable with the given connection string.
    /// </summary>
    /// <param name="connectionString">The PostgreSQL connection string.</param>
-   public DatabaseConnection(string connectionString)
-      : this(new NpgsqlDataSourceBuilder(connectionString).Build())
+   public DatabaseConnection(string connectionString) : this(connectionString, _ => { }) { }
+
+   /// <summary>
+   ///    Create a new database connection for a database that is reachable with the given connection string.
+   /// </summary>
+   /// <param name="connectionString">The PostgreSQL connection string.</param>
+   /// <param name="builderAction">An optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>.</param>
+   public DatabaseConnection(string connectionString, Action<NpgsqlDataSourceBuilder> builderAction)
+      : this(BuildDataSource(connectionString, builderAction))
    {
       _disposeDataSource = true;
    }
@@ -683,5 +690,12 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
          if (connectionOpened)
             await CloseAsync(ct);
       }
+   }
+
+   private static NpgsqlDataSource BuildDataSource(string connectionString, Action<NpgsqlDataSourceBuilder> builderAction)
+   {
+      var builder = new NpgsqlDataSourceBuilder(connectionString);
+      builderAction.Invoke(builder);
+      return builder.Build();
    }
 }
