@@ -321,6 +321,29 @@ var products = GetProducts(); // IEnumerable<Product>
 await db.Bulk.CopyAsync("products", products, columnMapping);
 ```
 
+When you need an ephemeral staging table inside a transaction, copy into a temp table and reuse its name in later queries:
+
+```csharp
+await db.InTransactionAsync(async () =>
+{
+    var tempTableName = await db.Bulk.CopyToTempTableAsync(
+        products,
+        columnMapping,
+        tableName: "temp_products"
+    );
+
+    var matchingProducts = await db.Dapper.QueryAsync<Product>(
+        $"""
+        SELECT p.*
+        FROM products p
+        INNER JOIN {tempTableName} t ON t.id = p.id
+        """
+    );
+});
+```
+
+`CopyToTempTableAsync` creates a PostgreSQL temp table with columns derived from the provided `DbValue` types, loads the rows with binary COPY, and returns the table name. The temp table is created with `ON COMMIT DROP`, so use it within an active transaction or already-open connection.
+
 For streaming scenarios, use a copy session:
 
 ```csharp
