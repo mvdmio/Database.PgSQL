@@ -192,6 +192,46 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    }
 
    [Fact]
+   public async Task MigrateDatabaseToLatestAsync_WithPartialMigrationHistory_SkipsOlderMissingMigrationsAndRunsNewerOnes()
+   {
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      await db.Dapper.ExecuteAsync(
+         """
+         CREATE SCHEMA IF NOT EXISTS "mvdmio";
+         CREATE TABLE IF NOT EXISTS "mvdmio"."migrations" (
+            identifier  BIGINT      NOT NULL,
+            name        TEXT        NOT NULL,
+            executed_at TIMESTAMPTZ NOT NULL,
+            PRIMARY KEY (identifier)
+         );
+
+         INSERT INTO "mvdmio"."migrations" (identifier, name, executed_at)
+         VALUES (202505181000, 'SimpleTable', NOW());
+         """,
+         ct: CancellationToken);
+
+      var migrator = new DatabaseMigrator(db, typeof(TestFixture).Assembly);
+
+      await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      var legacyTableExists = await db.Management.TableExistsAsync("public", "legacy_cutoff_table");
+      legacyTableExists.Should().BeFalse();
+
+      var postCutoffTableExists = await db.Management.TableExistsAsync("public", "post_cutoff_table");
+      postCutoffTableExists.Should().BeTrue();
+
+      var complexTableExists = await db.Management.TableExistsAsync("public", "complex_table");
+      complexTableExists.Should().BeTrue();
+
+      var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
+      executedMigrations.Should().HaveCount(3);
+      executedMigrations.Should().Contain(x => x.Identifier == 202505181000);
+      executedMigrations.Should().Contain(x => x.Identifier == 202505181500);
+      executedMigrations.Should().Contain(x => x.Identifier == 202505192230);
+   }
+
+   [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithSchemaAndPendingMigrations_AppliesBoth()
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());

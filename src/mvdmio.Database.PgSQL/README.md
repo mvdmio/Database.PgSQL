@@ -537,6 +537,8 @@ var executed = await migrator.RetrieveAlreadyExecutedMigrationsAsync();
 
 Each migration runs in its own transaction. If a migration fails, its transaction is rolled back and a `MigrationException` is thrown. Executed migrations are tracked in the `mvdmio.migrations` table (automatically created).
 
+When determining what is still pending, the migrator uses the highest recorded migration identifier as the cutoff. If the database contains a partial migration history, any missing records at or below that highest identifier are treated as already covered, and only migrations with newer identifiers are executed.
+
 ### CLI Tool
 
 The `mvdmio.Database.PgSQL.Tool` package provides a `db` CLI tool for managing migrations and extracting schema:

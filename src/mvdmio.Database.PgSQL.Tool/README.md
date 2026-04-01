@@ -120,6 +120,8 @@ The command:
 
 Internally, both `db migrate latest` and `db migrate to` now share the same orchestration pipeline, so target selection is the only behavioral difference between the commands.
 
+Pending detection uses the highest recorded migration identifier as the cutoff. If older migration records are missing but a newer migration is recorded, only migrations with identifiers greater than that highest recorded value are applied.
+
 When an empty database is detected and an embedded schema file exists, the schema is applied instead of running all migrations individually. See [Schema-First Migrations](#schema-first-migrations).
 
 ### `db migrate to <identifier>`

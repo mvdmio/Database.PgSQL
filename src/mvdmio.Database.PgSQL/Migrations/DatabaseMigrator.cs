@@ -259,19 +259,22 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    private async Task RunPendingMigrationsAsync(long? targetIdentifier, CancellationToken cancellationToken)
    {
       var alreadyExecutedMigrations = (await RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
+      var highestExecutedIdentifier = alreadyExecutedMigrations
+         .Select(x => (long?)x.Identifier)
+         .Max();
 
       var migrations = _migrationRetriever.RetrieveMigrations().AsEnumerable();
 
       if (targetIdentifier.HasValue)
          migrations = migrations.Where(x => x.Identifier <= targetIdentifier.Value);
 
+      if (highestExecutedIdentifier.HasValue)
+         migrations = migrations.Where(x => x.Identifier > highestExecutedIdentifier.Value);
+
       var orderedMigrations = migrations.OrderBy(x => x.Identifier).ToArray();
 
       foreach (var migration in orderedMigrations)
       {
-         if (alreadyExecutedMigrations.Any(x => x.Identifier == migration.Identifier))
-            continue;
-
          try
          {
             await RunAsync(migration, cancellationToken);
