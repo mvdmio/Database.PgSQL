@@ -543,6 +543,8 @@ When determining what is still pending, the migrator uses the highest recorded m
 
 The `mvdmio.Database.PgSQL.Tool` package provides a `db` CLI tool for managing migrations and extracting schema:
 
+For AI agents working in this repository, `.claude/skills/pgsql-tool-cli/SKILL.md` documents the expected CLI workflows for Claude Code and OpenCode.
+
 ```bash
 # Install the tool
 dotnet tool install --global mvdmio.Database.PgSQL.Tool
@@ -576,7 +578,7 @@ db cleanup
 db pull --environment prod
 db pull -e acc
 
-# Pull using an explicit connection string (produces schema.sql)
+# Pull using an explicit connection string (produces schema.sql only)
 db pull --connection-string "Host=localhost;Database=mydb;..."
 ```
 
@@ -639,7 +641,7 @@ The NuGet package includes a `.props` file that automatically embeds any `.sql` 
 
 **Generating schema files:**
 
-Use `db pull` to generate a schema file from an existing database:
+Use `db pull` to generate a SQL schema file from an existing database. It does not generate table classes or `.mvdmio-translations.snapshot.json`:
 
 ```bash
 # Pull schema from the default environment
@@ -664,11 +666,10 @@ CREATE TABLE users (...);
 
 On the next build, this file is automatically embedded as an assembly resource.
 
-The CLI implementation now keeps `db pull` thin by delegating configuration lookup, schema export, and table-definition file generation to dedicated services, which also makes those seams easier to unit test.
+The CLI implementation now keeps `db pull` thin by delegating configuration lookup and schema export to dedicated services, which also makes those seams easier to unit test.
 
 The migrate commands now follow the same pattern: command parsing stays thin while shared services handle project loading, schema-resource inspection, and migration execution for both `db migrate latest` and `db migrate to`.
 
-The table-definition scaffolder used by `db pull` is also now split into smaller internal helpers so naming, constraint parsing, and generated-file rendering can evolve independently without changing generated output.
 
 #### Cleaning up obsolete migrations
 

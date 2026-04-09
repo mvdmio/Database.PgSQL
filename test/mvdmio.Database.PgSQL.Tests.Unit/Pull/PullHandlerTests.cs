@@ -12,10 +12,9 @@ public class PullHandlerTests
    {
       var cancellationToken = TestContext.Current.CancellationToken;
       var schemaExportService = new FakeSchemaExportService();
-      var tableDefinitionWriter = new FakeTableDefinitionWriter();
       var fileSystem = new FakePullFileSystem();
       var reporter = new FakePullReporter();
-      var handler = new PullHandler(schemaExportService, tableDefinitionWriter, fileSystem, reporter);
+      var handler = new PullHandler(schemaExportService, fileSystem, reporter);
       var config = new ToolConfiguration
       {
          BasePath = Path.Combine("C:", "repo"),
@@ -33,13 +32,12 @@ public class PullHandlerTests
          "Available environments: local, prod"
       );
       schemaExportService.ConnectionString.Should().BeNull();
-      tableDefinitionWriter.CallCount.Should().Be(0);
       fileSystem.CreatedDirectories.Should().BeEmpty();
       fileSystem.Writes.Should().BeEmpty();
    }
 
    [Fact]
-   public async Task HandleAsync_WithResolvedConnection_WritesSchemaAndReportsResult()
+   public async Task HandleAsync_WithResolvedConnection_WritesSchemaOnlyAndReportsResult()
    {
       var cancellationToken = TestContext.Current.CancellationToken;
       var schemaExportService = new FakeSchemaExportService
@@ -50,17 +48,9 @@ public class PullHandlerTests
             []
          )
       };
-      var tableDefinitionWriter = new FakeTableDefinitionWriter
-      {
-         Result = new TableDefinitionWriteResult(
-            Path.Combine("C:", "repo", "Tables"),
-            2,
-            ["Skipped repository-ready attributes for audit.entries: no primary key was found."]
-         )
-      };
       var fileSystem = new FakePullFileSystem();
       var reporter = new FakePullReporter();
-      var handler = new PullHandler(schemaExportService, tableDefinitionWriter, fileSystem, reporter);
+      var handler = new PullHandler(schemaExportService, fileSystem, reporter);
       var config = new ToolConfiguration
       {
          BasePath = Path.Combine("C:", "repo"),
@@ -74,20 +64,18 @@ public class PullHandlerTests
       await handler.HandleAsync(config, null, null, cancellationToken);
 
       schemaExportService.ConnectionString.Should().Be("Host=localhost;Database=localdb");
-      tableDefinitionWriter.Config.Should().BeSameAs(config);
-      tableDefinitionWriter.Tables.Should().HaveCount(1);
       fileSystem.CreatedDirectories.Should().ContainSingle().Which.Should().Be(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")));
       fileSystem.Writes.Should().ContainSingle();
       fileSystem.Writes.Single().Key.Should().Be(Path.Combine(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")), "schema.local.sql"));
       fileSystem.Writes.Single().Value.Should().Be("-- schema");
+      fileSystem.Writes.Keys.Should().NotContain(Path.Combine(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")), ".mvdmio-translations.snapshot.json"));
       reporter.Infos.Should().ContainInOrder(
          "Connecting to database...",
          "Extracting schema...",
          string.Empty,
-         $"Schema written to {Path.Combine(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")), "schema.local.sql")}",
-         $"Generated 2 table definition file(s) in {Path.Combine("C:", "repo", "Tables")}"
+         $"Schema written to {Path.Combine(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")), "schema.local.sql")}"
       );
-      reporter.Warnings.Should().ContainSingle().Which.Should().Be("Skipped repository-ready attributes for audit.entries: no primary key was found.");
+      reporter.Warnings.Should().BeEmpty();
       reporter.Errors.Should().BeEmpty();
    }
 
@@ -99,29 +87,6 @@ public class PullHandlerTests
       public override Task<SchemaExportResult> ExportAsync(string connectionString, CancellationToken cancellationToken = default)
       {
          ConnectionString = connectionString;
-         return Task.FromResult(Result);
-      }
-   }
-
-   private sealed class FakeTableDefinitionWriter : TableDefinitionWriter
-   {
-      public ToolConfiguration? Config { get; private set; }
-      public IReadOnlyList<TableInfo>? Tables { get; private set; }
-      public IReadOnlyList<ConstraintInfo>? Constraints { get; private set; }
-      public int CallCount { get; private set; }
-      public TableDefinitionWriteResult Result { get; set; } = new(string.Empty, 0, []);
-
-      public override Task<TableDefinitionWriteResult> WriteAsync(
-         ToolConfiguration config,
-         IReadOnlyList<TableInfo> tables,
-         IReadOnlyList<ConstraintInfo> constraints,
-         CancellationToken cancellationToken = default
-      )
-      {
-         CallCount++;
-         Config = config;
-         Tables = tables;
-         Constraints = constraints;
          return Task.FromResult(Result);
       }
    }

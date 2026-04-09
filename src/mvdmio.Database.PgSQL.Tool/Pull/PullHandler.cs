@@ -9,24 +9,21 @@ namespace mvdmio.Database.PgSQL.Tool.Pull;
 internal sealed class PullHandler
 {
    private readonly SchemaExportService _schemaExportService;
-   private readonly TableDefinitionWriter _tableDefinitionWriter;
    private readonly IPullFileSystem _fileSystem;
    private readonly IPullReporter _reporter;
 
    public PullHandler()
-      : this(new SchemaExportService(), new TableDefinitionWriter(), new PullFileSystem(), new ConsolePullReporter())
+      : this(new SchemaExportService(), new PullFileSystem(), new ConsolePullReporter())
    {
    }
 
    internal PullHandler(
       SchemaExportService schemaExportService,
-      TableDefinitionWriter tableDefinitionWriter,
       IPullFileSystem fileSystem,
       IPullReporter reporter
    )
    {
       _schemaExportService = schemaExportService;
-      _tableDefinitionWriter = tableDefinitionWriter;
       _fileSystem = fileSystem;
       _reporter = reporter;
    }
@@ -65,16 +62,8 @@ internal sealed class PullHandler
       var schemaResult = await _schemaExportService.ExportAsync(connectionString, cancellationToken);
       await _fileSystem.WriteAllTextAsync(outputPath, schemaResult.Script, cancellationToken);
 
-      var tableDefinitions = await _tableDefinitionWriter.WriteAsync(config, schemaResult.Tables, schemaResult.Constraints, cancellationToken);
-
       _reporter.WriteInfo(string.Empty);
       _reporter.WriteInfo($"Schema written to {outputPath}");
-      _reporter.WriteInfo($"Generated {tableDefinitions.GeneratedFileCount} table definition file(s) in {tableDefinitions.TablesDirectory}");
-
-      foreach (var warning in tableDefinitions.Warnings)
-      {
-         _reporter.WriteWarning(warning);
-      }
    }
 
    private void WriteMissingConnectionError(ToolConfiguration config, string? environmentOverride)

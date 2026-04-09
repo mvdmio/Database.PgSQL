@@ -12,6 +12,8 @@ dotnet tool install --global mvdmio.Database.PgSQL.Tool
 
 After installation, the tool is available as `db`.
 
+For AI agents working in this repository, see `.claude/skills/pgsql-tool-cli/SKILL.md` for a concise command and workflow guide tailored to Claude Code and OpenCode.
+
 ## Quick Start
 
 ```bash
@@ -118,9 +120,9 @@ The command:
 3. Compares with already-executed migrations
 4. Applies pending migrations in order
 
-Internally, both `db migrate latest` and `db migrate to` now share the same orchestration pipeline, so target selection is the only behavioral difference between the commands.
-
 Pending detection uses the highest recorded migration identifier as the cutoff. If older migration records are missing but a newer migration is recorded, only migrations with identifiers greater than that highest recorded value are applied.
+
+Internally, both `db migrate latest` and `db migrate to` now share the same orchestration pipeline, so target selection is the only behavioral difference between the commands.
 
 When an empty database is detected and an embedded schema file exists, the schema is applied instead of running all migrations individually. See [Schema-First Migrations](#schema-first-migrations).
 
@@ -137,7 +139,7 @@ db migrate to 202602161430 --environment prod
 
 ### `db pull`
 
-Extracts the current database schema and saves it as a SQL file.
+Extracts the current database schema and saves it as a SQL file. The pull command does not generate table definition classes or `.mvdmio-translations.snapshot.json`.
 
 ```bash
 # Pull from the default environment
@@ -155,7 +157,7 @@ The schema is written to the `Schemas/` directory (configurable via `schemasDire
 - With an environment: `schema.<environment>.sql` (e.g., `schema.local.sql`)
 - Without an environment: `schema.sql`
 
-The command also scaffolds table definition classes into a `Tables/` directory inside the configured project. These generated classes use the attributes from `mvdmio.Database.PgSQL.Attributes` and are ready for repository generation when the table has a single-column primary key.
+No additional snapshot artifact is generated.
 
 The generated schema file includes:
 - Extensions
@@ -170,11 +172,7 @@ The generated schema file includes:
 
 Where PostgreSQL allows it, `db pull` keeps primary keys, unique constraints, checks, and exclusion constraints inside each `CREATE TABLE` block. Foreign keys stay as separate `ALTER TABLE ... ADD CONSTRAINT` statements so table creation order remains safe.
 
-Generated table definition files:
-- are written to `Tables/*.cs`
-- use the project root namespace plus `.Tables`
-- add `[PrimaryKey]`, `[Unique]`, `[Generated]`, and `[Column]` when those can be inferred safely
-- skip repository-ready attributes for tables without a single-column primary key, while still generating the class
+`db pull` only writes schema `.sql` output.
 
 ### `db cleanup`
 
@@ -218,11 +216,9 @@ Migrations are tracked in the `mvdmio.migrations` table (automatically created).
 
 The configuration file is searched from the current directory upward, allowing you to run the tool from any subdirectory of your project.
 
-Internally, configuration loading, path resolution, connection-string resolution, schema export, and table-definition writing are separated so command handlers can stay focused on orchestration.
+Internally, configuration loading, path resolution, connection-string resolution, and schema export are separated so command handlers can stay focused on orchestration.
 
 Migrate command orchestration is also split into dedicated services for project loading, target selection, schema-resource reporting, and migration execution.
-
-Table-definition scaffolding is now split into focused helpers for naming, constraint analysis, and file content generation so output behavior stays stable while the code stays easier to maintain.
 
 ### Connection String Resolution
 
@@ -285,7 +281,6 @@ mvdmio.Database.PgSQL.Tool/
 ├── Pull/
 │   ├── PullHandler.cs
 │   ├── SchemaExportService.cs
-│   └── TableDefinitionWriter.cs
 ├── Migrations/
 │   ├── MigrateHandler.cs
 │   ├── MigrateRequest.cs
@@ -293,11 +288,7 @@ mvdmio.Database.PgSQL.Tool/
 │   └── MigrationProjectLoader.cs
 ├── Scaffolding/
 │   ├── MigrationScaffolder.cs
-│   ├── NamespaceResolver.cs
-│   ├── TableDefinitionConstraintAnalyzer.cs
-│   ├── TableDefinitionContentBuilder.cs
-│   ├── TableDefinitionNameResolver.cs
-│   └── TableDefinitionScaffolder.cs
+│   └── NamespaceResolver.cs
 └── Program.cs                     # CLI entry point
 ```
 
