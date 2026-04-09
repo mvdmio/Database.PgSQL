@@ -7,9 +7,9 @@ This document provides instructions for AI coding assistants working on this cod
 - Ask questions if you need clarification.
 - Search early; quote exact errors; prefer newer sources.
 - Style: telegraph. Drop filler/grammar. Min tokens (global AGENTS + replies).
-- Keep files shorter than ~500 LOC; split/refactor as needed. Does not apply to test files.
-- Always add tests when adding functionality.
-- Always create or modify tests when fixing a bug.
+- Keep files shorter than ~500 LOC; refactor as needed. Does not apply to test files. Do NOT split classes into partial files; do proper refactoring instead.
+- Always add tests when adding new code.
+- Always create or modify tests when modifying existing code.
 - Always build the solution and run the tests after making changes. Fix all build errors and test failures before finishing your work.
 - If the build fails because some process is running and locking the file, kill the process.
 - Always update the README.md file so that it reflects the latest state of the project
@@ -78,9 +78,10 @@ dotnet format
 
 ### Before Committing
 
-1. Run `dotnet build` to ensure the project compiles
-2. Run `dotnet test` to verify all tests pass
-3. Run `dotnet format` to format code according to .editorconfig
+Run the following commands in sequence:
+1. Run `dotnet format` to format code according to .editorconfig
+2. Run `dotnet build` to ensure the project compiles
+3. Run `dotnet test` to verify all tests pass
 
 ### Test-Driven Development
 

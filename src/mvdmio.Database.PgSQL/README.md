@@ -447,7 +447,7 @@ var script = await db.Management.GenerateSchemaScriptAsync();
 File.WriteAllText("schema.sql", script);
 ```
 
-The generated script includes extensions, schemas, enum/composite/domain types, sequences, tables, constraints, indexes, functions/procedures, triggers, and views. The script header includes the current migration version (identifier and name) if migrations have been executed. All statements use idempotent syntax (`IF NOT EXISTS`, `CREATE OR REPLACE`, etc.) so the script can be run repeatedly against the same database without errors.
+The generated script includes extensions, schemas, enum/composite/domain types, sequences, tables, constraints, indexes, functions/procedures, triggers, and views. The script header includes the current migration version (identifier and name) if migrations have been executed. All statements use idempotent syntax (`IF NOT EXISTS`, `CREATE OR REPLACE`, etc.) so the script can be run repeatedly against the same database without errors. When possible, table-local constraints such as primary keys, unique constraints, checks, and exclusion constraints are emitted directly inside `CREATE TABLE`; foreign keys remain separate `ALTER TABLE` statements so referenced tables can still be created in dependency-safe order.
 
 #### Query Individual Schema Objects
 
@@ -649,7 +649,7 @@ db pull
 db pull --environment prod
 ```
 
-The generated schema file is written to the `Schemas/` directory and includes a header comment with the current migration version:
+The generated schema file is written to the `Schemas/` directory and includes a header comment with the current migration version. `db pull` keeps primary keys, unique constraints, checks, and exclusion constraints inside each table definition where PostgreSQL allows that, while foreign keys stay in separate `ALTER TABLE` statements:
 
 ```sql
 --

@@ -10,13 +10,14 @@ namespace mvdmio.Database.PgSQL.Connectors.Schema;
 ///    migration tracking schema (mvdmio).
 /// </summary>
 [PublicAPI]
-public sealed partial class SchemaExtractor
+public sealed class SchemaExtractor
 {
    private const string MIGRATIONS_SCHEMA = "mvdmio";
    private const string MIGRATIONS_TABLE = "migrations";
    private const string MIGRATIONS_TABLE_FULLY_QUALIFIED = "\"mvdmio\".\"migrations\"";
 
    private readonly DatabaseConnection _db;
+   private readonly SchemaCatalogReader _catalog;
 
    /// <summary>
    ///    Initializes a new instance of the <see cref="SchemaExtractor"/> class.
@@ -25,16 +26,8 @@ public sealed partial class SchemaExtractor
    public SchemaExtractor(DatabaseConnection db)
    {
       _db = db;
+      _catalog = new SchemaCatalogReader(db);
    }
-
-   /// <summary>
-   ///    Gets the schema filter SQL clause that excludes system schemas and the migration tracking schema.
-   /// </summary>
-   private static string SchemaFilter => $"""
-      n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', '{EscapeSqlString(MIGRATIONS_SCHEMA)}')
-      AND n.nspname NOT LIKE 'pg\_temp\_%'
-      AND n.nspname NOT LIKE 'pg\_toast\_temp\_%'
-      """;
 
    /// <summary>
    ///    Gets the current migration version (the most recently executed migration).
@@ -66,6 +59,138 @@ public sealed partial class SchemaExtractor
    }
 
    /// <summary>
+   ///    Retrieves all non-default extensions installed in the database.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The installed extensions.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<Connectors.Schema.Models.ExtensionInfo>> GetExtensionsAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetExtensionsAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Retrieves all user-created schemas, excluding system schemas, the public schema, and the mvdmio migration schema.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The schema names.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<string>> GetUserSchemasAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetUserSchemasAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Retrieves all user-defined enum types.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The enum types with their labels.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<Connectors.Schema.Models.EnumTypeInfo>> GetEnumTypesAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetEnumTypesAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Retrieves all user-defined composite types.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The composite types with their attributes.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<Connectors.Schema.Models.CompositeTypeInfo>> GetCompositeTypesAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetCompositeTypesAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Retrieves all user-defined domain types.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The domain types.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<Connectors.Schema.Models.DomainTypeInfo>> GetDomainTypesAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetDomainTypesAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Retrieves all user-defined sequences.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The sequences.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<Connectors.Schema.Models.SequenceInfo>> GetSequencesAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetSequencesAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Retrieves all user tables with their columns.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The tables with column information.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<Connectors.Schema.Models.TableInfo>> GetTablesAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetTablesAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Retrieves all constraints for user tables.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The constraints.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<Connectors.Schema.Models.ConstraintInfo>> GetConstraintsAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetConstraintsAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Retrieves all indexes that are not created by constraints.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The indexes.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<Connectors.Schema.Models.IndexInfo>> GetIndexesAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetIndexesAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Retrieves all user-defined functions and procedures.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The functions with their full definitions.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<Connectors.Schema.Models.FunctionInfo>> GetFunctionsAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetFunctionsAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Retrieves all user-defined triggers.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The triggers.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<Connectors.Schema.Models.TriggerInfo>> GetTriggersAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetTriggersAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Retrieves all user-defined views.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The views.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<Connectors.Schema.Models.ViewInfo>> GetViewsAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetViewsAsync(cancellationToken);
+   }
+
+   /// <summary>
    ///    Generates a complete, idempotent SQL script that recreates the database schema.
    ///    The script includes extensions, schemas, types, sequences, tables, constraints,
    ///    indexes, functions, triggers, and views.
@@ -89,14 +214,17 @@ public sealed partial class SchemaExtractor
       sb.AppendLine("--");
       sb.AppendLine();
 
+      var tables = (await GetTablesAsync(cancellationToken)).ToArray();
+      var constraints = (await GetConstraintsAsync(cancellationToken)).ToArray();
+
       await AppendExtensionsAsync(sb, cancellationToken);
       await AppendSchemasAsync(sb, cancellationToken);
       await AppendEnumTypesAsync(sb, cancellationToken);
       await AppendCompositeTypesAsync(sb, cancellationToken);
       await AppendDomainTypesAsync(sb, cancellationToken);
       await AppendSequencesAsync(sb, cancellationToken);
-      await AppendTablesAsync(sb, cancellationToken);
-      await AppendConstraintsAsync(sb, cancellationToken);
+      SchemaScriptTableRenderer.AppendTables(sb, tables, constraints);
+      SchemaScriptTableRenderer.AppendConstraints(sb, constraints, EscapeSqlString);
       await AppendIndexesAsync(sb, cancellationToken);
       await AppendFunctionsAsync(sb, cancellationToken);
       await AppendTriggersAsync(sb, cancellationToken);
@@ -273,79 +401,6 @@ public sealed partial class SchemaExtractor
       }
 
       sb.AppendLine();
-   }
-
-   private async Task AppendTablesAsync(StringBuilder sb, CancellationToken ct)
-   {
-      var tables = (await GetTablesAsync(ct)).ToArray();
-
-      if (tables.Length == 0)
-         return;
-
-      sb.AppendLine("-- ============================================================================");
-      sb.AppendLine("-- Tables");
-      sb.AppendLine("-- ============================================================================");
-      sb.AppendLine();
-
-      foreach (var table in tables)
-      {
-         sb.AppendLine($"CREATE TABLE IF NOT EXISTS \"{table.Schema}\".\"{table.Name}\" (");
-
-         for (var i = 0; i < table.Columns.Count; i++)
-         {
-            var col = table.Columns[i];
-            var line = $"   \"{col.Name}\" {col.DataType}";
-
-            if (col.IsIdentity)
-               line += $" GENERATED {col.IdentityGeneration} AS IDENTITY";
-            else if (col.DefaultValue is not null)
-               line += $" DEFAULT {col.DefaultValue}";
-
-            if (!col.IsNullable)
-               line += " NOT NULL";
-
-            if (i < table.Columns.Count - 1)
-               line += ",";
-
-            sb.AppendLine(line);
-         }
-
-         sb.AppendLine(");");
-         sb.AppendLine();
-      }
-   }
-
-   private async Task AppendConstraintsAsync(StringBuilder sb, CancellationToken ct)
-   {
-      var constraints = (await GetConstraintsAsync(ct)).ToArray();
-
-      if (constraints.Length == 0)
-         return;
-
-      sb.AppendLine("-- ============================================================================");
-      sb.AppendLine("-- Constraints");
-      sb.AppendLine("-- ============================================================================");
-      sb.AppendLine();
-
-      // Group by type: primary keys first, then unique, then check, then foreign keys, then exclusion
-      var typeOrder = new Dictionary<string, int> { ["p"] = 0, ["u"] = 1, ["c"] = 2, ["f"] = 3, ["x"] = 4 };
-      var ordered = constraints.OrderBy(c => c.ConstraintType is not null ? typeOrder.GetValueOrDefault(c.ConstraintType, 99) : 99).ThenBy(c => c.Schema).ThenBy(c => c.TableName).ThenBy(c => c.ConstraintName);
-
-      foreach (var constraint in ordered)
-      {
-         // Skip constraints that have null essential properties — they would produce broken SQL.
-         if (constraint.ConstraintName is null || constraint.Schema is null || constraint.TableName is null || constraint.Definition is null)
-            continue;
-
-         // PostgreSQL does not support ALTER TABLE ... ADD CONSTRAINT IF NOT EXISTS,
-         // so wrap each constraint in a DO block that checks for its existence first.
-         sb.AppendLine("DO $$ BEGIN");
-         sb.AppendLine($"   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '{EscapeSqlString(constraint.ConstraintName)}') THEN");
-         sb.AppendLine($"      ALTER TABLE \"{constraint.Schema}\".\"{constraint.TableName}\" ADD CONSTRAINT \"{constraint.ConstraintName}\" {constraint.Definition};");
-         sb.AppendLine("   END IF;");
-         sb.AppendLine("END $$;");
-         sb.AppendLine();
-      }
    }
 
    private async Task AppendIndexesAsync(StringBuilder sb, CancellationToken ct)

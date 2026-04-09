@@ -168,6 +168,8 @@ The generated schema file includes:
 - Views
 - A header comment with the current migration version
 
+Where PostgreSQL allows it, `db pull` keeps primary keys, unique constraints, checks, and exclusion constraints inside each `CREATE TABLE` block. Foreign keys stay as separate `ALTER TABLE ... ADD CONSTRAINT` statements so table creation order remains safe.
+
 Generated table definition files:
 - are written to `Tables/*.cs`
 - use the project root namespace plus `.Tables`

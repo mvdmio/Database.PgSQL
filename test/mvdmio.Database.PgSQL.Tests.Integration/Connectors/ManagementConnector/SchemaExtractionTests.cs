@@ -178,6 +178,80 @@ public class SchemaExtractionTests : TestBase
    }
 
    [Fact]
+   public async Task GenerateSchemaScriptAsync_InlinesSupportedConstraintsIntoCreateTable()
+   {
+      await Db.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.inline_constraint_test (
+            id    bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
+            value integer NOT NULL,
+            PRIMARY KEY (id),
+            CONSTRAINT chk_inline_value_positive CHECK (value > 0)
+         );
+         """,
+         ct: CancellationToken
+      );
+
+      var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
+
+      script.Should().Contain("CONSTRAINT \"inline_constraint_test_pkey\" PRIMARY KEY (id)");
+      script.Should().Contain("CONSTRAINT \"chk_inline_value_positive\" CHECK (value > 0)");
+      script.Should().NotContain("ALTER TABLE \"public\".\"inline_constraint_test\" ADD CONSTRAINT \"chk_inline_value_positive\"");
+      script.Should().NotContain("ALTER TABLE \"public\".\"inline_constraint_test\" ADD CONSTRAINT \"inline_constraint_test_pkey\"");
+      script.Should().NotContain("ALTER TABLE \"public\".\"inline_constraint_test\" ADD CONSTRAINT \"inline_constraint_test_id_not_null\"");
+      script.Should().NotContain("ALTER TABLE \"public\".\"inline_constraint_test\" ADD CONSTRAINT \"inline_constraint_test_value_not_null\"");
+   }
+
+   [Fact]
+   public async Task GenerateSchemaScriptAsync_LeavesForeignKeysAsAlterTableConstraints()
+   {
+      var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
+
+      script.Should().Contain("ALTER TABLE \"test_schema\".\"child_table\" ADD CONSTRAINT \"fk_child_parent\" FOREIGN KEY (parent_id) REFERENCES parent_table(id)");
+   }
+
+   [Fact]
+   public async Task GenerateSchemaScriptAsync_ScopesConstraintExistenceChecksToSchemaAndTable()
+   {
+      await Db.Dapper.ExecuteAsync("CREATE SCHEMA IF NOT EXISTS second_schema;", ct: CancellationToken);
+
+      await Db.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS second_schema.parent_table (
+            id bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
+            PRIMARY KEY (id)
+         );
+         """,
+         ct: CancellationToken
+      );
+
+      await Db.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS second_schema.child_table (
+            id        bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
+            parent_id bigint NOT NULL,
+            PRIMARY KEY (id)
+         );
+         """,
+         ct: CancellationToken
+      );
+
+      await Db.Dapper.ExecuteAsync(
+         """
+         ALTER TABLE second_schema.child_table
+            ADD CONSTRAINT fk_child_parent FOREIGN KEY (parent_id) REFERENCES second_schema.parent_table(id);
+         """,
+         ct: CancellationToken
+      );
+
+      var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
+
+      script.Should().Contain("conname = 'fk_child_parent' AND conrelid = '\"test_schema\".\"child_table\"'::regclass");
+      script.Should().Contain("conname = 'fk_child_parent' AND conrelid = '\"second_schema\".\"child_table\"'::regclass");
+      script.Should().Contain("ALTER TABLE \"second_schema\".\"child_table\" ADD CONSTRAINT \"fk_child_parent\" FOREIGN KEY (parent_id) REFERENCES second_schema.parent_table(id)");
+   }
+
+   [Fact]
    public async Task GenerateSchemaScriptAsync_ContainsIndexes()
    {
       var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
@@ -545,8 +619,7 @@ public class SchemaExtractionTests : TestBase
 
       var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
 
-      // The single quote in the constraint name must be escaped as ''
-      script.Should().Contain("chk_it''s_positive");
+      script.Should().Contain("CONSTRAINT \"chk_it's_positive\" CHECK (value > 0)");
    }
 
    [Fact]

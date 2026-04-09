@@ -230,7 +230,8 @@ public sealed partial class BulkConnector
       var allColumns = columnValueMapping.Keys;
       var updateColumns = allColumns.Where(x => !upsertConfiguration.OnConflictColumns.Contains(x)).ToArray();
 
-      return await _db.InTransactionAsync(async () => {
+      return await _db.InTransactionAsync(async () =>
+      {
          await _db.Dapper.ExecuteAsync($"CREATE TEMP TABLE {tempTableName} (LIKE {tableName} INCLUDING CONSTRAINTS INCLUDING DEFAULTS INCLUDING GENERATED INCLUDING IDENTITY);", ct: ct);
 
          await CopyAsync(
@@ -255,7 +256,8 @@ public sealed partial class BulkConnector
          return await _db.Dapper.QueryAsync<T, bool, bool, InsertOrUpdateResult<T>>(
             query,
             splitOn: "is_inserted, is_updated",
-            (item, isInserted, isUpdated) => new InsertOrUpdateResult<T> {
+            (item, isInserted, isUpdated) => new InsertOrUpdateResult<T>
+            {
                Item = item,
                IsInserted = isInserted,
                IsUpdated = isUpdated
@@ -344,7 +346,8 @@ public sealed partial class BulkConnector
       var tempTableName = GenerateTempTableName();
       var allColumns = columnValueMapping.Keys;
 
-      return await _db.InTransactionAsync(async () => {
+      return await _db.InTransactionAsync(async () =>
+      {
          await _db.Dapper.ExecuteAsync($"CREATE TEMP TABLE {tempTableName} (LIKE {tableName} INCLUDING CONSTRAINTS INCLUDING DEFAULTS INCLUDING GENERATED INCLUDING IDENTITY);", ct: ct);
 
          await CopyAsync(
@@ -384,7 +387,8 @@ public sealed partial class BulkConnector
 
    private static string BuildCreateTempTableSql<T>(string tableName, T sampleItem, Dictionary<string, Func<T, DbValue>> columnValueMapping)
    {
-      var columnDefinitions = columnValueMapping.Select(column => {
+      var columnDefinitions = columnValueMapping.Select(column =>
+      {
          var dbValue = column.Value.Invoke(sampleItem);
          var sqlType = MapToSqlType(dbValue.Type);
 
@@ -402,27 +406,28 @@ public sealed partial class BulkConnector
       if ((type & NpgsqlDbType.Array) == NpgsqlDbType.Array)
          return $"{MapToSqlType(type & ~NpgsqlDbType.Array)}[]";
 
-      return type switch {
-         NpgsqlDbType.Smallint    => "smallint",
-         NpgsqlDbType.Integer     => "integer",
-         NpgsqlDbType.Bigint      => "bigint",
-         NpgsqlDbType.Real        => "real",
-         NpgsqlDbType.Double      => "double precision",
-         NpgsqlDbType.Numeric     => "numeric",
-         NpgsqlDbType.Text        => "text",
-         NpgsqlDbType.Varchar     => "character varying",
-         NpgsqlDbType.Char        => "character",
-         NpgsqlDbType.Boolean     => "boolean",
-         NpgsqlDbType.Timestamp   => "timestamp without time zone",
+      return type switch
+      {
+         NpgsqlDbType.Smallint => "smallint",
+         NpgsqlDbType.Integer => "integer",
+         NpgsqlDbType.Bigint => "bigint",
+         NpgsqlDbType.Real => "real",
+         NpgsqlDbType.Double => "double precision",
+         NpgsqlDbType.Numeric => "numeric",
+         NpgsqlDbType.Text => "text",
+         NpgsqlDbType.Varchar => "character varying",
+         NpgsqlDbType.Char => "character",
+         NpgsqlDbType.Boolean => "boolean",
+         NpgsqlDbType.Timestamp => "timestamp without time zone",
          NpgsqlDbType.TimestampTz => "timestamp with time zone",
-         NpgsqlDbType.Date        => "date",
-         NpgsqlDbType.Time        => "time without time zone",
-         NpgsqlDbType.TimeTz      => "time with time zone",
-         NpgsqlDbType.Uuid        => "uuid",
-         NpgsqlDbType.Json        => "json",
-         NpgsqlDbType.Jsonb       => "jsonb",
-         NpgsqlDbType.Bytea       => "bytea",
-         _                        => throw new NotSupportedException($"CopyToTempTableAsync does not support PostgreSQL type '{type}'.")
+         NpgsqlDbType.Date => "date",
+         NpgsqlDbType.Time => "time without time zone",
+         NpgsqlDbType.TimeTz => "time with time zone",
+         NpgsqlDbType.Uuid => "uuid",
+         NpgsqlDbType.Json => "json",
+         NpgsqlDbType.Jsonb => "jsonb",
+         NpgsqlDbType.Bytea => "bytea",
+         _ => throw new NotSupportedException($"CopyToTempTableAsync does not support PostgreSQL type '{type}'.")
       };
    }
 

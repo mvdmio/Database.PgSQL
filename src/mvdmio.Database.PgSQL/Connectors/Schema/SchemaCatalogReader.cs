@@ -3,12 +3,23 @@ using mvdmio.Database.PgSQL.Connectors.Schema.Models;
 
 namespace mvdmio.Database.PgSQL.Connectors.Schema;
 
-/// <summary>
-///    Catalog query methods for <see cref="SchemaExtractor"/>.
-///    Each method queries PostgreSQL system catalogs to retrieve schema information.
-/// </summary>
-public sealed partial class SchemaExtractor
+internal sealed class SchemaCatalogReader
 {
+   private const string MIGRATIONS_SCHEMA = "mvdmio";
+
+   private readonly DatabaseConnection _db;
+
+   public SchemaCatalogReader(DatabaseConnection db)
+   {
+      _db = db;
+   }
+
+   private static string SchemaFilter => $"""
+      n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', '{SchemaExtractor.EscapeSqlString(MIGRATIONS_SCHEMA)}')
+      AND n.nspname NOT LIKE 'pg\_temp\_%'
+      AND n.nspname NOT LIKE 'pg\_toast\_temp\_%'
+      """;
+
    /// <summary>
    ///    Retrieves all non-default extensions installed in the database.
    /// </summary>
