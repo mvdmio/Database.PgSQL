@@ -101,7 +101,6 @@ public sealed class CopySession<T> : IAsyncDisposable
    /// <summary>
    /// Cleans up the copy session and releases the connection when the copy cannot be completed.
    /// </summary>
-   /// <param name="ct">A cancellation token to observe while waiting for the task to complete.</param>
    /// <returns>A task representing the asynchronous dispose operation.</returns>
    public ValueTask DisposeAsync()
    {

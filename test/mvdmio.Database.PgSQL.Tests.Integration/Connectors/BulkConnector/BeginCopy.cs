@@ -22,7 +22,8 @@ public class BulkConnectorBeginCopyTests : TestBase
             integer integer NOT NULL PRIMARY KEY,
             text    text    NOT NULL
          );
-         """
+         """,
+         ct: CancellationToken
       );
    }
 
