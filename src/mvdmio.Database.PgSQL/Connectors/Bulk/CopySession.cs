@@ -94,7 +94,7 @@ public sealed class CopySession<T> : IAsyncDisposable
       }
       finally
       {
-          await DisposeAsyncCore(ct);
+         await DisposeAsyncCore(ct);
       }
    }
 

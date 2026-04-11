@@ -28,6 +28,8 @@ What it includes:
 - Migration runner
 - Source-generated repositories for annotated table models
 
+Streaming COPY sessions created with `BeginCopyAsync(...)` should be used with `await using`; failed writes now clean up the importer and release the connection through async disposal.
+
 Quick example:
 
 ```csharp

@@ -90,7 +90,7 @@ public sealed partial class BulkConnector
       }
       finally
       {
-         await copySession.DisposeAsync(ct);
+         await copySession.DisposeAsync();
       }
 
       if (errors.Count is 1)

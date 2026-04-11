@@ -77,6 +77,17 @@ var mapping = new Dictionary<string, Func<Product, DbValue>>
 await db.Bulk.CopyAsync("products", products, mapping);
 ```
 
+For streaming COPY sessions, prefer `await using` so failed writes still dispose the importer and release the connection:
+
+```csharp
+await using var session = await db.Bulk.BeginCopyAsync<Product>("products", mapping);
+
+foreach (var product in products)
+   await session.WriteAsync(product);
+
+await session.CompleteAsync();
+```
+
 ### Migrations In Code
 
 ```csharp
