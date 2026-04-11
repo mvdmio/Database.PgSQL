@@ -25,20 +25,7 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
    {
       await base.InitializeAsync();
 
-      await Db.Dapper.ExecuteAsync(
-         """
-         CREATE TABLE IF NOT EXISTS test_upsert (
-            id              bigint           NOT NULL GENERATED ALWAYS AS IDENTITY,
-            integer         integer          NOT NULL,
-            float           real             NOT NULL,
-            double          double precision NOT NULL,
-            text            text             NOT NULL,
-            created_at      timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
-            last_updated_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
-            PRIMARY KEY (integer)
-         );
-         """
-      );
+      await CreateTestTableAsync(Db);
    }
 
    [Fact]
@@ -176,6 +163,81 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
       rows[7].Text.Should().Be("Test 8");
       rows[8].Text.Should().Be("Test 9");
       rows[9].Text.Should().Be("Test 10");
+   }
+
+   [Fact]
+   public async Task AfterWriteFailure_ReleasesCopyStateForNextOperation()
+   {
+      // Arrange
+      var failingItems = new[]
+      {
+         new TestItem
+         {
+            Integer = 1,
+            Float = 1.1f,
+            Double = 1.1d,
+            Text = "Test 1"
+         }
+      };
+
+      var failingMapping = new Dictionary<string, Func<TestItem, DbValue>>
+      {
+         { "integer", x => new DbValue(x.Integer, NpgsqlDbType.Integer) },
+         { "float", x => throw new InvalidOperationException("Simulated mapping failure") },
+         { "double", x => new DbValue(x.Double, NpgsqlDbType.Double) },
+         { "text", x => new DbValue(x.Text, NpgsqlDbType.Text) }
+      };
+
+      var validItems = TestItem.Create(2);
+
+      // Act
+      Func<Task> action = async () => await Db.Bulk.InsertOrUpdateAsync(
+         "test_upsert",
+         ["integer"],
+         failingItems,
+         failingMapping,
+         CancellationToken
+      );
+
+      var exception = (await action.Should().ThrowAsync<InvalidOperationException>()).Which;
+      exception.Message.Should().Contain("Simulated mapping failure");
+
+      await Db.RollbackTransactionAsync(CancellationToken);
+      await Db.BeginTransactionAsync(ct: CancellationToken);
+      await CreateTestTableAsync(Db);
+
+      var result = (await Db.Bulk.InsertOrUpdateAsync(
+         "test_upsert",
+         ["integer"],
+         validItems,
+         _columnMapping,
+         CancellationToken
+      )).ToArray();
+
+      // Assert
+      result.Should().HaveCount(2);
+      result.Should().OnlyContain(x => x.IsInserted && !x.IsUpdated);
+
+      var rows = (await Db.Dapper.QueryAsync<TestItem>("SELECT * FROM test_upsert ORDER BY integer", ct: CancellationToken)).ToArray();
+      rows.Should().HaveCount(2);
+   }
+
+   private static Task CreateTestTableAsync(DatabaseConnection db)
+   {
+      return db.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS test_upsert (
+            id              bigint           NOT NULL GENERATED ALWAYS AS IDENTITY,
+            integer         integer          NOT NULL,
+            float           real             NOT NULL,
+            double          double precision NOT NULL,
+            text            text             NOT NULL,
+            created_at      timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            last_updated_at timestamptz DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            PRIMARY KEY (integer)
+         );
+         """
+      );
    }
 
    private sealed record TestItem

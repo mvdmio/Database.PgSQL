@@ -8,13 +8,14 @@ namespace mvdmio.Database.PgSQL.Connectors.Bulk;
 /// Represents a session for performing bulk copy operations to a PostgreSQL table using binary import.
 /// </summary>
 /// <typeparam name="T">The type of items to be written to the database.</typeparam>
-public sealed class CopySession<T>
+public sealed class CopySession<T> : IAsyncDisposable
 {
    private readonly DatabaseConnection _db;
    private readonly string _tableName;
    private readonly Dictionary<string, Func<T, DbValue>> _columnValueMapping;
 
    private bool _connectionOpened;
+   private bool _disposed;
    private NpgsqlBinaryImporter _writer = null!;
 
    /// <summary>
@@ -34,7 +35,18 @@ public sealed class CopySession<T>
    {
       var sql = $"COPY {_tableName} ({string.Join(", ", _columnValueMapping.Keys)}) FROM STDIN (FORMAT BINARY)";
       _connectionOpened = await _db.OpenAsync(ct);
-      _writer = await _db.Connection!.BeginBinaryImportAsync(sql, ct);
+
+      try
+      {
+         _writer = await _db.Connection!.BeginBinaryImportAsync(sql, ct);
+      }
+      catch
+      {
+         if (_connectionOpened)
+            await _db.CloseAsync(ct);
+
+         throw;
+      }
    }
 
    /// <summary>
@@ -45,19 +57,27 @@ public sealed class CopySession<T>
    /// <returns>A task representing the asynchronous write operation.</returns>
    public async Task WriteAsync(T item, CancellationToken ct = default)
    {
-      await _writer.StartRowAsync(ct);
-
-      foreach (var columnValueMap in _columnValueMapping)
+      try
       {
-         var valueFunc = columnValueMap.Value;
+         await _writer.StartRowAsync(ct);
 
-         var value = valueFunc.Invoke(item);
-         if (value.Value is null)
-            await _writer.WriteNullAsync(ct);
-         else if (value.Type is NpgsqlDbType.Unknown)
-            await _writer.WriteAsync(value.Value, ct);
-         else
-            await _writer.WriteAsync(value.Value, value.Type, ct);
+         foreach (var columnValueMap in _columnValueMapping)
+         {
+            var valueFunc = columnValueMap.Value;
+
+            var value = valueFunc.Invoke(item);
+            if (value.Value is null)
+               await _writer.WriteNullAsync(ct);
+            else if (value.Type is NpgsqlDbType.Unknown)
+               await _writer.WriteAsync(value.Value, ct);
+            else
+               await _writer.WriteAsync(value.Value, value.Type, ct);
+         }
+      }
+      catch
+      {
+         await DisposeAsync();
+         throw;
       }
    }
 
@@ -74,8 +94,34 @@ public sealed class CopySession<T>
       }
       finally
       {
-         await _writer.DisposeAsync();
+          await DisposeAsyncCore(ct);
+      }
+   }
 
+   /// <summary>
+   /// Cleans up the copy session and releases the connection when the copy cannot be completed.
+   /// </summary>
+   /// <param name="ct">A cancellation token to observe while waiting for the task to complete.</param>
+   /// <returns>A task representing the asynchronous dispose operation.</returns>
+   public ValueTask DisposeAsync()
+   {
+      return DisposeAsyncCore();
+   }
+
+   internal async ValueTask DisposeAsyncCore(CancellationToken ct = default)
+   {
+      if (_disposed)
+         return;
+
+      _disposed = true;
+
+      try
+      {
+         if (_writer is not null)
+            await _writer.DisposeAsync();
+      }
+      finally
+      {
          if (_connectionOpened)
             await _db.CloseAsync(ct);
       }

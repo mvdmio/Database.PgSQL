@@ -65,25 +65,32 @@ public sealed partial class BulkConnector
 
       var copySession = await BeginCopyAsync(tableName, columnValueMapping, ct);
 
-      foreach (var item in items)
+      try
       {
+         foreach (var item in items)
+         {
+            try
+            {
+               await copySession.WriteAsync(item, ct);
+            }
+            catch (PostgresException ex)
+            {
+               errors.Add(ex);
+            }
+         }
+
          try
          {
-            await copySession.WriteAsync(item, ct);
+            await copySession.CompleteAsync(ct);
          }
-         catch (PostgresException ex)
+         catch (Exception ex)
          {
             errors.Add(ex);
          }
       }
-
-      try
+      finally
       {
-         await copySession.CompleteAsync(ct);
-      }
-      catch (Exception ex)
-      {
-         errors.Add(ex);
+         await copySession.DisposeAsync(ct);
       }
 
       if (errors.Count is 1)
