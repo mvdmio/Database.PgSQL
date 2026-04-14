@@ -19,6 +19,7 @@ Targets `net8.0`, `net9.0`, and `net10.0`.
 - Bulk insert or upsert rows
 - Check schema and table existence
 - Export the current database schema
+- Preserve identity columns and stored generated columns during schema export
 - Run migrations from application code
 - Generate repositories from annotated table models
 - Auto-embed `Schemas/**/*.sql` files for direct and transitive project references

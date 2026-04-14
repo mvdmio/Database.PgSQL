@@ -241,9 +241,11 @@ internal sealed class SchemaCatalogReader
             a.attname                                                AS column_name,
             pg_catalog.format_type(a.atttypid, a.atttypmod)          AS data_type,
             NOT a.attnotnull                                         AS is_nullable,
-            CASE WHEN a.attidentity = '' THEN pg_get_expr(d.adbin, d.adrelid) ELSE NULL END AS default_value,
+            CASE WHEN a.attidentity = '' AND a.attgenerated = '' THEN pg_get_expr(d.adbin, d.adrelid) ELSE NULL END AS default_value,
             a.attidentity <> ''                                      AS is_identity,
             CASE a.attidentity WHEN 'a' THEN 'ALWAYS' WHEN 'd' THEN 'BY DEFAULT' ELSE NULL END AS identity_generation,
+            CASE WHEN a.attgenerated = 's' THEN pg_get_expr(d.adbin, d.adrelid) ELSE NULL END AS generated_expression,
+            a.attgenerated = 's'                                     AS is_generated_stored,
             a.attnum                                                 AS ordinal
          FROM pg_class c
          JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -270,7 +272,9 @@ internal sealed class SchemaCatalogReader
                   IsNullable = r.IsNullable,
                   DefaultValue = r.DefaultValue,
                   IsIdentity = r.IsIdentity,
-                  IdentityGeneration = r.IdentityGeneration
+                  IdentityGeneration = r.IdentityGeneration,
+                  GeneratedExpression = r.GeneratedExpression,
+                  IsGeneratedStored = r.IsGeneratedStored
                })
                .ToArray()
          })
@@ -457,6 +461,8 @@ internal sealed class SchemaCatalogReader
       public string? DefaultValue { get; init; }
       public required bool IsIdentity { get; init; }
       public string? IdentityGeneration { get; init; }
+      public string? GeneratedExpression { get; init; }
+      public required bool IsGeneratedStored { get; init; }
       public required int Ordinal { get; init; }
    }
 }

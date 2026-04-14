@@ -35,6 +35,8 @@ internal static class SchemaScriptTableRenderer
 
             if (col.IsIdentity)
                line += $" GENERATED {col.IdentityGeneration} AS IDENTITY";
+            else if (col.IsGeneratedStored)
+               line += $" GENERATED ALWAYS AS ({col.GeneratedExpression}) STORED";
             else if (col.DefaultValue is not null)
                line += $" DEFAULT {col.DefaultValue}";
 

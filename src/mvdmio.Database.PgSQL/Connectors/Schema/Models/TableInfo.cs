@@ -41,4 +41,10 @@ public sealed class ColumnInfo
 
    /// <summary>The identity generation type ("ALWAYS" or "BY DEFAULT"), or null if not an identity column.</summary>
    public string? IdentityGeneration { get; init; }
+
+   /// <summary>The generated column expression, or null if the column is not generated.</summary>
+   public string? GeneratedExpression { get; init; }
+
+   /// <summary>Whether the column is generated and stored.</summary>
+   public required bool IsGeneratedStored { get; init; }
 }

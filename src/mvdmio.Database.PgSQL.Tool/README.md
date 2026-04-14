@@ -77,6 +77,8 @@ db pull --environment prod
 
 By default, schema files are written into `Schemas/`.
 
+Exported table definitions preserve PostgreSQL identity columns and `GENERATED ALWAYS AS (...) STORED` columns.
+
 ### `db cleanup`
 
 Refreshes schema files for configured environments and removes migrations that are older than every retained schema version.
