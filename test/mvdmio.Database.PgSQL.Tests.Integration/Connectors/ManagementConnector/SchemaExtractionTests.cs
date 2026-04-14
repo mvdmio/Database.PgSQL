@@ -90,6 +90,8 @@ public class SchemaExtractionTests : TestBase
 
       await Db.Dapper.ExecuteAsync("CREATE INDEX IF NOT EXISTS idx_parent_name ON public.parent_table (name);");
 
+      await Db.Dapper.ExecuteAsync("CREATE UNIQUE INDEX IF NOT EXISTS idx_parent_name_unique ON public.parent_table (name, status);");
+
       await Db.Dapper.ExecuteAsync("CREATE INDEX IF NOT EXISTS idx_child_parent_id ON test_schema.child_table (parent_id);");
 
       await Db.Dapper.ExecuteAsync(
@@ -270,6 +272,8 @@ public class SchemaExtractionTests : TestBase
       var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
 
       script.Should().Contain("idx_parent_name");
+      script.Should().Contain("idx_parent_name_unique");
+      script.Should().Contain("CREATE UNIQUE INDEX IF NOT EXISTS");
       script.Should().Contain("idx_child_parent_id");
       script.Should().Contain("IF NOT EXISTS");
    }
@@ -567,6 +571,7 @@ public class SchemaExtractionTests : TestBase
       var indexes = (await Db.Management.Schema.GetIndexesAsync(CancellationToken)).ToArray();
 
       indexes.Should().Contain(i => i.IndexName == "idx_parent_name");
+      indexes.Should().Contain(i => i.IndexName == "idx_parent_name_unique");
       indexes.Should().Contain(i => i.IndexName == "idx_child_parent_id");
    }
 

@@ -311,7 +311,7 @@ internal sealed class SchemaCatalogReader
    }
 
    /// <summary>
-   ///    Retrieves all indexes that are not created by constraints (i.e., not primary key or unique constraint indexes).
+   ///    Retrieves all indexes that are not created by constraints (i.e., not primary key, unique, or exclusion constraint indexes).
    /// </summary>
    /// <param name="cancellationToken">A cancellation token.</param>
    /// <returns>The indexes.</returns>
@@ -325,17 +325,16 @@ internal sealed class SchemaCatalogReader
             t.relname                                     AS table_name,
             i.relname                                     AS index_name,
             pg_catalog.pg_get_indexdef(ix.indexrelid)      AS definition
-         FROM pg_index ix
-         JOIN pg_class i ON i.oid = ix.indexrelid
-         JOIN pg_class t ON t.oid = ix.indrelid
-         JOIN pg_namespace n ON n.oid = t.relnamespace
-         WHERE t.relkind IN ('r', 'p')
-           AND NOT ix.indisprimary
-           AND NOT ix.indisunique
-           AND {SchemaFilter}
-           AND NOT EXISTS (
-              SELECT 1 FROM pg_constraint con
-              WHERE con.conindid = ix.indexrelid
+          FROM pg_index ix
+          JOIN pg_class i ON i.oid = ix.indexrelid
+          JOIN pg_class t ON t.oid = ix.indrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE t.relkind IN ('r', 'p')
+            AND NOT ix.indisprimary
+            AND {SchemaFilter}
+            AND NOT EXISTS (
+               SELECT 1 FROM pg_constraint con
+               WHERE con.conindid = ix.indexrelid
            )
          ORDER BY n.nspname, t.relname, i.relname
          """,
