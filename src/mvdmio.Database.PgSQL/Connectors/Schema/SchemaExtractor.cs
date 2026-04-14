@@ -224,6 +224,7 @@ public sealed class SchemaExtractor
       await AppendDomainTypesAsync(sb, cancellationToken);
       await AppendSequencesAsync(sb, cancellationToken);
       SchemaScriptTableRenderer.AppendTables(sb, tables, constraints);
+      await AppendSequenceOwnershipAsync(sb, cancellationToken);
       SchemaScriptTableRenderer.AppendConstraints(sb, constraints, EscapeSqlString);
       await AppendIndexesAsync(sb, cancellationToken);
       await AppendFunctionsAsync(sb, cancellationToken);
@@ -387,17 +388,26 @@ public sealed class SchemaExtractor
          sb.AppendLine(";");
       }
 
-      // Append OWNED BY after all sequences are created
-      var ownedSequences = sequences.Where(s => s.OwnedByTable is not null && s.OwnedByColumn is not null).ToArray();
+      sb.AppendLine();
+   }
 
-      if (ownedSequences.Length > 0)
+   private async Task AppendSequenceOwnershipAsync(StringBuilder sb, CancellationToken ct)
+   {
+      var ownedSequences = (await GetSequencesAsync(ct))
+         .Where(s => s.OwnedByTable is not null && s.OwnedByColumn is not null)
+         .ToArray();
+
+      if (ownedSequences.Length == 0)
+         return;
+
+      sb.AppendLine("-- ============================================================================");
+      sb.AppendLine("-- Sequence ownership");
+      sb.AppendLine("-- ============================================================================");
+      sb.AppendLine();
+
+      foreach (var seq in ownedSequences)
       {
-         sb.AppendLine();
-
-         foreach (var seq in ownedSequences)
-         {
-            sb.AppendLine($"ALTER SEQUENCE \"{seq.Schema}\".\"{seq.Name}\" OWNED BY \"{seq.Schema}\".\"{seq.OwnedByTable}\".\"{seq.OwnedByColumn}\";");
-         }
+         sb.AppendLine($"ALTER SEQUENCE \"{seq.Schema}\".\"{seq.Name}\" OWNED BY \"{seq.Schema}\".\"{seq.OwnedByTable}\".\"{seq.OwnedByColumn}\";");
       }
 
       sb.AppendLine();

@@ -32,6 +32,8 @@ What it includes:
 
 Streaming COPY sessions created with `BeginCopyAsync(...)` should be used with `await using`; failed writes now clean up the importer and release the connection through async disposal.
 
+Schema export integration tests cover both true identity columns and sequence-backed defaults, and verify that exported schema files execute against a fresh empty PostgreSQL database.
+
 Quick example:
 
 ```csharp
