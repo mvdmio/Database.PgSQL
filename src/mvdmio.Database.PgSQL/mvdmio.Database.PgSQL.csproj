@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Package configuration">
-    <Version>0.23.8</Version>
+    <Version>0.23.9</Version>
     <Title>mvdmio.Database.PgSQL</Title>
     <Description>PostgreSQL database interaction including migrations.</Description>
     <Company>mvdmio</Company>
@@ -32,6 +32,7 @@
     <None Include="README.md" PackagePath="" Pack="true"/>
     <None Include="..\..\LICENSE" PackagePath="" Pack="true"/>
     <None Include="build\**" Pack="true" PackagePath="build\"/>
+    <None Include="buildTransitive\**" Pack="true" PackagePath="buildTransitive\"/>
   </ItemGroup>
 
   <ItemGroup>

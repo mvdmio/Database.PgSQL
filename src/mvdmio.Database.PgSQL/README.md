@@ -21,6 +21,7 @@ Targets `net8.0`, `net9.0`, and `net10.0`.
 - Export the current database schema
 - Run migrations from application code
 - Generate repositories from annotated table models
+- Auto-embed `Schemas/**/*.sql` files for direct and transitive project references
 
 ## Quick Start
 
@@ -96,6 +97,12 @@ using mvdmio.Database.PgSQL.Migrations;
 var migrator = new DatabaseMigrator(db, typeof(Program).Assembly);
 await migrator.MigrateDatabaseToLatestAsync();
 ```
+
+### Embedded Schema Files
+
+When a project references `mvdmio.Database.PgSQL` directly, or references another project that does, any `Schemas/**/*.sql` files in that project are automatically included as embedded resources.
+
+This works through the package's `build` and `buildTransitive` MSBuild props files.
 
 ### Generated Repositories
 
