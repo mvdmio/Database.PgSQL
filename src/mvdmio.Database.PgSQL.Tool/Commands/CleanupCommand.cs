@@ -1,7 +1,7 @@
-using mvdmio.Database.PgSQL.Connectors.Schema;
 using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Tool.Cleanup;
 using mvdmio.Database.PgSQL.Tool.Configuration;
+using mvdmio.Database.PgSQL.Tool.Pull;
 using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
@@ -18,6 +18,7 @@ internal static class CleanupCommand
       command.SetAction(async (_, cancellationToken) =>
       {
          var config = ToolConfigurationLoader.Load();
+         var schemaExportService = new SchemaExportService();
 
          if (config.ConnectionStrings is null || config.ConnectionStrings.Count == 0)
          {
@@ -40,10 +41,23 @@ internal static class CleanupCommand
 
             Console.WriteLine($"Pulling schema for '{environmentName}'...");
 
-            await using var connection = new DatabaseConnection(connectionString);
-            var schemaExtractor = new SchemaExtractor(connection);
-            var script = await schemaExtractor.GenerateSchemaScriptAsync(cancellationToken);
+            SchemaExportResult schemaResult;
+
+            try
+            {
+               schemaResult = await schemaExportService.ExportAsync(connectionString, config.Schemas, cancellationToken);
+            }
+            catch (InvalidOperationException ex)
+            {
+               Console.Error.WriteLine($"Error: {ex.Message}");
+               return;
+            }
+
+            var script = schemaResult.Script;
             await File.WriteAllTextAsync(schemaPath, script, cancellationToken);
+
+            foreach (var warning in schemaResult.Warnings)
+               Console.WriteLine($"  Warning: {warning}");
 
             var migrationInfo = SchemaFileParser.ParseMigrationVersion(script);
             environmentMigrationIdentifiers.Add(migrationInfo?.Identifier);

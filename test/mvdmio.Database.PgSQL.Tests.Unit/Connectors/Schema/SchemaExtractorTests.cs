@@ -52,4 +52,5 @@ public class SchemaExtractorTests
 
       result.Should().Be("''");
    }
+
 }

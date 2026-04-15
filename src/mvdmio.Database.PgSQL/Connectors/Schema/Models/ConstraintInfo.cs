@@ -22,4 +22,10 @@ public sealed class ConstraintInfo
 
    /// <summary>The constraint definition as returned by pg_get_constraintdef().</summary>
    public required string Definition { get; init; }
+
+   /// <summary>The schema of the referenced table for foreign keys.</summary>
+   public string? ReferencedSchema { get; init; }
+
+   /// <summary>The name of the referenced table for foreign keys.</summary>
+   public string? ReferencedTableName { get; init; }
 }

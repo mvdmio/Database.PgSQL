@@ -45,7 +45,8 @@ public class PullHandlerTests
          Result = new SchemaExportResult(
             "-- schema",
             [new TableInfo { Schema = "public", Name = "users", Columns = [] }],
-            []
+            [],
+            ["warn"]
          )
       };
       var fileSystem = new FakePullFileSystem();
@@ -55,6 +56,7 @@ public class PullHandlerTests
       {
          BasePath = Path.Combine("C:", "repo"),
          SchemasDirectory = "Schemas",
+         Schemas = ["billing", "identity"],
          ConnectionStrings = new Dictionary<string, string>
          {
             ["local"] = "Host=localhost;Database=localdb"
@@ -64,6 +66,7 @@ public class PullHandlerTests
       await handler.HandleAsync(config, null, null, cancellationToken);
 
       schemaExportService.ConnectionString.Should().Be("Host=localhost;Database=localdb");
+      schemaExportService.Schemas.Should().BeEquivalentTo(["billing", "identity"]);
       fileSystem.CreatedDirectories.Should().ContainSingle().Which.Should().Be(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")));
       fileSystem.Writes.Should().ContainSingle();
       fileSystem.Writes.Single().Key.Should().Be(Path.Combine(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")), "schema.local.sql"));
@@ -75,18 +78,49 @@ public class PullHandlerTests
          string.Empty,
          $"Schema written to {Path.Combine(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")), "schema.local.sql")}"
       );
-      reporter.Warnings.Should().BeEmpty();
+      reporter.Warnings.Should().ContainSingle().Which.Should().Be("warn");
       reporter.Errors.Should().BeEmpty();
+   }
+
+   [Fact]
+   public async Task HandleAsync_WithInvalidConfiguredSchemas_WritesErrorAndSkipsFileWrite()
+   {
+      var cancellationToken = TestContext.Current.CancellationToken;
+      var schemaExportService = new ThrowingSchemaExportService();
+      var fileSystem = new FakePullFileSystem();
+      var reporter = new FakePullReporter();
+      var handler = new PullHandler(schemaExportService, fileSystem, reporter);
+      var config = new ToolConfiguration
+      {
+         BasePath = Path.Combine("C:", "repo"),
+         SchemasDirectory = "Schemas",
+         Schemas = ["missing_schema"],
+         ConnectionStrings = new Dictionary<string, string>
+         {
+            ["local"] = "Host=localhost;Database=localdb"
+         }
+      };
+
+      await handler.HandleAsync(config, null, null, cancellationToken);
+
+      fileSystem.Writes.Should().BeEmpty();
+      reporter.Errors.Should().ContainSingle().Which.Should().Be("Error: Configured schemas were not found in the database: missing_schema.");
    }
 
    private sealed class FakeSchemaExportService : SchemaExportService
    {
       public string? ConnectionString { get; private set; }
-      public SchemaExportResult Result { get; set; } = new(string.Empty, [], []);
+      public IReadOnlyCollection<string>? Schemas { get; private set; }
+      public SchemaExportResult Result { get; set; } = new(string.Empty, [], [], []);
 
-      public override Task<SchemaExportResult> ExportAsync(string connectionString, CancellationToken cancellationToken = default)
+      public override Task<SchemaExportResult> ExportAsync(
+         string connectionString,
+         IReadOnlyCollection<string>? schemas = null,
+         CancellationToken cancellationToken = default
+      )
       {
          ConnectionString = connectionString;
+         Schemas = schemas;
          return Task.FromResult(Result);
       }
    }
@@ -105,6 +139,18 @@ public class PullHandlerTests
       {
          Writes[path] = contents;
          return Task.CompletedTask;
+      }
+   }
+
+   private sealed class ThrowingSchemaExportService : SchemaExportService
+   {
+      public override Task<SchemaExportResult> ExportAsync(
+         string connectionString,
+         IReadOnlyCollection<string>? schemas = null,
+         CancellationToken cancellationToken = default
+      )
+      {
+         throw new InvalidOperationException("Configured schemas were not found in the database: missing_schema.");
       }
    }
 

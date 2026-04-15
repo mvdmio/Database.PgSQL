@@ -23,8 +23,23 @@ internal static class ToolConfigurationLoader
 
       var config = deserializer.Deserialize<ToolConfiguration>(yaml) ?? new ToolConfiguration();
       config.BasePath = Path.GetDirectoryName(configFilePath)!;
+      config.Schemas = NormalizeSchemas(config.Schemas);
 
       return config;
+   }
+
+   private static List<string>? NormalizeSchemas(List<string>? schemas)
+   {
+      if (schemas is null)
+         return null;
+
+      var normalized = schemas
+         .Select(schema => schema.Trim())
+         .Where(schema => schema.Length > 0)
+         .Distinct(StringComparer.Ordinal)
+         .ToList();
+
+      return normalized.Count > 0 ? normalized : null;
    }
 
    private static string? FindConfigFile()

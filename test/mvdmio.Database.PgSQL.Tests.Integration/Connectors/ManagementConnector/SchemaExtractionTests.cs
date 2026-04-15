@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using mvdmio.Database.PgSQL.Connectors.Schema;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 using System.Text;
 using Testcontainers.PostgreSql;
@@ -35,6 +36,22 @@ public class SchemaExtractionTests : TestBase
 
       await Db.Dapper.ExecuteAsync(
          """
+         CREATE SCHEMA IF NOT EXISTS identity;
+         """
+      );
+
+      await Db.Dapper.ExecuteAsync(
+         """
+         DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON t.typnamespace = n.oid WHERE t.typname = 'external_status' AND n.nspname = 'identity') THEN
+               CREATE TYPE identity.external_status AS ENUM ('draft', 'final');
+            END IF;
+         END $$;
+         """
+      );
+
+      await Db.Dapper.ExecuteAsync(
+         """
          CREATE SEQUENCE IF NOT EXISTS public.test_seq
             AS bigint
             INCREMENT BY 1
@@ -64,6 +81,16 @@ public class SchemaExtractionTests : TestBase
             id         bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
             parent_id  bigint NOT NULL,
             value      double precision,
+            PRIMARY KEY (id)
+         );
+         """
+      );
+
+      await Db.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS test_schema.typed_table (
+            id     bigint NOT NULL GENERATED ALWAYS AS IDENTITY,
+            status identity.external_status NOT NULL,
             PRIMARY KEY (id)
          );
          """
@@ -444,6 +471,55 @@ public class SchemaExtractionTests : TestBase
       var nameCol = parentTable.Columns.First(c => c.Name == "name");
       nameCol.DataType.Should().Be("text");
       nameCol.IsNullable.Should().BeFalse();
+   }
+
+   [Fact]
+   public async Task GetTablesAsync_WithIncludedSchemas_ReturnsOnlySelectedSchemas()
+   {
+      var extractor = new SchemaExtractor(Db, ["test_schema"]);
+
+      var tables = (await extractor.GetTablesAsync(CancellationToken)).ToArray();
+
+      tables.Should().NotBeEmpty();
+      tables.Should().OnlyContain(table => table.Schema == "test_schema");
+      tables.Select(table => table.Name).Should().Contain("child_table");
+      tables.Select(table => table.Name).Should().NotContain("parent_table");
+   }
+
+   [Fact]
+   public async Task GenerateSchemaScriptAsync_WithIncludedSchemas_ExcludesOtherSchemas()
+   {
+      var extractor = new SchemaExtractor(Db, ["test_schema"]);
+
+      var script = await extractor.GenerateSchemaScriptAsync(CancellationToken);
+
+      script.Should().Contain("CREATE SCHEMA IF NOT EXISTS \"test_schema\"");
+      script.Should().Contain("CREATE TABLE IF NOT EXISTS \"test_schema\".\"child_table\"");
+      script.Should().NotContain("CREATE TABLE IF NOT EXISTS \"public\".\"parent_table\"");
+   }
+
+   [Fact]
+   public async Task GetConstraintsAsync_WithIncludedSchemas_ReturnsReferencedTableDetailsForExcludedSchemas()
+   {
+      var extractor = new SchemaExtractor(Db, ["test_schema"]);
+
+      var constraints = (await extractor.GetConstraintsAsync(CancellationToken)).ToArray();
+      var foreignKey = constraints.Should().ContainSingle(c => c.ConstraintName == "fk_child_parent").Subject;
+
+      foreignKey.ReferencedSchema.Should().Be("public");
+      foreignKey.ReferencedTableName.Should().Be("parent_table");
+   }
+
+   [Fact]
+   public async Task GetTablesAsync_WithIncludedSchemas_PreservesExcludedSchemaQualifiedTypes()
+   {
+      var extractor = new SchemaExtractor(Db, ["test_schema"]);
+
+      var tables = (await extractor.GetTablesAsync(CancellationToken)).ToArray();
+      var typedTable = tables.First(table => table.Schema == "test_schema" && table.Name == "typed_table");
+      var statusColumn = typedTable.Columns.First(column => column.Name == "status");
+
+      statusColumn.DataType.Should().Be("identity.external_status");
    }
 
    [Fact]

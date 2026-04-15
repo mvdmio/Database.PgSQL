@@ -58,7 +58,21 @@ internal sealed class PullHandler
       _reporter.WriteInfo("Connecting to database...");
       _reporter.WriteInfo("Extracting schema...");
 
-      var schemaResult = await _schemaExportService.ExportAsync(connectionString, cancellationToken);
+      SchemaExportResult schemaResult;
+
+      try
+      {
+         schemaResult = await _schemaExportService.ExportAsync(connectionString, config.Schemas, cancellationToken);
+      }
+      catch (InvalidOperationException ex)
+      {
+         _reporter.WriteError($"Error: {ex.Message}");
+         return;
+      }
+
+      foreach (var warning in schemaResult.Warnings)
+         _reporter.WriteWarning(warning);
+
       await _fileSystem.WriteAllTextAsync(outputPath, schemaResult.Script, cancellationToken);
 
       _reporter.WriteInfo(string.Empty);

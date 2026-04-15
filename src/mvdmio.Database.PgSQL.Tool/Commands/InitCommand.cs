@@ -39,6 +39,7 @@ internal static class InitCommand
          Console.WriteLine($"  project:             {config.Project}");
          Console.WriteLine($"  migrationsDirectory: {config.MigrationsDirectory}");
          Console.WriteLine($"  schemasDirectory:    {config.SchemasDirectory}");
+         Console.WriteLine("  schemas:             all user schemas (default)");
          Console.WriteLine("  connectionStrings:   local (placeholder)");
          Console.WriteLine();
          Console.WriteLine("Migrations are tracked in the \"mvdmio\".\"migrations\" table.");

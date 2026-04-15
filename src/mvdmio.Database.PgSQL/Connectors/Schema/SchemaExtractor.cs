@@ -18,16 +18,34 @@ public sealed class SchemaExtractor
 
    private readonly DatabaseConnection _db;
    private readonly SchemaCatalogReader _catalog;
+   private readonly IReadOnlyCollection<string>? _includedSchemas;
 
    /// <summary>
    ///    Initializes a new instance of the <see cref="SchemaExtractor"/> class.
    /// </summary>
    /// <param name="db">The database connection to use for schema extraction.</param>
    public SchemaExtractor(DatabaseConnection db)
+      : this(db, null)
+   {
+   }
+
+   /// <summary>
+   ///    Initializes a new instance of the <see cref="SchemaExtractor"/> class.
+   /// </summary>
+   /// <param name="db">The database connection to use for schema extraction.</param>
+   /// <param name="includedSchemas">Optional set of schemas to export. When null or empty, all user schemas are exported.</param>
+   public SchemaExtractor(DatabaseConnection db, IReadOnlyCollection<string>? includedSchemas)
    {
       _db = db;
-      _catalog = new SchemaCatalogReader(db);
+      _includedSchemas = includedSchemas is { Count: > 0 } ? includedSchemas : null;
+      _catalog = new SchemaCatalogReader(db, _includedSchemas);
    }
+
+   /// <summary>
+   ///    Gets the schemas explicitly included for export, or null when exporting all user schemas.
+   /// </summary>
+   [PublicAPI]
+   public IReadOnlyCollection<string>? IncludedSchemas => _includedSchemas;
 
    /// <summary>
    ///    Gets the current migration version (the most recently executed migration).
@@ -78,6 +96,17 @@ public sealed class SchemaExtractor
    public Task<IEnumerable<string>> GetUserSchemasAsync(CancellationToken cancellationToken = default)
    {
       return _catalog.GetUserSchemasAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Retrieves all exportable schemas, excluding only system schemas and the mvdmio migration schema.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The schema names, including public.</returns>
+   [PublicAPI]
+   public Task<IEnumerable<string>> GetExportableSchemasAsync(CancellationToken cancellationToken = default)
+   {
+      return _catalog.GetExportableSchemasAsync(cancellationToken);
    }
 
    /// <summary>

@@ -9,6 +9,8 @@ This repository contains two publishable packages:
 
 The library package also ships MSBuild props that automatically embed `Schemas/**/*.sql` files for both direct package consumers and downstream projects reached through transitive project/package references.
 
+The CLI tool now supports an optional `schemas` configuration value so multi-project solutions can export only the PostgreSQL schemas owned by each project. When omitted or empty, exports still include all user schemas.
+
 ## Packages
 
 ### `mvdmio.Database.PgSQL`

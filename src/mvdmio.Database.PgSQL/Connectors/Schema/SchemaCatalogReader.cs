@@ -8,17 +8,30 @@ internal sealed class SchemaCatalogReader
    private const string MIGRATIONS_SCHEMA = "mvdmio";
 
    private readonly DatabaseConnection _db;
+   private readonly IReadOnlyCollection<string>? _includedSchemas;
 
-   public SchemaCatalogReader(DatabaseConnection db)
+   public SchemaCatalogReader(DatabaseConnection db, IReadOnlyCollection<string>? includedSchemas = null)
    {
       _db = db;
+      _includedSchemas = includedSchemas is { Count: > 0 } ? includedSchemas : null;
    }
 
-   private static string SchemaFilter => $"""
-      n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', '{SchemaExtractor.EscapeSqlString(MIGRATIONS_SCHEMA)}')
-      AND n.nspname NOT LIKE 'pg\_temp\_%'
-      AND n.nspname NOT LIKE 'pg\_toast\_temp\_%'
-      """;
+   private string GetSchemaFilter(string schemaAlias)
+   {
+      var sb = new System.Text.StringBuilder();
+      sb.AppendLine($"{schemaAlias}.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', '{SchemaExtractor.EscapeSqlString(MIGRATIONS_SCHEMA)}')");
+      sb.AppendLine($"AND {schemaAlias}.nspname NOT LIKE 'pg\\_temp\\_%'");
+      sb.Append($"AND {schemaAlias}.nspname NOT LIKE 'pg\\_toast\\_temp\\_%'");
+
+      if (_includedSchemas is { Count: > 0 })
+      {
+         var includedSchemas = string.Join(", ", _includedSchemas.Select(schema => $"'{SchemaExtractor.EscapeSqlString(schema)}'"));
+         sb.AppendLine();
+         sb.Append($"AND {schemaAlias}.nspname IN ({includedSchemas})");
+      }
+
+      return sb.ToString();
+   }
 
    /// <summary>
    ///    Retrieves all non-default extensions installed in the database.
@@ -55,8 +68,27 @@ internal sealed class SchemaCatalogReader
          $"""
          SELECT n.nspname
          FROM pg_namespace n
-         WHERE {SchemaFilter}
+         WHERE {GetSchemaFilter("n")}
            AND n.nspname <> 'public'
+         ORDER BY n.nspname
+         """,
+         ct: cancellationToken
+      );
+   }
+
+   /// <summary>
+   ///    Retrieves all exportable schemas, excluding only system schemas and the mvdmio migration schema.
+   /// </summary>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>The exportable schema names, including public.</returns>
+   [PublicAPI]
+   public async Task<IEnumerable<string>> GetExportableSchemasAsync(CancellationToken cancellationToken = default)
+   {
+      return await _db.Dapper.QueryAsync<string>(
+         $"""
+         SELECT n.nspname
+         FROM pg_namespace n
+         WHERE {GetSchemaFilter("n")}
          ORDER BY n.nspname
          """,
          ct: cancellationToken
@@ -82,7 +114,7 @@ internal sealed class SchemaCatalogReader
          JOIN pg_namespace n ON t.typnamespace = n.oid
          JOIN pg_enum e ON e.enumtypid = t.oid
          WHERE t.typtype = 'e'
-           AND {SchemaFilter}
+           AND {GetSchemaFilter("n")}
          ORDER BY n.nspname, t.typname, e.enumsortorder
          """,
          ct: cancellationToken
@@ -115,7 +147,7 @@ internal sealed class SchemaCatalogReader
          JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
          WHERE t.typtype = 'c'
            AND c.relkind = 'c'
-           AND {SchemaFilter}
+           AND {GetSchemaFilter("n")}
          ORDER BY n.nspname, t.typname, a.attnum
          """,
          ct: cancellationToken
@@ -151,7 +183,7 @@ internal sealed class SchemaCatalogReader
          FROM pg_type t
          JOIN pg_namespace n ON t.typnamespace = n.oid
          WHERE t.typtype = 'd'
-           AND {SchemaFilter}
+           AND {GetSchemaFilter("n")}
          ORDER BY n.nspname, t.typname
          """,
          ct: cancellationToken
@@ -218,7 +250,7 @@ internal sealed class SchemaCatalogReader
          LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'a' AND d.classid = 'pg_class'::regclass
          LEFT JOIN pg_class dep_c ON dep_c.oid = d.refobjid AND dep_c.relkind IN ('r', 'p')
          LEFT JOIN pg_attribute dep_a ON dep_a.attrelid = d.refobjid AND dep_a.attnum = d.refobjsubid AND NOT dep_a.attisdropped
-         WHERE {SchemaFilter}
+         WHERE {GetSchemaFilter("n")}
          ORDER BY n.nspname, c.relname
          """,
          ct: cancellationToken
@@ -252,7 +284,7 @@ internal sealed class SchemaCatalogReader
          JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
          LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
          WHERE c.relkind IN ('r', 'p')
-           AND {SchemaFilter}
+           AND {GetSchemaFilter("n")}
          ORDER BY n.nspname, c.relname, a.attnum
          """,
          ct: cancellationToken
@@ -296,12 +328,16 @@ internal sealed class SchemaCatalogReader
             c.relname                                     AS table_name,
             con.conname                                   AS constraint_name,
             con.contype::text                              AS constraint_type,
+            ref_n.nspname                                 AS referenced_schema,
+            ref_c.relname                                 AS referenced_table_name,
             pg_catalog.pg_get_constraintdef(con.oid, true) AS definition
          FROM pg_constraint con
          JOIN pg_class c ON c.oid = con.conrelid
          JOIN pg_namespace n ON n.oid = c.relnamespace
+         LEFT JOIN pg_class ref_c ON ref_c.oid = con.confrelid
+         LEFT JOIN pg_namespace ref_n ON ref_n.oid = ref_c.relnamespace
          WHERE c.relkind IN ('r', 'p')
-           AND {SchemaFilter}
+           AND {GetSchemaFilter("n")}
          ORDER BY
             CASE con.contype WHEN 'p' THEN 0 WHEN 'u' THEN 1 WHEN 'c' THEN 2 WHEN 'f' THEN 3 WHEN 'x' THEN 4 ELSE 5 END,
             n.nspname, c.relname, con.conname
@@ -331,7 +367,7 @@ internal sealed class SchemaCatalogReader
           JOIN pg_namespace n ON n.oid = t.relnamespace
           WHERE t.relkind IN ('r', 'p')
             AND NOT ix.indisprimary
-            AND {SchemaFilter}
+            AND {GetSchemaFilter("n")}
             AND NOT EXISTS (
                SELECT 1 FROM pg_constraint con
                WHERE con.conindid = ix.indexrelid
@@ -359,7 +395,7 @@ internal sealed class SchemaCatalogReader
             pg_catalog.pg_get_functiondef(p.oid)               AS definition
          FROM pg_proc p
          JOIN pg_namespace n ON n.oid = p.pronamespace
-         WHERE {SchemaFilter}
+         WHERE {GetSchemaFilter("n")}
            AND p.prokind IN ('f', 'p')
            AND NOT EXISTS (
               SELECT 1 FROM pg_depend d
@@ -390,7 +426,7 @@ internal sealed class SchemaCatalogReader
          JOIN pg_class c ON c.oid = t.tgrelid
          JOIN pg_namespace n ON n.oid = c.relnamespace
          WHERE NOT t.tgisinternal
-           AND {SchemaFilter}
+           AND {GetSchemaFilter("n")}
          ORDER BY n.nspname, c.relname, t.tgname
          """,
          ct: cancellationToken
@@ -414,7 +450,7 @@ internal sealed class SchemaCatalogReader
          FROM pg_class c
          JOIN pg_namespace n ON n.oid = c.relnamespace
          WHERE c.relkind = 'v'
-           AND {SchemaFilter}
+           AND {GetSchemaFilter("n")}
          ORDER BY n.nspname, c.relname
          """,
          ct: cancellationToken

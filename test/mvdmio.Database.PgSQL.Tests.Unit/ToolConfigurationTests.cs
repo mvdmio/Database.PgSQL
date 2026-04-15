@@ -45,6 +45,20 @@ public class ToolConfigurationTests
    }
 
    [Fact]
+   public void Deserialize_WithSchemas_ParsesCorrectly()
+   {
+      var yaml = """
+         schemas:
+           - billing
+           - public
+         """;
+
+      var config = Deserialize(yaml);
+
+      config.Schemas.Should().BeEquivalentTo(["billing", "public"]);
+   }
+
+   [Fact]
    public void Deserialize_WithOldConnectionStringField_IgnoresItGracefully()
    {
       var yaml = """
@@ -122,6 +136,35 @@ public class ToolConfigurationTests
       var yaml = serializer.Serialize(config);
 
       yaml.Should().NotContain("connectionStrings");
+   }
+
+   [Fact]
+   public void Save_WithSchemas_NormalizesAndOmitsEmptyEntries()
+   {
+      var tempDirectory = Path.Combine(Path.GetTempPath(), $"tool-config-tests-{Guid.NewGuid():N}");
+      Directory.CreateDirectory(tempDirectory);
+
+      try
+      {
+         var config = new ToolConfiguration
+         {
+            Schemas = [" billing ", string.Empty, "billing", "public", "   "]
+         };
+
+         config.Save(tempDirectory);
+
+         var savedYaml = File.ReadAllText(Path.Combine(tempDirectory, ToolConfiguration.CONFIG_FILE_NAME));
+         savedYaml.Should().Contain("schemas:");
+         savedYaml.Should().Contain("- billing");
+         savedYaml.Should().Contain("- public");
+         savedYaml.Should().NotContain("- \"\"");
+
+         config.Schemas.Should().BeEquivalentTo(["billing", "public"]);
+      }
+      finally
+      {
+         Directory.Delete(tempDirectory, true);
+      }
    }
 
    private static ToolConfiguration Deserialize(string yaml)

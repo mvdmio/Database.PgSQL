@@ -35,6 +35,11 @@ public sealed class ToolConfiguration
    public Dictionary<string, string>? ConnectionStrings { get; set; }
 
    /// <summary>
+   ///    Optional list of PostgreSQL schemas to export. When omitted or empty, all user schemas are exported.
+   /// </summary>
+   public List<string>? Schemas { get; set; }
+
+   /// <summary>
    ///    The directory containing the config file. Used to resolve relative paths.
    ///    Not serialized from YAML.
    /// </summary>
@@ -47,6 +52,8 @@ public sealed class ToolConfiguration
    /// <param name="directory">The directory to write the config file to.</param>
    public void Save(string directory)
    {
+      Schemas = NormalizeSchemas(Schemas);
+
       var serializer = new SerializerBuilder()
          .WithNamingConvention(CamelCaseNamingConvention.Instance)
          .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull | DefaultValuesHandling.OmitDefaults)
@@ -55,5 +62,19 @@ public sealed class ToolConfiguration
       var yaml = serializer.Serialize(this);
       var filePath = Path.Combine(directory, CONFIG_FILE_NAME);
       File.WriteAllText(filePath, yaml);
+   }
+
+   private static List<string>? NormalizeSchemas(List<string>? schemas)
+   {
+      if (schemas is null)
+         return null;
+
+      var normalized = schemas
+         .Select(schema => schema.Trim())
+         .Where(schema => schema.Length > 0)
+         .Distinct(StringComparer.Ordinal)
+         .ToList();
+
+      return normalized.Count > 0 ? normalized : null;
    }
 }

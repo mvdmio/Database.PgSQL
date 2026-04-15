@@ -19,6 +19,7 @@ Targets `net8.0`, `net9.0`, and `net10.0`.
 - Bulk insert or upsert rows
 - Check schema and table existence
 - Export the current database schema
+- Limit schema export to selected PostgreSQL schemas when using the companion CLI configuration
 - Preserve identity columns and stored generated columns during schema export
 - Run migrations from application code
 - Generate repositories from annotated table models

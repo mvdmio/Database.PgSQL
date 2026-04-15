@@ -77,6 +77,8 @@ db pull --environment prod
 
 By default, schema files are written into `Schemas/`.
 
+Set `schemas` in `.mvdmio-migrations.yml` to export only specific PostgreSQL schemas. When omitted or empty, `db pull` and `db cleanup` export all user schemas. `public` is only included when listed explicitly.
+
 Exported table definitions preserve PostgreSQL identity columns and `GENERATED ALWAYS AS (...) STORED` columns.
 
 ### `db cleanup`
@@ -95,11 +97,16 @@ The tool uses `.mvdmio-migrations.yml`.
 project: src/MyApp.Data
 migrationsDirectory: Migrations
 schemasDirectory: Schemas
+schemas:
+  - billing
+  - identity
 connectionStrings:
   local: Host=localhost;Database=mydb;Username=postgres;Password=secret
   acc: Host=acc-server;Database=mydb;Username=postgres;Password=secret
   prod: Host=prod-server;Database=mydb;Username=postgres;Password=secret
 ```
+
+If a selected schema has foreign keys to tables in excluded schemas, the tool prints a warning. The export still succeeds, but replaying it into an empty database may require those referenced schemas and tables to already exist.
 
 Connection strings are resolved in this order:
 
