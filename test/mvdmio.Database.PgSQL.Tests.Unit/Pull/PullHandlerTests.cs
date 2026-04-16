@@ -70,7 +70,10 @@ public class PullHandlerTests
       fileSystem.CreatedDirectories.Should().ContainSingle().Which.Should().Be(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")));
       fileSystem.Writes.Should().ContainSingle();
       fileSystem.Writes.Single().Key.Should().Be(Path.Combine(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")), "schema.local.sql"));
-      fileSystem.Writes.Single().Value.Should().Be("-- schema");
+      fileSystem.Writes.Single().Value.Should().StartWith("-- =============================================================================");
+      fileSystem.Writes.Single().Value.Should().Contain("AUTO-GENERATED FILE");
+      fileSystem.Writes.Single().Value.Should().Contain("modify migration files instead");
+      fileSystem.Writes.Single().Value.Should().EndWith("-- schema");
       fileSystem.Writes.Keys.Should().NotContain(Path.Combine(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")), ".mvdmio-translations.snapshot.json"));
       reporter.Infos.Should().ContainInOrder(
          "Connecting to database...",

@@ -36,6 +36,8 @@ Streaming COPY sessions created with `BeginCopyAsync(...)` should be used with `
 
 Schema export integration tests cover both true identity columns and sequence-backed defaults, verify that standalone unique indexes are preserved in exported schema files, and verify that exported schema files execute against a fresh empty PostgreSQL database.
 
+Exported `schema.sql` files include an auto-generated header comment warning that the file should not be modified directly and that migration files should be changed instead.
+
 Quick example:
 
 ```csharp
