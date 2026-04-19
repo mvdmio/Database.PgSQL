@@ -1,7 +1,7 @@
 --
--- PostgreSQL database schema
+-- PostgreSQL database schema (secondary test assembly, local environment)
 -- Generated at 2026-02-18 10:30:45 UTC
--- Migration version: 202505181000 (SimpleTable)
+-- Migration version: 202505181200 (SecondaryTableLocal)
 --
 
 CREATE SCHEMA IF NOT EXISTS "mvdmio";
@@ -12,9 +12,8 @@ CREATE TABLE IF NOT EXISTS "mvdmio"."migrations" (
    PRIMARY KEY (identifier)
 );
 
-CREATE TABLE public.simple_table (
+CREATE TABLE public.secondary_table_local (
     id                    BIGINT NOT NULL,
-    required_string_value TEXT   NOT NULL,
-    optional_string_value TEXT   NULL,
+    description           TEXT   NOT NULL,
     PRIMARY KEY (id)
 );

@@ -7,7 +7,7 @@ This repository contains two publishable packages:
 - `mvdmio.Database.PgSQL`: a .NET library for PostgreSQL access, transactions, bulk operations, schema management, migrations, and generated repositories.
 - `mvdmio.Database.PgSQL.Tool`: a `dotnet` global/local tool exposed as `db` for creating migrations, applying them, pulling schema files, and cleaning up obsolete migrations.
 
-The library package also ships MSBuild props that automatically embed `Schemas/**/*.sql` files for both direct package consumers and downstream projects reached through transitive project/package references.
+The library package also ships MSBuild props that automatically embed `Schemas/**/*.sql` files for both direct package consumers and downstream projects reached through transitive project/package references. When `DatabaseMigrator` is given multiple assemblies, schemas from every assembly are applied in order on a cold-start migration.
 
 The CLI tool now supports an optional `schemas` configuration value so multi-project solutions can export only the PostgreSQL schemas owned by each project. When omitted or empty, exports still include all user schemas.
 

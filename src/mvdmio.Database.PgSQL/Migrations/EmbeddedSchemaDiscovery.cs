@@ -56,6 +56,64 @@ public static class EmbeddedSchemaDiscovery
    }
 
    /// <summary>
+   ///    Finds all embedded schema resources across all assemblies, preserving assembly order.
+   ///    Each assembly contributes at most one schema file. For a given assembly, the lookup uses
+   ///    the same rules as <see cref="FindSchemaResource"/>: when an environment is specified, the
+   ///    environment-specific schema is preferred with fallback to <c>schema.sql</c>; when no
+   ///    environment is specified, <c>schema.sql</c> is preferred with fallback to any
+   ///    <c>schema.*.sql</c>. Assemblies without a matching schema resource are silently skipped.
+   /// </summary>
+   /// <param name="assemblies">The assemblies to search for embedded schema resources.</param>
+   /// <param name="environment">
+   ///    Optional environment name. If specified, looks for schema.{environment}.sql (case-insensitive)
+   ///    per assembly, falling back to schema.sql within that assembly.
+   /// </param>
+   /// <returns>
+   ///    A list of (stream, resource name, source assembly) tuples in assembly order, one per assembly
+   ///    that contains a matching schema resource. The caller is responsible for disposing all streams.
+   /// </returns>
+   public static IReadOnlyList<(Stream Stream, string ResourceName, Assembly Assembly)> FindAllSchemaResources(Assembly[] assemblies, string? environment)
+   {
+      var results = new List<(Stream Stream, string ResourceName, Assembly Assembly)>();
+
+      if (assemblies.Length == 0)
+         return results;
+
+      foreach (var assembly in assemblies)
+      {
+         var resource = FindSchemaResourceInAssembly(assembly, environment);
+
+         if (resource is not null)
+            results.Add((resource.Value.Stream, resource.Value.ResourceName, assembly));
+      }
+
+      return results;
+   }
+
+   private static (Stream Stream, string ResourceName)? FindSchemaResourceInAssembly(Assembly assembly, string? environment)
+   {
+      var singleAssembly = new[] { assembly };
+
+      if (!string.IsNullOrWhiteSpace(environment))
+      {
+         var envSchemaName = $"{SCHEMA_PREFIX}{environment.ToLowerInvariant()}{SCHEMA_SUFFIX}";
+         var envResult = FindResourceByName(singleAssembly, envSchemaName);
+
+         if (envResult is not null)
+            return envResult;
+
+         return FindResourceByName(singleAssembly, DEFAULT_SCHEMA_NAME);
+      }
+
+      var defaultResult = FindResourceByName(singleAssembly, DEFAULT_SCHEMA_NAME);
+
+      if (defaultResult is not null)
+         return defaultResult;
+
+      return FindAnySchemaResource(singleAssembly);
+   }
+
+   /// <summary>
    ///    Reads the content of an embedded schema resource from the given assemblies.
    /// </summary>
    /// <param name="assemblies">The assemblies to search for embedded schema resources.</param>
@@ -78,6 +136,38 @@ public static class EmbeddedSchemaDiscovery
       await using var stream = resource.Value.Stream;
       using var reader = new StreamReader(stream);
       return await reader.ReadToEndAsync(cancellationToken);
+   }
+
+   /// <summary>
+   ///    Reads the content of all embedded schema resources across all assemblies in assembly order.
+   /// </summary>
+   /// <param name="assemblies">The assemblies to search for embedded schema resources.</param>
+   /// <param name="environment">
+   ///    Optional environment name. If specified, looks for schema.{environment}.sql (case-insensitive).
+   ///    Falls back to schema.sql if environment-specific file is not found (per assembly).
+   /// </param>
+   /// <param name="cancellationToken">A cancellation token.</param>
+   /// <returns>
+   ///    A list of (content, resource name, source assembly) tuples in assembly order, one per assembly
+   ///    that contains a matching schema resource.
+   /// </returns>
+   public static async Task<IReadOnlyList<(string Content, string ResourceName, Assembly Assembly)>> ReadAllSchemaContentsAsync(
+      Assembly[] assemblies,
+      string? environment,
+      CancellationToken cancellationToken = default)
+   {
+      var resources = FindAllSchemaResources(assemblies, environment);
+      var results = new List<(string Content, string ResourceName, Assembly Assembly)>(resources.Count);
+
+      foreach (var resource in resources)
+      {
+         await using var stream = resource.Stream;
+         using var reader = new StreamReader(stream);
+         var content = await reader.ReadToEndAsync(cancellationToken);
+         results.Add((content, resource.ResourceName, resource.Assembly));
+      }
+
+      return results;
    }
 
    /// <summary>

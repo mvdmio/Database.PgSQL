@@ -185,31 +185,33 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    Determines whether an embedded schema should be applied.
    ///    Returns true if:
    ///    - Assemblies are configured for schema discovery
-   ///    - An embedded schema resource exists
+   ///    - An embedded schema resource exists in at least one assembly
    ///    - The database is empty
-   ///    - If targetIdentifier is specified, the schema version must be &lt;= targetIdentifier
+   ///    - If targetIdentifier is specified, every discovered schema's version must be &lt;= targetIdentifier.
+   ///      A schema whose header version exceeds the target means the caller is asking for a state older
+   ///      than one of the baselines can represent; applying only a subset would leave gaps that later
+   ///      migrations cannot fill, so the entire schema-first bootstrap is skipped instead.
    /// </summary>
    private async Task<bool> ShouldApplySchemaAsync(long? targetIdentifier, CancellationToken cancellationToken)
    {
       if (_assemblies.Length == 0)
          return false;
 
-      if (!EmbeddedSchemaDiscovery.SchemaResourceExists(_assemblies, _environment))
+      var contents = await EmbeddedSchemaDiscovery.ReadAllSchemaContentsAsync(_assemblies, _environment, cancellationToken);
+
+      if (contents.Count == 0)
          return false;
 
       if (!await IsDatabaseEmptyAsync(cancellationToken))
          return false;
 
-      // If we have a target identifier, check that the schema version is <= target
       if (targetIdentifier.HasValue)
       {
-         var schemaContent = await EmbeddedSchemaDiscovery.ReadSchemaContentAsync(_assemblies, _environment, cancellationToken);
-
-         if (schemaContent is not null)
+         foreach (var (content, _, _) in contents)
          {
-            var migrationInfo = SchemaFileParser.ParseMigrationVersion(schemaContent);
+            var info = SchemaFileParser.ParseMigrationVersion(content);
 
-            if (migrationInfo is not null && migrationInfo.Value.Identifier > targetIdentifier.Value)
+            if (info is not null && info.Value.Identifier > targetIdentifier.Value)
                return false;
          }
       }
@@ -218,33 +220,49 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    }
 
    /// <summary>
-   ///    Applies the embedded schema resource to the database.
+   ///    Applies all embedded schema resources to the database in assembly order.
+   ///    Each assembly contributes at most one schema file. The baseline migration row
+   ///    is recorded using the highest identifier across all applied schema headers.
    /// </summary>
    private async Task ApplySchemaAsync(CancellationToken cancellationToken)
    {
-      var schemaContent = await EmbeddedSchemaDiscovery.ReadSchemaContentAsync(_assemblies, _environment, cancellationToken);
+      var schemas = await EmbeddedSchemaDiscovery.ReadAllSchemaContentsAsync(_assemblies, _environment, cancellationToken);
 
-      if (string.IsNullOrEmpty(schemaContent))
+      if (schemas.Count == 0)
          throw new InvalidOperationException("No embedded schema resource found.");
-
-      // Parse the schema content to extract migration version
-      var migrationInfo = SchemaFileParser.ParseMigrationVersion(schemaContent);
 
       await _connection.InTransactionAsync(async () =>
       {
-         await _connection.Dapper.ExecuteAsync(schemaContent, ct: cancellationToken);
-
-         // Ensure migration table exists (it should have been created by the schema, but ensure it's there)
+         // Pre-create the migrations table so schema files that also try to create it
+         // (with or without IF NOT EXISTS) don't conflict within the same transaction.
          await EnsureMigrationTableExistsAsync();
 
-         // Record the migration version from the schema
-         if (migrationInfo is not null)
+         SchemaFileMigrationInfo? highestMigrationInfo = null;
+
+         foreach (var (content, _, _) in schemas)
+         {
+            if (string.IsNullOrEmpty(content))
+               continue;
+
+            await _connection.Dapper.ExecuteAsync(content, ct: cancellationToken);
+
+            var info = SchemaFileParser.ParseMigrationVersion(content);
+
+            if (info is not null)
+            {
+               if (highestMigrationInfo is null || info.Value.Identifier > highestMigrationInfo.Value.Identifier)
+                  highestMigrationInfo = info;
+            }
+         }
+
+         // Record the highest migration version across all applied schemas as the baseline.
+         if (highestMigrationInfo is not null)
          {
             await _connection.Dapper.ExecuteAsync(
                $"INSERT INTO {MIGRATIONS_TABLE_FULLY_QUALIFIED} (identifier, name, executed_at) VALUES (:identifier, :name, :executedAtUtc)",
                new Dictionary<string, object?> {
-                  { "identifier", migrationInfo.Value.Identifier },
-                  { "name", migrationInfo.Value.Name },
+                  { "identifier", highestMigrationInfo.Value.Identifier },
+                  { "name", highestMigrationInfo.Value.Name },
                   { "executedAtUtc", DateTime.UtcNow }
                },
                ct: cancellationToken

@@ -106,6 +106,8 @@ When a project references `mvdmio.Database.PgSQL` directly, or references anothe
 
 This works through the package's `build` and `buildTransitive` MSBuild props files.
 
+When `DatabaseMigrator` is constructed with multiple assemblies and the target database is empty, **every** assembly that contains an embedded `schema.sql` (or environment-specific `schema.{env}.sql`) has its schema applied, in the order the assemblies are passed to the constructor. Assemblies without a matching schema resource are silently skipped. All schemas run in a single transaction, and the migrations table is pre-created so that schema files using `CREATE TABLE IF NOT EXISTS "mvdmio"."migrations"` do not conflict. The baseline entry in `mvdmio.migrations` is recorded using the highest `-- Migration version: <id> (<name>)` header found across the applied schemas. If the database already contains migrations, no schema files are applied. When `MigrateDatabaseToAsync(targetIdentifier)` is used and any discovered schema's header version exceeds the target, the entire schema-first bootstrap is skipped (applying a subset would leave gaps that later migrations cannot fill).
+
 ### Generated Repositories
 
 ```csharp

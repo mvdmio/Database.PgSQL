@@ -33,6 +33,7 @@
                          OutputItemType="Analyzer"
                          SetTargetFramework="TargetFramework=netstandard2.0"
                          PrivateAssets="contentfiles;analyzers" />
+       <ProjectReference Include="..\mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema\mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema.csproj" />
     </ItemGroup>
 
    <!-- Embed schema files for testing embedded schema discovery -->

@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
+using mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema;
 using System.Reflection;
 using Testcontainers.PostgreSql;
 
@@ -20,6 +21,12 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    ///    Gets the test assembly which contains embedded schema resources.
    /// </summary>
    private static Assembly TestAssembly => typeof(SchemaFirstMigrationTests).Assembly;
+
+   /// <summary>
+   ///    Gets the secondary test support assembly which embeds its own <c>schema.sql</c> and
+   ///    <c>schema.local.sql</c> for multi-assembly schema discovery tests.
+   /// </summary>
+   private static Assembly SecondaryAssembly => typeof(AssemblyMarker).Assembly;
 
    protected static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
@@ -327,5 +334,145 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
 
       var localResourceName = EmbeddedSchemaDiscovery.GetSchemaResourceName([TestAssembly], "local");
       localResourceName.Should().Be("schema.local.sql");
+   }
+
+   [Fact]
+   public async Task MigrateDatabaseToLatestAsync_WithMultipleAssemblies_AppliesAllSchemasInOrder()
+   {
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      // Primary assembly's schema.sql has version 202505181000 (SimpleTable).
+      // Secondary assembly's schema.sql has version 202505181100 (SecondaryTable).
+      var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
+      var migrator = new DatabaseMigrator(
+         db,
+         environment: null,
+         [TestAssembly, SecondaryAssembly],
+         migrationRetriever);
+
+      await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      // Tables from BOTH schemas must exist.
+      (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
+      (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeTrue();
+
+      // The baseline migration row should carry the highest identifier across applied schemas.
+      var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
+      executedMigrations.Should().Contain(m => m.Identifier == 202505181100 && m.Name == "SecondaryTable");
+      // Only one row should represent the schema baseline.
+      executedMigrations.Count(m => m.Identifier is 202505181000 or 202505181100).Should().Be(1);
+   }
+
+   [Fact]
+   public async Task MigrateDatabaseToLatestAsync_WithMultipleAssembliesAndReversedOrder_StillAppliesBoth()
+   {
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      // Reverse order: secondary first, primary second.
+      var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
+      var migrator = new DatabaseMigrator(
+         db,
+         environment: null,
+         [SecondaryAssembly, TestAssembly],
+         migrationRetriever);
+
+      await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
+      (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeTrue();
+
+      // Highest identifier across schemas still recorded as the baseline.
+      var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
+      executedMigrations.Should().Contain(m => m.Identifier == 202505181100);
+   }
+
+   [Fact]
+   public async Task MigrateDatabaseToLatestAsync_WithMultipleAssembliesAndEnvironment_AppliesEnvironmentSchemaPerAssembly()
+   {
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      // Both assemblies ship schema.local.sql. Both local variants must be applied.
+      // Primary's schema.local.sql creates simple_table (same as non-local); secondary's
+      // schema.local.sql creates secondary_table_local (distinct from non-local secondary_table).
+      var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
+      var migrator = new DatabaseMigrator(
+         db,
+         environment: "local",
+         [TestAssembly, SecondaryAssembly],
+         migrationRetriever);
+
+      await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
+      // The local variant was applied (not the non-local secondary_table).
+      (await db.Management.TableExistsAsync("public", "secondary_table_local")).Should().BeTrue();
+      (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeFalse();
+
+      var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
+      executedMigrations.Should().Contain(m => m.Identifier == 202505181200 && m.Name == "SecondaryTableLocal");
+   }
+
+   [Fact]
+   public void EmbeddedSchemaDiscovery_FindAllSchemaResources_ReturnsOneEntryPerAssembly()
+   {
+      var resources = EmbeddedSchemaDiscovery.FindAllSchemaResources([TestAssembly, SecondaryAssembly], environment: null);
+
+      try
+      {
+         resources.Should().HaveCount(2);
+         resources[0].Assembly.Should().BeSameAs(TestAssembly);
+         resources[1].Assembly.Should().BeSameAs(SecondaryAssembly);
+      }
+      finally
+      {
+         foreach (var resource in resources)
+            resource.Stream.Dispose();
+      }
+   }
+
+   [Fact]
+   public void EmbeddedSchemaDiscovery_FindAllSchemaResources_SkipsAssembliesWithoutSchema()
+   {
+      // typeof(TestFixture).Assembly is the integration-tests assembly itself, which also has embedded schemas.
+      // Use the mvdmio.Database.PgSQL main assembly as a "no schema" assembly.
+      var noSchemaAssembly = typeof(DatabaseMigrator).Assembly;
+
+      var resources = EmbeddedSchemaDiscovery.FindAllSchemaResources(
+         [noSchemaAssembly, SecondaryAssembly],
+         environment: null);
+
+      try
+      {
+         resources.Should().HaveCount(1);
+         resources[0].Assembly.Should().BeSameAs(SecondaryAssembly);
+      }
+      finally
+      {
+         foreach (var resource in resources)
+            resource.Stream.Dispose();
+      }
+   }
+
+   [Fact]
+   public async Task MigrateDatabaseToAsync_WithTargetBelowHighestSchemaIdentifier_DoesNotApplyAnySchemas()
+   {
+      // Primary schema header = 202505181000, secondary = 202505181100.
+      // Targeting a value below the highest schema header must skip the whole bootstrap
+      // rather than applying only a subset (which would leave gaps that cannot be filled later).
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
+      var migrator = new DatabaseMigrator(
+         db,
+         environment: null,
+         [TestAssembly, SecondaryAssembly],
+         migrationRetriever);
+
+      await migrator.MigrateDatabaseToAsync(202505181050, CancellationToken);
+
+      // Bootstrap must be skipped because the secondary schema's header (202505181100) exceeds the target.
+      // secondary_table only comes from the secondary schema, so its absence proves the schema was not applied.
+      // (simple_table may exist because a reflection-based migration with identifier <= target creates it.)
+      (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeFalse();
    }
 }

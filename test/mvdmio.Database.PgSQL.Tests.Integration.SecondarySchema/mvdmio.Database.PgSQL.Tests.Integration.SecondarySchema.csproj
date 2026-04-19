@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+   <PropertyGroup>
+      <TargetFramework>net10.0</TargetFramework>
+      <ImplicitUsings>enable</ImplicitUsings>
+      <Nullable>enable</Nullable>
+      <IsPackable>false</IsPackable>
+   </PropertyGroup>
+
+   <!-- Embed schema files so multi-assembly schema discovery tests have a second source. -->
+   <ItemGroup>
+      <EmbeddedResource Include="Schemas\**\*.sql" LogicalName="%(Filename)%(Extension)" />
+   </ItemGroup>
+
+</Project>

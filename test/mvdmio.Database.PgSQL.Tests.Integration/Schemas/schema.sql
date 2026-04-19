@@ -5,7 +5,7 @@
 --
 
 CREATE SCHEMA IF NOT EXISTS "mvdmio";
-CREATE TABLE "mvdmio"."migrations" (
+CREATE TABLE IF NOT EXISTS "mvdmio"."migrations" (
    identifier  BIGINT      NOT NULL,
    name        TEXT        NOT NULL,
    executed_at TIMESTAMPTZ NOT NULL,
