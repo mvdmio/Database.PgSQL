@@ -89,6 +89,33 @@ Refreshes schema files for configured environments and removes migrations that a
 db cleanup
 ```
 
+### `db copy`
+
+Copies all table data from one configured environment to another using PostgreSQL binary `COPY`. Typical use case: refresh a local or test database from production.
+
+```bash
+db copy --from prod --to local
+db copy -f prod -t test --schemas billing,identity
+db copy -f prod -t local --exclude-tables public.audit_log,billing.large_archive
+```
+
+Behavior:
+
+- Resolves `--from` and `--to` against `connectionStrings` in `.mvdmio-migrations.yml`. Both flags are required.
+- Refuses to run when `--from` and `--to` resolve to the same connection string.
+- Validates that every source table exists on the destination with at least the same columns. Missing tables or columns are reported up front and the copy is aborted.
+- Truncates all destination tables in a single `TRUNCATE ... RESTART IDENTITY CASCADE` statement, then streams data table-by-table via binary `COPY`.
+- Disables FK and trigger checks on the destination for the duration of the copy by setting `session_replication_role = replica`. Requires the destination user to be a superuser.
+- Skips columns that are `GENERATED ... STORED` or `IDENTITY ALWAYS`. Tables where every column is filtered out are skipped with a warning.
+- After the copy, advances identity / serial sequences on the destination so the next insert continues past `MAX(id)`.
+- Honors the `schemas` config value (and the `--schemas` override) when both selecting tables and resetting sequences. When omitted, all user schemas are copied (system schemas and the `mvdmio.migrations` history table are always excluded).
+- `--exclude-tables` accepts a comma-separated list of `schema.table` entries to skip, regardless of `schemas` selection.
+
+Prerequisites:
+
+- The destination database schema must already match the source. Run `db migrate latest --environment <to>` first.
+- The destination connection user must be allowed to set `session_replication_role`. The default `postgres` superuser satisfies this.
+
 ## Configuration
 
 The tool uses `.mvdmio-migrations.yml`.

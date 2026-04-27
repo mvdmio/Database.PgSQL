@@ -12,6 +12,9 @@ rootCommand.Subcommands.Add(PullCommand.Create());
 // db cleanup
 rootCommand.Subcommands.Add(CleanupCommand.Create());
 
+// db copy --from <env> --to <env>
+rootCommand.Subcommands.Add(CopyCommand.Create());
+
 // db migration create <name>
 var migrationCommand = new Command("migration", "Migration scaffolding commands");
 migrationCommand.Subcommands.Add(MigrationCreateCommand.Create());

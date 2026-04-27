@@ -85,6 +85,14 @@ db migrate latest
 db pull
 ```
 
+Refresh a local database from another configured environment:
+
+```bash
+db copy --from prod --to local
+```
+
+`db copy` truncates all destination tables and streams data via PostgreSQL binary `COPY`. It honors the `schemas` config, skips generated and `IDENTITY ALWAYS` columns, and resets identity / serial sequences on the destination so subsequent inserts continue past the copied rows. Requires the destination user to be a superuser (uses `session_replication_role = replica` to bypass FK ordering). Run `db migrate latest --environment <to>` on the destination first so the schema matches the source.
+
 Package README:
 
 - [`src/mvdmio.Database.PgSQL.Tool/README.md`](src/mvdmio.Database.PgSQL.Tool/README.md)

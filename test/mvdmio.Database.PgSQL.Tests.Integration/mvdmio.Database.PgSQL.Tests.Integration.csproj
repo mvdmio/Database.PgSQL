@@ -28,6 +28,7 @@
 
     <ItemGroup>
        <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL\mvdmio.Database.PgSQL.csproj" />
+       <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL.Tool\mvdmio.Database.PgSQL.Tool.csproj" />
        <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL.Analyzers\mvdmio.Database.PgSQL.Analyzers.csproj"
                          ReferenceOutputAssembly="false"
                          OutputItemType="Analyzer"
