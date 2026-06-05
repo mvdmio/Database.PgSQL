@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using JetBrains.Annotations;
 using Npgsql;
 
@@ -5,12 +6,18 @@ namespace mvdmio.Database.PgSQL;
 
 /// <summary>
 ///    Provides access to commonly used databases.
+///    Data sources are cached per connection string and built lazily exactly once, so the factory is safe to call concurrently.
 /// </summary>
+/// <remarks>
+///    Dispose only after all in-flight operations using data sources from this factory have completed.
+///    Disposing the factory concurrently with active use (e.g. while another thread is calling <see cref="BuildConnection" /> or
+///    <see cref="BuildDataSource" />, or while a <see cref="DatabaseConnection" /> handed out by this factory is still in use) is not supported.
+/// </remarks>
 [PublicAPI]
 public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
 {
-   private readonly Dictionary<string, NpgsqlDataSource> _dataSources = new();
-   private readonly SemaphoreSlim _lock = new(1, 1);
+   private readonly ConcurrentDictionary<string, Lazy<NpgsqlDataSource>> _dataSources = new();
+   private volatile bool _disposed;
 
    /// <summary>
    ///   Builds a new data source for the given connection string.
@@ -38,52 +45,48 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
    /// <inheritdoc />
    public async ValueTask DisposeAsync()
    {
-      foreach (var dataSource in _dataSources)
-         await dataSource.Value.DisposeAsync();
+      _disposed = true;
 
-      _lock.Dispose();
+      foreach (var dataSource in _dataSources.Values)
+      {
+         if (dataSource.IsValueCreated)
+            await dataSource.Value.DisposeAsync();
+      }
    }
 
    /// <inheritdoc />
    public void Dispose()
    {
-      foreach (var dataSource in _dataSources)
-         dataSource.Value.Dispose();
+      _disposed = true;
 
-      _lock.Dispose();
+      foreach (var dataSource in _dataSources.Values)
+      {
+         if (dataSource.IsValueCreated)
+            dataSource.Value.Dispose();
+      }
    }
 
    private NpgsqlDataSource RetrieveOrCreate(string connectionString, Action<NpgsqlDataSourceBuilder>? builderAction = null)
    {
-      if (_dataSources.TryGetValue(connectionString, out var dataSource))
-         return dataSource;
+      ObjectDisposedException.ThrowIf(_disposed, this);
 
-      _lock.Wait();
+      var dataSource = _dataSources.GetOrAdd(
+         connectionString,
+         cs => new Lazy<NpgsqlDataSource>(() => {
+            var dataSourceBuilder = new NpgsqlDataSourceBuilder(cs) {
+               ConnectionStringBuilder = {
+                  IncludeErrorDetail = true,
+                  LogParameters = true
+               }
+            };
 
-      try
-      {
-         if (_dataSources.TryGetValue(connectionString, out dataSource))
-            return dataSource;
+            dataSourceBuilder.EnableDynamicJson();
 
-         var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString)
-         {
-            ConnectionStringBuilder = {
-               IncludeErrorDetail = true,
-               LogParameters = true
-            }
-         };
+            builderAction?.Invoke(dataSourceBuilder);
+            return dataSourceBuilder.Build();
+         })
+      );
 
-         dataSourceBuilder.EnableDynamicJson();
-
-         builderAction?.Invoke(dataSourceBuilder);
-         dataSource = dataSourceBuilder.Build();
-
-         _dataSources.Add(connectionString, dataSource);
-         return dataSource;
-      }
-      finally
-      {
-         _lock.Release();
-      }
+      return dataSource.Value;
    }
 }
