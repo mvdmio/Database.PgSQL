@@ -100,6 +100,12 @@ var migrator = new DatabaseMigrator(db, typeof(Program).Assembly);
 await migrator.MigrateDatabaseToLatestAsync();
 ```
 
+#### Concurrent startup
+
+`MigrateDatabaseToLatestAsync` and `MigrateDatabaseToAsync` are safe to call from multiple application instances starting at the same time (rolling deploys, autoscaling, multi-pod startup). The runner serializes the entire migration run with a session-scoped PostgreSQL advisory lock: only one instance migrates at a time, every other instance blocks until it finishes, then acquires the lock, re-reads the current state, finds nothing left to do, and continues. This is always on, requires no configuration, and is released automatically if the migrating instance crashes.
+
+> **PgBouncer caveat:** session-scoped advisory locks do not work behind PgBouncer in **transaction-pooling** mode, because successive statements may land on different backends. Run migrations against a **direct connection** or a **session-pooled** connection. A consumer-configured server-side `statement_timeout` can also cancel the blocking lock acquisition.
+
 ### Embedded Schema Files
 
 When a project references `mvdmio.Database.PgSQL` directly, or references another project that does, any `Schemas/**/*.sql` files in that project are automatically included as embedded resources.

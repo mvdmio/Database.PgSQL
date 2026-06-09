@@ -38,8 +38,15 @@ public sealed class ReflectionMigrationRetriever : IMigrationRetriever
       {
          foreach (var type in assembly.GetTypes())
          {
-            if (typeof(T).IsAssignableFrom(type))
+            // Only consider concrete types that can be instantiated with a parameterless constructor.
+            // Conventional migrations always satisfy this; abstract bases, interfaces, generic definitions,
+            // and helper types with parameterized constructors are skipped instead of crashing instantiation.
+            if (typeof(T).IsAssignableFrom(type)
+                && type is { IsAbstract: false, IsInterface: false, IsGenericTypeDefinition: false }
+                && type.GetConstructor(Type.EmptyTypes) is not null)
+            {
                types.Add(type);
+            }
          }
       }
 

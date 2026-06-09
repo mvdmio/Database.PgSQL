@@ -1,6 +1,6 @@
-using System.Collections.Concurrent;
 using JetBrains.Annotations;
 using Npgsql;
+using System.Collections.Concurrent;
 
 namespace mvdmio.Database.PgSQL;
 
@@ -72,8 +72,10 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
 
       var dataSource = _dataSources.GetOrAdd(
          connectionString,
-         cs => new Lazy<NpgsqlDataSource>(() => {
-            var dataSourceBuilder = new NpgsqlDataSourceBuilder(cs) {
+         cs => new Lazy<NpgsqlDataSource>(() =>
+         {
+            var dataSourceBuilder = new NpgsqlDataSourceBuilder(cs)
+            {
                ConnectionStringBuilder = {
                   IncludeErrorDetail = true,
                   LogParameters = true

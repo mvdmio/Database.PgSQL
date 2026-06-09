@@ -9,6 +9,8 @@ This repository contains two publishable packages:
 
 The library package also ships MSBuild props that automatically embed `Schemas/**/*.sql` files for both direct package consumers and downstream projects reached through transitive project/package references. When `DatabaseMigrator` is given multiple assemblies, schemas from every assembly are applied in order on a cold-start migration.
 
+The migration runner is safe to call from multiple application instances starting at once: it serializes each run with a session-scoped PostgreSQL advisory lock so migrations are applied exactly once, with no configuration required. Run migrations against a direct or session-pooled connection (not PgBouncer transaction-pooling). See [docs/adr/0001-advisory-lock-for-migration-runner.md](docs/adr/0001-advisory-lock-for-migration-runner.md).
+
 The CLI tool now supports an optional `schemas` configuration value so multi-project solutions can export only the PostgreSQL schemas owned by each project. When omitted or empty, exports still include all user schemas.
 
 ## Packages

@@ -18,6 +18,11 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    private const string MIGRATIONS_TABLE = "migrations";
    private const string MIGRATIONS_TABLE_FULLY_QUALIFIED = "\"mvdmio\".\"migrations\"";
 
+   // Fixed 64-bit key for the session-scoped PostgreSQL advisory lock that serializes migration runs
+   // across concurrently-starting instances. The value is the ASCII bytes of "mvdmio\0\1" and is a constant,
+   // not derived at runtime, so every instance contends for the same lock. See docs/adr/0001.
+   private const long MIGRATION_ADVISORY_LOCK_KEY = 0x6D76_646D_696F_0001;
+
    private readonly DatabaseConnection _connection;
    private readonly IMigrationRetriever _migrationRetriever;
    private readonly string? _environment;
@@ -107,35 +112,69 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    }
 
    /// <inheritdoc />
-   public async Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken = default)
+   public Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken = default)
    {
-      // Check if database is empty and we have a schema resource to apply
-      if (await ShouldApplySchemaAsync(targetIdentifier: null, cancellationToken))
-      {
-         await ApplySchemaAsync(cancellationToken);
-      }
-      else
-      {
-         await EnsureMigrationTableExistsAsync();
-      }
-
-      await RunPendingMigrationsAsync(targetIdentifier: null, cancellationToken);
+      return MigrateAsync(targetIdentifier: null, cancellationToken);
    }
 
    /// <inheritdoc />
-   public async Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken = default)
+   public Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken = default)
    {
-      // Check if database is empty and we have a schema resource to apply
-      if (await ShouldApplySchemaAsync(targetIdentifier, cancellationToken))
-      {
-         await ApplySchemaAsync(cancellationToken);
-      }
-      else
-      {
-         await EnsureMigrationTableExistsAsync();
-      }
+      return MigrateAsync(targetIdentifier, cancellationToken);
+   }
 
-      await RunPendingMigrationsAsync(targetIdentifier, cancellationToken);
+   /// <summary>
+   ///    Runs the full migration orchestration under a session-scoped advisory lock so that concurrently-starting
+   ///    instances apply migrations exactly once. The lock is acquired before the empty-database check, held across
+   ///    schema application and the entire migration loop, and released in a <c>finally</c>.
+   /// </summary>
+   private async Task MigrateAsync(long? targetIdentifier, CancellationToken cancellationToken)
+   {
+      // Open the connection for the whole run so the session-scoped advisory lock stays held across every step.
+      // Mirrors the _transactionOpenedConnection pattern: close it only if we were the ones who opened it.
+      var migratorOpenedConnection = await _connection.OpenAsync(cancellationToken);
+      var lockAcquired = false;
+
+      try
+      {
+         await AcquireMigrationLockAsync(cancellationToken);
+         lockAcquired = true;
+
+         // Check if database is empty and we have a schema resource to apply
+         if (await ShouldApplySchemaAsync(targetIdentifier, cancellationToken))
+         {
+            await ApplySchemaAsync(cancellationToken);
+         }
+         else
+         {
+            await EnsureMigrationTableExistsAsync();
+         }
+
+         await RunPendingMigrationsAsync(targetIdentifier, cancellationToken);
+      }
+      finally
+      {
+         // Clean up with a non-cancellable token: even when the run is cancelled mid-way, the advisory lock must
+         // still be released and the connection closed (passing the original token would make WaitAsync throw and
+         // skip cleanup). The lock is held on the session (outside any transaction) so a transaction rollback cannot
+         // release it; release it explicitly here, before the conditional close, so it never lingers across the close.
+         // Releasing is best-effort: a failure here (e.g. a broken connection) must not mask the exception already
+         // propagating, and the session lock is released anyway once the connection is closed/returned to the pool.
+         if (lockAcquired)
+         {
+            try
+            {
+               await ReleaseMigrationLockAsync(CancellationToken.None);
+            }
+            catch
+            {
+               // Intentionally swallowed; see comment above.
+            }
+         }
+
+         if (migratorOpenedConnection)
+            await _connection.CloseAsync(CancellationToken.None);
+      }
    }
 
    /// <inheritdoc />
@@ -302,6 +341,33 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
             throw new MigrationException(migration, e);
          }
       }
+   }
+
+   /// <summary>
+   ///    Acquires the session-scoped advisory lock, blocking until it is granted. Issued with an infinite command
+   ///    timeout so Npgsql's default 30-second command timeout cannot abort a wait for a long-but-healthy migration
+   ///    held by another instance.
+   /// </summary>
+   private async Task AcquireMigrationLockAsync(CancellationToken cancellationToken)
+   {
+      await _connection.Dapper.ExecuteAsync(
+         "SELECT pg_advisory_lock(:key)",
+         new Dictionary<string, object?> { { "key", MIGRATION_ADVISORY_LOCK_KEY } },
+         commandTimeout: TimeSpan.Zero, // 0 = infinite; a healthy migration may legitimately run longer than the default timeout.
+         ct: cancellationToken
+      );
+   }
+
+   /// <summary>
+   ///    Releases the session-scoped advisory lock acquired by <see cref="AcquireMigrationLockAsync" />.
+   /// </summary>
+   private async Task ReleaseMigrationLockAsync(CancellationToken cancellationToken)
+   {
+      await _connection.Dapper.ExecuteAsync(
+         "SELECT pg_advisory_unlock(:key)",
+         new Dictionary<string, object?> { { "key", MIGRATION_ADVISORY_LOCK_KEY } },
+         ct: cancellationToken
+      );
    }
 
    private async Task EnsureMigrationTableExistsAsync()
