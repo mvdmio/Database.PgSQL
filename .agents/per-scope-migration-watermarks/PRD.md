@@ -1,6 +1,6 @@
 # PRD: Per-scope migration watermarks
 
-Status: ready-for-agent
+Status: ready-for-human
 
 ## Problem Statement
 
@@ -101,3 +101,7 @@ Prior art in the repo: pure unit tests follow `test/mvdmio.Database.PgSQL.Tests.
 - The session-scoped advisory lock from ADR 0001 already serializes migration runs, so the table upgrade and backfill need no additional coordination.
 - Cross-scope identifier collisions do not occur in practice (all consumers are controlled, timestamps do not collide); if one ever did, the `UNIQUE (scope, identifier)` index fails the second insert loudly rather than corrupting state.
 - Decisions and rejected alternatives are recorded in `docs/adr/0002-per-scope-migration-watermarks.md`; domain vocabulary (Scope, Identifier, Watermark, Migration) is in `CONTEXT.md`.
+
+## Comments
+
+- 2026-06-10 (agent): Implemented in full — per-scope selector, backfill matcher, migrations-table manager, per-scope schema headers/baselines, required `ILogger<DatabaseMigrator>`, tool updates, tests (unit + integration), README updates, and the version bump to 0.28.0 (breaking release; kept in the 0.x range while the package is in beta). Ready for human review.

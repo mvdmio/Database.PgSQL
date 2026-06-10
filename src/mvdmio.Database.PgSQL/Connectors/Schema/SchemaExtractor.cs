@@ -1,4 +1,5 @@
 using JetBrains.Annotations;
+using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.Models;
 using System.Text;
 
@@ -48,32 +49,57 @@ public sealed class SchemaExtractor
    public IReadOnlyCollection<string>? IncludedSchemas => _includedSchemas;
 
    /// <summary>
-   ///    Gets the current migration version (the most recently executed migration).
+   ///    Gets the current migration version per scope: the highest executed identifier within each scope.
+   ///    Rows recorded before scopes existed (and not yet backfilled) are reported as a single entry with a
+   ///    null scope.
    /// </summary>
    /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The latest executed migration, or null if no migrations have been executed or the migration table does not exist.</returns>
-   public async Task<ExecutedMigrationModel?> GetCurrentMigrationVersionAsync(CancellationToken cancellationToken = default)
+   /// <returns>
+   ///    One entry per scope, ordered by scope, or empty if no migrations have been executed or the migration
+   ///    table does not exist.
+   /// </returns>
+   public async Task<IReadOnlyList<ExecutedMigrationModel>> GetCurrentMigrationVersionAsync(CancellationToken cancellationToken = default)
    {
       var schemaExists = await _db.Management.SchemaExistsAsync(MIGRATIONS_SCHEMA);
       if (!schemaExists)
-         return null;
+         return [];
 
       var tableExists = await _db.Management.TableExistsAsync(MIGRATIONS_SCHEMA, MIGRATIONS_TABLE);
       if (!tableExists)
-         return null;
+         return [];
 
-      return await _db.Dapper.QuerySingleOrDefaultAsync<ExecutedMigrationModel>(
+      // The scope column only exists once the new migrator has touched the database; exporting from a
+      // not-yet-upgraded database must still work, so fall back to a scope-less select in that case.
+      var scopeColumnExists = await MigrationsTableManager.ScopeColumnExistsAsync(_db, cancellationToken);
+
+      if (!scopeColumnExists)
+      {
+         return (await _db.Dapper.QueryAsync<ExecutedMigrationModel>(
+            $"""
+            SELECT
+               identifier AS identifier,
+               name AS name,
+               executed_at AS executedAtUtc
+            FROM {MIGRATIONS_TABLE_FULLY_QUALIFIED}
+            ORDER BY identifier DESC
+            LIMIT 1
+            """,
+            ct: cancellationToken
+         )).ToArray();
+      }
+
+      return (await _db.Dapper.QueryAsync<ExecutedMigrationModel>(
          $"""
-         SELECT
+         SELECT DISTINCT ON (scope)
             identifier AS identifier,
             name AS name,
-            executed_at AS executedAtUtc
+            executed_at AS executedAtUtc,
+            scope AS scope
          FROM {MIGRATIONS_TABLE_FULLY_QUALIFIED}
-         ORDER BY identifier DESC
-         LIMIT 1
+         ORDER BY scope, identifier DESC
          """,
          ct: cancellationToken
-      );
+      )).ToArray();
    }
 
    /// <summary>
@@ -234,11 +260,20 @@ public sealed class SchemaExtractor
       sb.AppendLine("-- PostgreSQL database schema");
       sb.AppendLine($"-- Generated at {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
 
-      var currentMigration = await GetCurrentMigrationVersionAsync(cancellationToken);
-      if (currentMigration is not null)
-         sb.AppendLine($"-- Migration version: {currentMigration.Value.Identifier} ({currentMigration.Value.Name})");
+      var currentMigrations = await GetCurrentMigrationVersionAsync(cancellationToken);
+      if (currentMigrations.Count > 0)
+      {
+         // One line per scope. Rows without a scope (legacy, not yet backfilled) keep the legacy
+         // scope-less line format so the header stays round-trippable.
+         foreach (var migration in currentMigrations)
+         {
+            sb.AppendLine($"-- Migration version: {SchemaFileParser.FormatMigrationVersion(migration.Identifier, migration.Name, migration.Scope)}");
+         }
+      }
       else
+      {
          sb.AppendLine("-- Migration version: (none)");
+      }
 
       sb.AppendLine("--");
       sb.AppendLine();

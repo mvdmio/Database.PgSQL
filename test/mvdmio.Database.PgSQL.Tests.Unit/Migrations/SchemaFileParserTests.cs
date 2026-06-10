@@ -1,13 +1,15 @@
 using AwesomeAssertions;
 using mvdmio.Database.PgSQL.Migrations;
+using mvdmio.Database.PgSQL.Migrations.Models;
 
 namespace mvdmio.Database.PgSQL.Tests.Unit.Migrations;
 
 public class SchemaFileParserTests
 {
    private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
+
    [Fact]
-   public void ParseMigrationVersion_WithValidHeader_ReturnsMigrationInfo()
+   public void ParseMigrationVersion_WithLegacyScopelessHeader_ReturnsSingleEntryWithNullScope()
    {
       var content = """
          --
@@ -21,13 +23,67 @@ public class SchemaFileParserTests
 
       var result = SchemaFileParser.ParseMigrationVersion(content);
 
-      result.Should().NotBeNull();
-      result!.Value.Identifier.Should().Be(202602161430);
-      result.Value.Name.Should().Be("AddUsersTable");
+      result.Should().ContainSingle();
+      result[0].Identifier.Should().Be(202602161430);
+      result[0].Name.Should().Be("AddUsersTable");
+      result[0].Scope.Should().BeNull();
    }
 
    [Fact]
-   public void ParseMigrationVersion_WithNoMigrationVersion_ReturnsNull()
+   public void ParseMigrationVersion_WithSinglePerScopeLine_ReturnsEntryWithScope()
+   {
+      var content = """
+         --
+         -- PostgreSQL database schema
+         -- Migration version: 202602161430 (AddUsersTable) [MyApp.Data]
+         --
+         """;
+
+      var result = SchemaFileParser.ParseMigrationVersion(content);
+
+      result.Should().ContainSingle();
+      result[0].Identifier.Should().Be(202602161430);
+      result[0].Name.Should().Be("AddUsersTable");
+      result[0].Scope.Should().Be("MyApp.Data");
+   }
+
+   [Fact]
+   public void ParseMigrationVersion_WithMultiplePerScopeLines_ReturnsAllEntriesInFileOrder()
+   {
+      var content = """
+         --
+         -- PostgreSQL database schema
+         -- Migration version: 202602161430 (AddUsersTable) [MyApp.Data]
+         -- Migration version: 202601010900 (AddInvoices) [MyApp.Billing]
+         --
+         """;
+
+      var result = SchemaFileParser.ParseMigrationVersion(content);
+
+      result.Should().HaveCount(2);
+      result[0].Should().Be(new SchemaFileMigrationInfo(202602161430, "AddUsersTable", "MyApp.Data"));
+      result[1].Should().Be(new SchemaFileMigrationInfo(202601010900, "AddInvoices", "MyApp.Billing"));
+   }
+
+   [Fact]
+   public void ParseMigrationVersion_WithMixedLegacyAndScopedLines_ReturnsBoth()
+   {
+      var content = """
+         --
+         -- Migration version: 202602161430 (AddUsersTable)
+         -- Migration version: 202601010900 (AddInvoices) [MyApp.Billing]
+         --
+         """;
+
+      var result = SchemaFileParser.ParseMigrationVersion(content);
+
+      result.Should().HaveCount(2);
+      result[0].Scope.Should().BeNull();
+      result[1].Scope.Should().Be("MyApp.Billing");
+   }
+
+   [Fact]
+   public void ParseMigrationVersion_WithNoMigrationVersion_ReturnsEmpty()
    {
       var content = """
          --
@@ -41,29 +97,29 @@ public class SchemaFileParserTests
 
       var result = SchemaFileParser.ParseMigrationVersion(content);
 
-      result.Should().BeNull();
+      result.Should().BeEmpty();
    }
 
    [Fact]
-   public void ParseMigrationVersion_WithEmptyContent_ReturnsNull()
+   public void ParseMigrationVersion_WithEmptyContent_ReturnsEmpty()
    {
       var result = SchemaFileParser.ParseMigrationVersion("");
 
-      result.Should().BeNull();
+      result.Should().BeEmpty();
    }
 
    [Fact]
-   public void ParseMigrationVersion_WithNoHeader_ReturnsNull()
+   public void ParseMigrationVersion_WithNoHeader_ReturnsEmpty()
    {
       var content = "CREATE TABLE users (id SERIAL PRIMARY KEY);";
 
       var result = SchemaFileParser.ParseMigrationVersion(content);
 
-      result.Should().BeNull();
+      result.Should().BeEmpty();
    }
 
    [Fact]
-   public void ParseMigrationVersion_WithMalformedIdentifier_ReturnsNull()
+   public void ParseMigrationVersion_WithMalformedIdentifier_ReturnsEmpty()
    {
       var content = """
          --
@@ -74,7 +130,7 @@ public class SchemaFileParserTests
 
       var result = SchemaFileParser.ParseMigrationVersion(content);
 
-      result.Should().BeNull();
+      result.Should().BeEmpty();
    }
 
    [Fact]
@@ -89,9 +145,9 @@ public class SchemaFileParserTests
 
       var result = SchemaFileParser.ParseMigrationVersion(content);
 
-      result.Should().NotBeNull();
-      result!.Value.Identifier.Should().Be(202602181500);
-      result.Value.Name.Should().Be("Add_Users_And_Orders_Tables_v2");
+      result.Should().ContainSingle();
+      result[0].Identifier.Should().Be(202602181500);
+      result[0].Name.Should().Be("Add_Users_And_Orders_Tables_v2");
    }
 
    [Fact]
@@ -106,9 +162,9 @@ public class SchemaFileParserTests
 
       var result = SchemaFileParser.ParseMigrationVersion(content);
 
-      result.Should().NotBeNull();
-      result!.Value.Identifier.Should().Be(202602181500);
-      result.Value.Name.Should().Be("Add Users Table");
+      result.Should().ContainSingle();
+      result[0].Identifier.Should().Be(202602181500);
+      result[0].Name.Should().Be("Add Users Table");
    }
 
    [Fact]
@@ -117,15 +173,31 @@ public class SchemaFileParserTests
       var content = """
          --
          -- PostgreSQL database schema
-         --   Migration version:   202602181500   (  AddUsersTable  )   
+         --   Migration version:   202602181500   (  AddUsersTable  )
          --
          """;
 
       var result = SchemaFileParser.ParseMigrationVersion(content);
 
-      result.Should().NotBeNull();
-      result!.Value.Identifier.Should().Be(202602181500);
-      result.Value.Name.Should().Be("AddUsersTable");
+      result.Should().ContainSingle();
+      result[0].Identifier.Should().Be(202602181500);
+      result[0].Name.Should().Be("AddUsersTable");
+   }
+
+   [Fact]
+   public void ParseMigrationVersion_WithExtraWhitespaceAroundScope_TrimsScope()
+   {
+      var content = """
+         --
+         -- PostgreSQL database schema
+         -- Migration version: 202602181500 (AddUsersTable)   [  MyApp.Data  ]
+         --
+         """;
+
+      var result = SchemaFileParser.ParseMigrationVersion(content);
+
+      result.Should().ContainSingle();
+      result[0].Scope.Should().Be("MyApp.Data");
    }
 
    [Fact]
@@ -140,9 +212,9 @@ public class SchemaFileParserTests
 
       var result = SchemaFileParser.ParseMigrationVersion(content);
 
-      result.Should().NotBeNull();
-      result!.Value.Identifier.Should().Be(999912312359);
-      result.Value.Name.Should().Be("FinalMigration");
+      result.Should().ContainSingle();
+      result[0].Identifier.Should().Be(999912312359);
+      result[0].Name.Should().Be("FinalMigration");
    }
 
    [Fact]
@@ -158,9 +230,24 @@ public class SchemaFileParserTests
 
       var result = SchemaFileParser.ParseMigrationVersion(content);
 
-      result.Should().NotBeNull();
-      result!.Value.Identifier.Should().Be(202602161430);
-      result.Value.Name.Should().Be("TestMigration");
+      result.Should().ContainSingle();
+      result[0].Identifier.Should().Be(202602161430);
+      result[0].Name.Should().Be("TestMigration");
+   }
+
+   [Fact]
+   public void FormatMigrationVersion_RoundTripsThroughParse()
+   {
+      var content = $"""
+         -- Migration version: {SchemaFileParser.FormatMigrationVersion(202602161430, "AddUsersTable", "MyApp.Data")}
+         -- Migration version: {SchemaFileParser.FormatMigrationVersion(202601010900, "AddInvoices", null)}
+         """;
+
+      var result = SchemaFileParser.ParseMigrationVersion(content);
+
+      result.Should().HaveCount(2);
+      result[0].Should().Be(new SchemaFileMigrationInfo(202602161430, "AddUsersTable", "MyApp.Data"));
+      result[1].Should().Be(new SchemaFileMigrationInfo(202601010900, "AddInvoices", Scope: null));
    }
 
    [Fact]
@@ -179,9 +266,9 @@ public class SchemaFileParserTests
 
          var result = await SchemaFileParser.ParseMigrationVersionFromFileAsync(tempFile, CancellationToken);
 
-         result.Should().NotBeNull();
-         result!.Value.Identifier.Should().Be(202602161430);
-         result.Value.Name.Should().Be("AddUsersTable");
+         result.Should().ContainSingle();
+         result[0].Identifier.Should().Be(202602161430);
+         result[0].Name.Should().Be("AddUsersTable");
       }
       finally
       {
@@ -215,9 +302,9 @@ public class SchemaFileParserTests
 
          var result = SchemaFileParser.ParseMigrationVersionFromFile(tempFile);
 
-         result.Should().NotBeNull();
-         result!.Value.Identifier.Should().Be(202602161430);
-         result.Value.Name.Should().Be("AddUsersTable");
+         result.Should().ContainSingle();
+         result[0].Identifier.Should().Be(202602161430);
+         result[0].Name.Should().Be("AddUsersTable");
       }
       finally
       {

@@ -63,6 +63,66 @@ public class MigrationExecutionServiceTests
    }
 
    [Fact]
+   public async Task ExecuteAsync_LatestWithSameIdentifierExecutedInAnotherScope_StillRunsMigrator()
+   {
+      // An executed row in a DIFFERENT scope shares the identifier of this project's pending migration
+      // (legal under UNIQUE (scope, identifier)). The up-to-date short-circuit must follow the migrator's
+      // per-scope watermark rule, not identifier membership, or the migration is silently skipped.
+      var runtime = new FakeMigrationRuntime
+      {
+         IsDatabaseEmptyResult = false,
+         AlreadyExecuted = [new ExecutedMigrationModel(202602161430, "OtherScopeMigration", DateTime.UtcNow, "Other.Scope")],
+         FinalExecuted =
+         [
+            new ExecutedMigrationModel(202602161430, "OtherScopeMigration", DateTime.UtcNow, "Other.Scope"),
+            new ExecutedMigrationModel(202602161430, "Migration202602161430", DateTime.UtcNow, ThisAssemblyScope)
+         ]
+      };
+      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
+      var service = new MigrationExecutionService(runtimeFactory, new FakeSchemaResourceService(), new FakeMigrateReporter());
+      var project = CreateProjectContext([new FakeDbMigration(202602161430)]);
+
+      await service.ExecuteAsync(
+         MigrateRequest.Latest,
+         "Host=localhost;Database=mydb",
+         "local",
+         project,
+         TestContext.Current.CancellationToken
+      );
+
+      runtime.MigrateLatestCallCount.Should().Be(1);
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_LatestWithScopeWatermarkCoveringAllMigrations_ReportsUpToDateAndSkipsMigrator()
+   {
+      // A baseline row above every migration's identifier (schema-first bootstrap) covers them all within
+      // the scope, even though no row matches any migration identifier exactly.
+      var runtime = new FakeMigrationRuntime
+      {
+         IsDatabaseEmptyResult = false,
+         AlreadyExecuted = [new ExecutedMigrationModel(202602161600, "Baseline", DateTime.UtcNow, ThisAssemblyScope)]
+      };
+      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
+      var reporter = new FakeMigrateReporter();
+      var service = new MigrationExecutionService(runtimeFactory, new FakeSchemaResourceService(), reporter);
+      var project = CreateProjectContext([new FakeDbMigration(202602161430), new FakeDbMigration(202602161530)]);
+
+      await service.ExecuteAsync(
+         MigrateRequest.Latest,
+         "Host=localhost;Database=mydb",
+         "local",
+         project,
+         TestContext.Current.CancellationToken
+      );
+
+      reporter.Infos.Should().Contain("Database is already up to date.");
+      runtime.MigrateLatestCallCount.Should().Be(0);
+   }
+
+   private static string ThisAssemblyScope => typeof(MigrationExecutionServiceTests).Assembly.GetName().Name!;
+
+   [Fact]
    public async Task ExecuteAsync_TargetWithNewerSchema_ReportsAndRunsTargetMigrations()
    {
       var runtime = new FakeMigrationRuntime

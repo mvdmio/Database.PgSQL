@@ -11,6 +11,8 @@ The library package also ships MSBuild props that automatically embed `Schemas/*
 
 The migration runner is safe to call from multiple application instances starting at once: it serializes each run with a session-scoped PostgreSQL advisory lock so migrations are applied exactly once, with no configuration required. Run migrations against a direct or session-pooled connection (not PgBouncer transaction-pooling). See [docs/adr/0001-advisory-lock-for-migration-runner.md](docs/adr/0001-advisory-lock-for-migration-runner.md).
 
+Migrations are tracked **per scope** (defaulting to the declaring assembly's simple name, overridable on `IDbMigration`): each scope keeps its own watermark, so multiple assemblies migrating the same database advance independently and can never silently suppress each other's migrations. Existing databases are upgraded in place on the next run, with a temporary backfill attributing existing rows to their scope. See [docs/adr/0002-per-scope-migration-watermarks.md](docs/adr/0002-per-scope-migration-watermarks.md).
+
 The CLI tool now supports an optional `schemas` configuration value so multi-project solutions can export only the PostgreSQL schemas owned by each project. When omitted or empty, exports still include all user schemas.
 
 ## Packages

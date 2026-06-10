@@ -12,4 +12,9 @@
       <EmbeddedResource Include="Schemas\**\*.sql" LogicalName="%(Filename)%(Extension)" />
    </ItemGroup>
 
+   <!-- Referenced so this assembly can declare its own migrations for multi-scope tests. -->
+   <ItemGroup>
+      <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL\mvdmio.Database.PgSQL.csproj" />
+   </ItemGroup>
+
 </Project>

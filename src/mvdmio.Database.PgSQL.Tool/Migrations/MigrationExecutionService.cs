@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.Models;
@@ -51,7 +52,7 @@ internal class MigrationExecutionService
 
       if (!await TryReportSchemaPathAsync(request, environmentName, project, isDatabaseEmpty, cancellationToken))
       {
-         var pendingCount = targetMigrations.Count(m => alreadyExecuted.All(e => e.Identifier != m.Identifier));
+         var pendingCount = CountPendingMigrations(targetMigrations, alreadyExecuted);
 
          if (request.IsLatest)
          {
@@ -85,6 +86,22 @@ internal class MigrationExecutionService
       var finalExecuted = (await runtime.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
       var appliedCount = finalExecuted.Length - alreadyExecuted.Length;
       _reporter.WriteInfo($"Migration complete. {appliedCount} migration(s) applied.");
+   }
+
+   /// <summary>
+   ///    Mirrors the migrator's per-scope watermark rule: a migration is pending when its identifier is ahead
+   ///    of the highest executed identifier within its own scope. An identifier-membership check would diverge
+   ///    — an executed row in a different scope must not count a migration as applied, and rows without a
+   ///    scope (legacy, not yet backfilled) are excluded from every watermark.
+   /// </summary>
+   private static int CountPendingMigrations(IReadOnlyList<IDbMigration> targetMigrations, IReadOnlyList<ExecutedMigrationModel> alreadyExecuted)
+   {
+      var watermarks = alreadyExecuted
+         .Where(x => x.Scope is not null)
+         .GroupBy(x => x.Scope!, StringComparer.Ordinal)
+         .ToDictionary(group => group.Key, group => group.Max(x => x.Identifier), StringComparer.Ordinal);
+
+      return targetMigrations.Count(m => !watermarks.TryGetValue(m.Scope, out var watermark) || m.Identifier > watermark);
    }
 
    private IReadOnlyList<IDbMigration>? GetTargetMigrations(
@@ -123,10 +140,8 @@ internal class MigrationExecutionService
 
          if (schemaContent is not null)
          {
-            var migrationInfo = SchemaFileParser.ParseMigrationVersion(schemaContent);
-
-            if (migrationInfo is not null)
-               _reporter.WriteInfo($"Schema contains migration version: {migrationInfo.Value.Identifier} ({migrationInfo.Value.Name})");
+            foreach (var migrationInfo in SchemaFileParser.ParseMigrationVersion(schemaContent))
+               _reporter.WriteInfo($"Schema contains migration version: {FormatMigrationVersion(migrationInfo)}");
          }
 
          _reporter.WriteInfo(string.Empty);
@@ -137,21 +152,31 @@ internal class MigrationExecutionService
          return true;
 
       var targetIdentifier = request.TargetIdentifier!.Value;
-      var schemaMigrationInfo = SchemaFileParser.ParseMigrationVersion(schemaContent);
-      if (schemaMigrationInfo is null)
+      var schemaMigrationInfos = SchemaFileParser.ParseMigrationVersion(schemaContent);
+      if (schemaMigrationInfos.Count == 0)
          return true;
 
-      if (schemaMigrationInfo.Value.Identifier <= targetIdentifier)
+      var highestSchemaIdentifier = schemaMigrationInfos.Max(x => x.Identifier);
+
+      if (highestSchemaIdentifier <= targetIdentifier)
       {
          _reporter.WriteInfo($"Empty database detected. Will apply embedded schema: {schemaResourceName}");
-         _reporter.WriteInfo($"Schema contains migration version: {schemaMigrationInfo.Value.Identifier} ({schemaMigrationInfo.Value.Name})");
+
+         foreach (var migrationInfo in schemaMigrationInfos)
+            _reporter.WriteInfo($"Schema contains migration version: {FormatMigrationVersion(migrationInfo)}");
+
          _reporter.WriteInfo(string.Empty);
          return true;
       }
 
-      _reporter.WriteInfo($"Schema version ({schemaMigrationInfo.Value.Identifier}) is newer than target ({targetIdentifier}). Running migrations instead.");
+      _reporter.WriteInfo($"Schema version ({highestSchemaIdentifier}) is newer than target ({targetIdentifier}). Running migrations instead.");
       _reporter.WriteInfo(string.Empty);
       return true;
+   }
+
+   private static string FormatMigrationVersion(SchemaFileMigrationInfo migrationInfo)
+   {
+      return SchemaFileParser.FormatMigrationVersion(migrationInfo.Identifier, migrationInfo.Name, migrationInfo.Scope);
    }
 }
 
@@ -228,7 +253,7 @@ internal sealed class DatabaseMigrationRuntime : IMigrationRuntime
    public DatabaseMigrationRuntime(string connectionString, string? environmentName, MigrationProjectContext project)
    {
       _connection = new DatabaseConnection(connectionString);
-      _migrator = new DatabaseMigrator(_connection, environmentName, [project.Assembly], project.MigrationRetriever);
+      _migrator = new DatabaseMigrator(_connection, environmentName, new ConsoleMigratorLogger(), [project.Assembly], project.MigrationRetriever);
    }
 
    public async ValueTask DisposeAsync()
@@ -254,5 +279,39 @@ internal sealed class DatabaseMigrationRuntime : IMigrationRuntime
    public async Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken)
    {
       await _migrator.MigrateDatabaseToAsync(targetIdentifier, cancellationToken);
+   }
+}
+
+/// <summary>
+///    Surfaces migrator warnings (e.g. executed rows that could not be attributed to a scope) on the console,
+///    since the CLI has no logging infrastructure.
+/// </summary>
+internal sealed class ConsoleMigratorLogger : ILogger<DatabaseMigrator>
+{
+   public IDisposable? BeginScope<TState>(TState state)
+      where TState : notnull
+   {
+      return null;
+   }
+
+   public bool IsEnabled(LogLevel logLevel)
+   {
+      return logLevel != LogLevel.None && logLevel >= LogLevel.Warning;
+   }
+
+   public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+   {
+      if (!IsEnabled(logLevel))
+         return;
+
+      var message = formatter(state, exception);
+
+      if (exception is not null)
+         message = $"{message}{Environment.NewLine}{exception}";
+
+      if (logLevel >= LogLevel.Error)
+         Console.Error.WriteLine($"Error: {message}");
+      else
+         Console.WriteLine($"Warning: {message}");
    }
 }

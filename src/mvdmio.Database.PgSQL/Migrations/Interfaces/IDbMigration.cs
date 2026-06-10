@@ -28,6 +28,15 @@ public interface IDbMigration
    string Name => MigrationClassNameParser.ParseName(GetType().Name);
 
    /// <summary>
+   ///    Scope this migration belongs to. Migrations are watermarked per scope: a migration runs when its
+   ///    <see cref="Identifier" /> is ahead of the highest executed identifier <i>within its own scope</i>,
+   ///    independent of other scopes. Defaults to the declaring assembly's simple name. Override this to keep
+   ///    a stable scope across an assembly rename — renaming the assembly without overriding the scope forks
+   ///    the migration history and re-runs every migration.
+   /// </summary>
+   string Scope => GetType().Assembly.GetName().Name ?? throw new InvalidOperationException($"Cannot determine default scope for migration '{GetType().FullName}': the declaring assembly has no simple name. Override {nameof(Scope)} explicitly.");
+
+   /// <summary>
    ///    Method for executing the migration on the database.
    /// </summary>
    /// <param name="db">The db-connection to execute the migration on.</param>

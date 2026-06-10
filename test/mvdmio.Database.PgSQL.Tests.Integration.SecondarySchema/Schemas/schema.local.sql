@@ -1,7 +1,7 @@
 --
 -- PostgreSQL database schema (secondary test assembly, local environment)
 -- Generated at 2026-02-18 10:30:45 UTC
--- Migration version: 202505181200 (SecondaryTableLocal)
+-- Migration version: 202505181200 (SecondaryTableLocal) [mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema]
 --
 
 CREATE SCHEMA IF NOT EXISTS "mvdmio";

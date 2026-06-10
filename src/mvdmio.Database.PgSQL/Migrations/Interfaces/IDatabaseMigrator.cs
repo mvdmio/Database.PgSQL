@@ -13,15 +13,17 @@ public interface IDatabaseMigrator
    Task<IEnumerable<ExecutedMigrationModel>> RetrieveAlreadyExecutedMigrationsAsync(CancellationToken cancellationToken = default);
 
    /// <summary>
-   ///    Run all migrations that have not yet been executed in order.
+   ///    Run all migrations that have not yet been executed in order. A migration is pending when its identifier
+   ///    is ahead of the highest executed identifier within its own scope.
    ///    If the database is empty and an embedded schema resource is found (based on the configured environment),
-   ///    the schema is applied first, then any remaining migrations after the schema version are run.
+   ///    the schema is applied first, then any remaining migrations past each scope's baseline are run.
    /// </summary>
    Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken = default);
 
    /// <summary>
-   ///    Run all pending migrations up to and including the specified identifier.
-   ///    If the database is empty and an embedded schema resource is found (with a version &lt;= targetIdentifier),
+   ///    Run all pending migrations up to and including the specified identifier. The target is a global ceiling
+   ///    applied per scope: every scope advances up to the given identifier.
+   ///    If the database is empty and an embedded schema resource is found (with all versions &lt;= targetIdentifier),
    ///    the schema is applied first, then any remaining migrations up to the target are run.
    /// </summary>
    /// <param name="targetIdentifier">The migration identifier to migrate up to (inclusive).</param>

@@ -1,4 +1,5 @@
 using mvdmio.Database.PgSQL.Migrations;
+using mvdmio.Database.PgSQL.Migrations.Models;
 using mvdmio.Database.PgSQL.Tool.Cleanup;
 using mvdmio.Database.PgSQL.Tool.Configuration;
 using mvdmio.Database.PgSQL.Tool.Pull;
@@ -59,13 +60,18 @@ internal static class CleanupCommand
             foreach (var warning in schemaResult.Warnings)
                Console.WriteLine($"  Warning: {warning}");
 
-            var migrationInfo = SchemaFileParser.ParseMigrationVersion(script);
-            environmentMigrationIdentifiers.Add(migrationInfo?.Identifier);
+            // A schema may carry one version line per scope; the lowest one is the conservative bound
+            // for deleting migration files (anything below it is baked into every scope's baseline).
+            var migrationInfos = SchemaFileParser.ParseMigrationVersion(script);
+            var lowestMigrationInfo = migrationInfos.Count == 0
+               ? (SchemaFileMigrationInfo?)null
+               : migrationInfos.MinBy(x => x.Identifier);
+            environmentMigrationIdentifiers.Add(lowestMigrationInfo?.Identifier);
 
-            if (migrationInfo is null)
+            if (lowestMigrationInfo is null)
                Console.WriteLine($"  Wrote {schemaPath} (no recorded migration version)");
             else
-               Console.WriteLine($"  Wrote {schemaPath} (migration {migrationInfo.Value.Identifier}: {migrationInfo.Value.Name})");
+               Console.WriteLine($"  Wrote {schemaPath} (migration {lowestMigrationInfo.Value.Identifier}: {lowestMigrationInfo.Value.Name})");
          }
 
          Console.WriteLine();

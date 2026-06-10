@@ -155,8 +155,8 @@ public class SchemaExtractionTests : TestBase
    {
       var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
 
-      // The test fixture runs migrations, so the latest migration should be in the header
-      script.Should().Contain("Migration version: 202505192230 (ComplexTable)");
+      // The test fixture runs migrations, so the latest migration per scope should be in the header
+      script.Should().Contain("Migration version: 202505192230 (ComplexTable) [mvdmio.Database.PgSQL.Tests.Integration]");
    }
 
    [Fact]
@@ -895,11 +895,13 @@ public class SchemaExtractionTests : TestBase
       var tableExists = await Db.Management.TableExistsAsync("mvdmio", "migrations");
       tableExists.Should().BeTrue("the migrations table should exist after migrations run");
 
-      // The test fixture runs migrations, so the latest migration should be returned
-      var currentMigration = await Db.Management.Schema.GetCurrentMigrationVersionAsync(CancellationToken);
+      // The test fixture runs migrations from a single assembly (one scope), so exactly one
+      // per-scope entry should be returned: the highest executed identifier within that scope.
+      var currentMigrations = await Db.Management.Schema.GetCurrentMigrationVersionAsync(CancellationToken);
 
-      currentMigration.Should().NotBeNull();
-      currentMigration!.Value.Identifier.Should().Be(202505192230);
-      currentMigration.Value.Name.Should().Be("ComplexTable");
+      currentMigrations.Should().ContainSingle();
+      currentMigrations[0].Identifier.Should().Be(202505192230);
+      currentMigrations[0].Name.Should().Be("ComplexTable");
+      currentMigrations[0].Scope.Should().Be("mvdmio.Database.PgSQL.Tests.Integration");
    }
 }

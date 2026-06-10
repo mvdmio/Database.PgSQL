@@ -1,4 +1,5 @@
 using JetBrains.Annotations;
+using Microsoft.Extensions.Logging;
 using mvdmio.Database.PgSQL.Exceptions;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers;
@@ -9,7 +10,9 @@ using System.Reflection;
 namespace mvdmio.Database.PgSQL.Migrations;
 
 /// <summary>
-///    Class for running database migrations.
+///    Class for running database migrations. Migrations are tracked per scope: a migration runs when its
+///    identifier is ahead of the highest executed identifier within its own scope, so the timelines of
+///    different assemblies advance independently.
 /// </summary>
 [PublicAPI]
 public sealed class DatabaseMigrator : IDatabaseMigrator
@@ -25,19 +28,25 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 
    private readonly DatabaseConnection _connection;
    private readonly IMigrationRetriever _migrationRetriever;
+   private readonly ILogger<DatabaseMigrator> _logger;
    private readonly string? _environment;
    private readonly Assembly[] _assemblies;
+
+   // Caches the positive probe result only: once the scope column exists it never disappears, while a
+   // negative result flips as soon as the table is upgraded. Saves an information_schema query per read.
+   private bool _scopeColumnExists;
 
    /// <summary>
    ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
+   /// <param name="logger">The logger to use for migration warnings and diagnostics.</param>
    /// <param name="assembliesContainingMigrations">
    ///    List of assemblies to use for searching <see cref="IDbMigration" />
    ///    classes. These assemblies are also searched for embedded schema resources.
    /// </param>
-   public DatabaseMigrator(DatabaseConnection connection, params Assembly[] assembliesContainingMigrations)
-      : this(connection, environment: null, assembliesContainingMigrations)
+   public DatabaseMigrator(DatabaseConnection connection, ILogger<DatabaseMigrator> logger, params Assembly[] assembliesContainingMigrations)
+      : this(connection, environment: null, logger, assembliesContainingMigrations)
    {
    }
 
@@ -51,12 +60,13 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    schema.{environment}.sql resource (case-insensitive). Falls back to schema.sql if not found.
    ///    If the database is empty, the embedded schema is applied before running migrations.
    /// </param>
+   /// <param name="logger">The logger to use for migration warnings and diagnostics.</param>
    /// <param name="assembliesContainingMigrations">
    ///    List of assemblies to use for searching <see cref="IDbMigration" />
    ///    classes. These assemblies are also searched for embedded schema resources.
    /// </param>
-   public DatabaseMigrator(DatabaseConnection connection, string? environment, params Assembly[] assembliesContainingMigrations)
-      : this(connection, environment, assembliesContainingMigrations, new ReflectionMigrationRetriever(assembliesContainingMigrations))
+   public DatabaseMigrator(DatabaseConnection connection, string? environment, ILogger<DatabaseMigrator> logger, params Assembly[] assembliesContainingMigrations)
+      : this(connection, environment, logger, assembliesContainingMigrations, new ReflectionMigrationRetriever(assembliesContainingMigrations))
    {
    }
 
@@ -64,9 +74,10 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class with a custom migration retriever.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
+   /// <param name="logger">The logger to use for migration warnings and diagnostics.</param>
    /// <param name="migrationRetriever">The migration retriever to use.</param>
-   public DatabaseMigrator(DatabaseConnection connection, IMigrationRetriever migrationRetriever)
-      : this(connection, environment: null, [], migrationRetriever)
+   public DatabaseMigrator(DatabaseConnection connection, ILogger<DatabaseMigrator> logger, IMigrationRetriever migrationRetriever)
+      : this(connection, environment: null, logger, [], migrationRetriever)
    {
    }
 
@@ -80,6 +91,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    schema.{environment}.sql resource (case-insensitive). Falls back to schema.sql if not found.
    ///    If the database is empty, the embedded schema is applied before running migrations.
    /// </param>
+   /// <param name="logger">The logger to use for migration warnings and diagnostics.</param>
    /// <param name="assembliesForSchemaDiscovery">
    ///    Assemblies to search for embedded schema resources. Pass empty array if schema discovery is not needed.
    /// </param>
@@ -87,11 +99,13 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    public DatabaseMigrator(
       DatabaseConnection connection,
       string? environment,
+      ILogger<DatabaseMigrator> logger,
       Assembly[] assembliesForSchemaDiscovery,
       IMigrationRetriever migrationRetriever)
    {
       _connection = connection;
       _environment = environment;
+      _logger = logger;
       _assemblies = assembliesForSchemaDiscovery;
       _migrationRetriever = migrationRetriever;
    }
@@ -99,12 +113,29 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <inheritdoc />
    public async Task<IEnumerable<ExecutedMigrationModel>> RetrieveAlreadyExecutedMigrationsAsync(CancellationToken cancellationToken = default)
    {
+      // The scope column only exists once this migrator has touched the database; reading from a
+      // not-yet-upgraded database must still work, so fall back to a scope-less select in that case.
+      if (!await ScopeColumnExistsAsync(cancellationToken))
+      {
+         return await _connection.Dapper.QueryAsync<ExecutedMigrationModel>(
+            $"""
+            SELECT
+               identifier AS identifier,
+               name AS name,
+               executed_at AS executedAtUtc
+            FROM {MIGRATIONS_TABLE_FULLY_QUALIFIED}
+            """,
+            ct: cancellationToken
+         );
+      }
+
       return await _connection.Dapper.QueryAsync<ExecutedMigrationModel>(
          $"""
          SELECT
             identifier AS identifier,
             name AS name,
-            executed_at AS executedAtUtc
+            executed_at AS executedAtUtc,
+            scope AS scope
          FROM {MIGRATIONS_TABLE_FULLY_QUALIFIED}
          """,
          ct: cancellationToken
@@ -126,7 +157,8 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <summary>
    ///    Runs the full migration orchestration under a session-scoped advisory lock so that concurrently-starting
    ///    instances apply migrations exactly once. The lock is acquired before the empty-database check, held across
-   ///    schema application and the entire migration loop, and released in a <c>finally</c>.
+   ///    schema application, the table upgrade, the scope backfill, and the entire migration loop, and released in
+   ///    a <c>finally</c>.
    /// </summary>
    private async Task MigrateAsync(long? targetIdentifier, CancellationToken cancellationToken)
    {
@@ -147,10 +179,23 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
          }
          else
          {
-            await EnsureMigrationTableExistsAsync();
+            await MigrationsTableManager.EnsureTableAsync(_connection, cancellationToken);
+            _scopeColumnExists = true;
          }
 
-         await RunPendingMigrationsAsync(targetIdentifier, cancellationToken);
+         // Read executed rows and discover migrations once for the whole run; the backfill returns the
+         // executed set with its attributions applied so the selection below needs no second read.
+         var discoveredMigrations = _migrationRetriever.RetrieveMigrations().ToArray();
+         var executedMigrations = (await RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
+
+         executedMigrations = await BackfillScopesAsync(executedMigrations, discoveredMigrations, cancellationToken);
+
+         var pendingMigrations = PendingMigrationSelector.SelectPending(executedMigrations, discoveredMigrations, targetIdentifier);
+
+         foreach (var migration in pendingMigrations)
+         {
+            await RunAsync(migration, cancellationToken);
+         }
       }
       finally
       {
@@ -185,16 +230,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
          await _connection.InTransactionAsync(async () =>
          {
             await migration.UpAsync(_connection);
-
-            await _connection.Dapper.ExecuteAsync(
-               $"INSERT INTO {MIGRATIONS_TABLE_FULLY_QUALIFIED} (identifier, name, executed_at) VALUES (:identifier, :name, :executedAtUtc)",
-               new Dictionary<string, object?> {
-                     { "identifier", migration.Identifier },
-                     { "name", migration.Name },
-                     { "executedAtUtc", DateTime.UtcNow }
-               },
-               ct: cancellationToken
-            );
+            await InsertMigrationRowAsync(migration.Identifier, migration.Name, migration.Scope, cancellationToken);
          }
          );
       }
@@ -202,6 +238,40 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
       {
          throw new MigrationException(migration, exception);
       }
+   }
+
+   /// <summary>
+   ///    Records an executed migration. Falls back to a scope-less insert when the table has not been
+   ///    upgraded yet (a direct <see cref="RunAsync" /> call against a legacy database, without a prior
+   ///    <see cref="MigrateDatabaseToLatestAsync" />); the backfill attributes such rows once the table
+   ///    is upgraded.
+   /// </summary>
+   private async Task InsertMigrationRowAsync(long identifier, string name, string? scope, CancellationToken cancellationToken)
+   {
+      var parameters = new Dictionary<string, object?> {
+         { "identifier", identifier },
+         { "name", name },
+         { "executedAtUtc", DateTime.UtcNow }
+      };
+
+      if (await ScopeColumnExistsAsync(cancellationToken))
+      {
+         parameters["scope"] = scope;
+
+         await _connection.Dapper.ExecuteAsync(
+            $"INSERT INTO {MIGRATIONS_TABLE_FULLY_QUALIFIED} (identifier, name, executed_at, scope) VALUES (:identifier, :name, :executedAtUtc, :scope)",
+            parameters,
+            ct: cancellationToken
+         );
+
+         return;
+      }
+
+      await _connection.Dapper.ExecuteAsync(
+         $"INSERT INTO {MIGRATIONS_TABLE_FULLY_QUALIFIED} (identifier, name, executed_at) VALUES (:identifier, :name, :executedAtUtc)",
+         parameters,
+         ct: cancellationToken
+      );
    }
 
    /// <inheritdoc />
@@ -226,7 +296,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    - Assemblies are configured for schema discovery
    ///    - An embedded schema resource exists in at least one assembly
    ///    - The database is empty
-   ///    - If targetIdentifier is specified, every discovered schema's version must be &lt;= targetIdentifier.
+   ///    - If targetIdentifier is specified, every version line of every discovered schema must be &lt;= targetIdentifier.
    ///      A schema whose header version exceeds the target means the caller is asking for a state older
    ///      than one of the baselines can represent; applying only a subset would leave gaps that later
    ///      migrations cannot fill, so the entire schema-first bootstrap is skipped instead.
@@ -248,9 +318,9 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
       {
          foreach (var (content, _, _) in contents)
          {
-            var info = SchemaFileParser.ParseMigrationVersion(content);
+            var infos = SchemaFileParser.ParseMigrationVersion(content);
 
-            if (info is not null && info.Value.Identifier > targetIdentifier.Value)
+            if (infos.Any(info => info.Identifier > targetIdentifier.Value))
                return false;
          }
       }
@@ -260,8 +330,9 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 
    /// <summary>
    ///    Applies all embedded schema resources to the database in assembly order.
-   ///    Each assembly contributes at most one schema file. The baseline migration row
-   ///    is recorded using the highest identifier across all applied schema headers.
+   ///    Each assembly contributes at most one schema file. One baseline migration row is recorded per scope,
+   ///    using the highest identifier for that scope across all applied schema headers. Version lines without
+   ///    a scope (legacy headers) record a single scope-less baseline that the backfill later attributes.
    /// </summary>
    private async Task ApplySchemaAsync(CancellationToken cancellationToken)
    {
@@ -274,9 +345,10 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
       {
          // Pre-create the migrations table so schema files that also try to create it
          // (with or without IF NOT EXISTS) don't conflict within the same transaction.
-         await EnsureMigrationTableExistsAsync();
+         await MigrationsTableManager.EnsureTableAsync(_connection, cancellationToken);
+         _scopeColumnExists = true;
 
-         SchemaFileMigrationInfo? highestMigrationInfo = null;
+         var migrationInfos = new List<SchemaFileMigrationInfo>();
 
          foreach (var (content, _, _) in schemas)
          {
@@ -285,62 +357,107 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 
             await _connection.Dapper.ExecuteAsync(content, ct: cancellationToken);
 
-            var info = SchemaFileParser.ParseMigrationVersion(content);
-
-            if (info is not null)
-            {
-               if (highestMigrationInfo is null || info.Value.Identifier > highestMigrationInfo.Value.Identifier)
-                  highestMigrationInfo = info;
-            }
+            migrationInfos.AddRange(SchemaFileParser.ParseMigrationVersion(content));
          }
 
-         // Record the highest migration version across all applied schemas as the baseline.
-         if (highestMigrationInfo is not null)
+         // Record one baseline row per scope: the highest version for that scope across all applied schemas.
+         var scopedBaselines = migrationInfos
+            .Where(info => info.Scope is not null)
+            .GroupBy(info => info.Scope!, StringComparer.Ordinal)
+            .Select(group => group.OrderByDescending(info => info.Identifier).First());
+
+         // Legacy scope-less header lines are recorded individually, not collapsed: each represents a
+         // different assembly's baseline, and the backfill attributes each to its scope by identifier.
+         // Collapsing them to the highest would leave every other scope without a watermark, re-running
+         // migrations whose effects the schema already contains.
+         var legacyBaselines = migrationInfos
+            .Where(info => info.Scope is null)
+            .GroupBy(info => info.Identifier)
+            .Select(group => group.First());
+
+         var baselines = scopedBaselines.Concat(legacyBaselines).OrderBy(info => info.Identifier);
+
+         foreach (var baseline in baselines)
          {
-            await _connection.Dapper.ExecuteAsync(
-               $"INSERT INTO {MIGRATIONS_TABLE_FULLY_QUALIFIED} (identifier, name, executed_at) VALUES (:identifier, :name, :executedAtUtc)",
-               new Dictionary<string, object?> {
-                  { "identifier", highestMigrationInfo.Value.Identifier },
-                  { "name", highestMigrationInfo.Value.Name },
-                  { "executedAtUtc", DateTime.UtcNow }
-               },
-               ct: cancellationToken
-            );
+            await InsertMigrationRowAsync(baseline.Identifier, baseline.Name, baseline.Scope, cancellationToken);
          }
       });
    }
 
    /// <summary>
-   ///    Runs all pending migrations, optionally up to a target identifier.
+   ///    Temporary upgrade aid: attributes legacy scope-less rows to their scope by matching identifiers
+   ///    against the discovered migrations. Fills only rows whose scope is still null, so concurrent runners
+   ///    (serialized by the advisory lock) each fill the rows they recognize. Logs a single warning for rows
+   ///    no discovered migration claims. Returns the executed set with the attributions applied, so callers
+   ///    need no second read. Removed in the next major version.
    /// </summary>
-   private async Task RunPendingMigrationsAsync(long? targetIdentifier, CancellationToken cancellationToken)
+   private async Task<ExecutedMigrationModel[]> BackfillScopesAsync(
+      ExecutedMigrationModel[] executedMigrations,
+      IReadOnlyCollection<IDbMigration> discoveredMigrations,
+      CancellationToken cancellationToken)
    {
-      var alreadyExecutedMigrations = (await RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
-      var highestExecutedIdentifier = alreadyExecutedMigrations
-         .Select(x => (long?)x.Identifier)
-         .Max();
+      if (executedMigrations.All(x => x.Scope is not null))
+         return executedMigrations;
 
-      var migrations = _migrationRetriever.RetrieveMigrations().AsEnumerable();
+#pragma warning disable CS0618 // The backfill is obsolete by design; this call site is removed with it in the next major version.
+      var result = ScopeBackfillMatcher.Match(executedMigrations, discoveredMigrations);
+#pragma warning restore CS0618
 
-      if (targetIdentifier.HasValue)
-         migrations = migrations.Where(x => x.Identifier <= targetIdentifier.Value);
+      if (result.Assignments.Count > 0)
+         await ApplyScopeAssignmentsAsync(result.Assignments, cancellationToken);
 
-      if (highestExecutedIdentifier.HasValue)
-         migrations = migrations.Where(x => x.Identifier > highestExecutedIdentifier.Value);
-
-      var orderedMigrations = migrations.OrderBy(x => x.Identifier).ToArray();
-
-      foreach (var migration in orderedMigrations)
+      if (result.Unattributed.Count > 0)
       {
-         try
-         {
-            await RunAsync(migration, cancellationToken);
-         }
-         catch (Exception e)
-         {
-            throw new MigrationException(migration, e);
-         }
+         _logger.LogWarning(
+            "Could not attribute {UnattributedCount} executed migration row(s) to a scope: {UnattributedRows}. " +
+            "These rows are excluded from every scope's watermark; set their scope manually in \"mvdmio\".\"migrations\".",
+            result.Unattributed.Count,
+            string.Join(", ", result.Unattributed.Select(x => $"{x.Identifier} ({x.Name})"))
+         );
       }
+
+      var scopeByIdentifier = result.Assignments.ToDictionary(x => x.Identifier, x => x.Scope);
+
+      return executedMigrations
+         .Select(row => row.Scope is null && scopeByIdentifier.TryGetValue(row.Identifier, out var scope)
+            ? row with { Scope = scope }
+            : row)
+         .ToArray();
+   }
+
+   /// <summary>
+   ///    Applies all scope attributions in a single statement. The NOT EXISTS guard skips a row whose
+   ///    (scope, identifier) pair already exists — possible when an unattributed row's migration re-ran and
+   ///    was recorded with its scope — so the backfill can never trip the unique index and brick the run;
+   ///    such a row stays scope-less, which is harmless because the scoped row already carries the watermark.
+   /// </summary>
+   private async Task ApplyScopeAssignmentsAsync(IReadOnlyList<ScopeAssignment> assignments, CancellationToken cancellationToken)
+   {
+      var parameters = new Dictionary<string, object?>();
+      var valueRows = new List<string>(assignments.Count);
+
+      for (var i = 0; i < assignments.Count; i++)
+      {
+         valueRows.Add($"(:scope{i}, :identifier{i})");
+         parameters[$"scope{i}"] = assignments[i].Scope;
+         parameters[$"identifier{i}"] = assignments[i].Identifier;
+      }
+
+      await _connection.Dapper.ExecuteAsync(
+         $"""
+         UPDATE {MIGRATIONS_TABLE_FULLY_QUALIFIED} AS migration_row
+         SET scope = assignment.scope
+         FROM (VALUES {string.Join(", ", valueRows)}) AS assignment (scope, identifier)
+         WHERE migration_row.scope IS NULL
+           AND migration_row.identifier = assignment.identifier
+           AND NOT EXISTS (
+              SELECT 1 FROM {MIGRATIONS_TABLE_FULLY_QUALIFIED} AS existing
+              WHERE existing.scope = assignment.scope AND existing.identifier = assignment.identifier
+           )
+         """,
+         parameters,
+         ct: cancellationToken
+      );
    }
 
    /// <summary>
@@ -370,22 +487,12 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
       );
    }
 
-   private async Task EnsureMigrationTableExistsAsync()
+   private async Task<bool> ScopeColumnExistsAsync(CancellationToken cancellationToken)
    {
-      if (await _connection.Management.TableExistsAsync(MIGRATIONS_SCHEMA, MIGRATIONS_TABLE))
-         return;
+      if (_scopeColumnExists)
+         return true;
 
-      await _connection.Dapper.ExecuteAsync($"CREATE SCHEMA IF NOT EXISTS \"{MIGRATIONS_SCHEMA}\";");
-
-      await _connection.Dapper.ExecuteAsync(
-         $"""
-         CREATE TABLE IF NOT EXISTS {MIGRATIONS_TABLE_FULLY_QUALIFIED} (
-            identifier  BIGINT      NOT NULL,
-            name        TEXT        NOT NULL,
-            executed_at TIMESTAMPTZ NOT NULL,
-            PRIMARY KEY (identifier)
-         );
-         """
-      );
+      _scopeColumnExists = await MigrationsTableManager.ScopeColumnExistsAsync(_connection, cancellationToken);
+      return _scopeColumnExists;
    }
 }

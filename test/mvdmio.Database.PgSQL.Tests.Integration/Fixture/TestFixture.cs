@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 using Testcontainers.PostgreSql;
@@ -18,7 +19,7 @@ public sealed class TestFixture : IAsyncLifetime
    {
       await DbContainer.StartAsync();
 
-      var databaseMigrator = new DatabaseMigrator(new DatabaseConnection(DbContainer.GetConnectionString()), GetType().Assembly);
+      var databaseMigrator = new DatabaseMigrator(new DatabaseConnection(DbContainer.GetConnectionString()), NullLogger<DatabaseMigrator>.Instance, GetType().Assembly);
       await databaseMigrator.MigrateDatabaseToLatestAsync();
    }
 

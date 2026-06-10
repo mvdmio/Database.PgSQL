@@ -1,11 +1,11 @@
 --
--- PostgreSQL database schema (secondary test assembly)
+-- PostgreSQL database schema (secondary test assembly, legacy header)
 -- Generated at 2026-02-18 10:30:45 UTC
--- Migration version: 202505181100 (SecondaryTable) [mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema]
+-- Migration version: 202505181100 (SecondaryTable)
+-- NOTE: deliberately kept in the legacy scope-less header format; see the primary assembly's
+-- schema.legacymulti.sql for the multi-assembly legacy-header scenario this exercises.
 --
 
--- Exercises the realistic db-pull output where every exported schema
--- file re-declares the migrations table with IF NOT EXISTS.
 CREATE SCHEMA IF NOT EXISTS "mvdmio";
 CREATE TABLE IF NOT EXISTS "mvdmio"."migrations" (
    identifier  BIGINT      NOT NULL,

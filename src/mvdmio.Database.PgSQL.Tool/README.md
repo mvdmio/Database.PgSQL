@@ -77,13 +77,15 @@ db pull --environment prod
 
 By default, schema files are written into `Schemas/`.
 
+The exported header records one `-- Migration version: <id> (<name>) [<scope>]` line per migration scope, so a schema-first bootstrap can establish the correct baseline for every scope. Older scope-less schema files are still read.
+
 Set `schemas` in `.mvdmio-migrations.yml` to export only specific PostgreSQL schemas. When omitted or empty, `db pull` and `db cleanup` export all user schemas. `public` is only included when listed explicitly.
 
 Exported table definitions preserve PostgreSQL identity columns and `GENERATED ALWAYS AS (...) STORED` columns.
 
 ### `db cleanup`
 
-Refreshes schema files for configured environments and removes migrations that are older than every retained schema version.
+Refreshes schema files for configured environments and removes migrations that are older than every retained schema version. When a schema header carries multiple per-scope version lines, the lowest one is used as the conservative deletion bound.
 
 ```bash
 db cleanup

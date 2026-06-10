@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers.Interfaces;
@@ -46,7 +47,7 @@ public class ConcurrentMigrationTests : IAsyncLifetime
       var runs = Enumerable.Range(0, CONCURRENT_INSTANCES).Select(_ => Task.Run(async () =>
       {
          await using var db = _connectionFactory.BuildConnection(connectionString);
-         var migrator = new DatabaseMigrator(db, new SlowMigrationSet());
+         var migrator = new DatabaseMigrator(db, NullLogger<DatabaseMigrator>.Instance, new SlowMigrationSet());
 
          await startSignal.Task;
          await migrator.MigrateDatabaseToLatestAsync(CancellationToken);

@@ -12,49 +12,74 @@ namespace mvdmio.Database.PgSQL.Migrations;
 public static partial class SchemaFileParser
 {
    /// <summary>
-   ///    The regex pattern used to extract migration version from the schema file header.
-   ///    Matches lines like: "-- Migration version: 202602161430 (AddUsersTable)"
+   ///    The regex pattern used to extract migration versions from the schema file header.
+   ///    Matches both the current per-scope form "-- Migration version: 202602161430 (AddUsersTable) [MyApp.Data]"
+   ///    and the legacy scope-less form "-- Migration version: 202602161430 (AddUsersTable)".
    /// </summary>
-   [GeneratedRegex(@"^--\s*Migration version:\s*(\d+)\s*\(([^)]+)\)\s*$", RegexOptions.Multiline)]
+   [GeneratedRegex(@"^--\s*Migration version:\s*(\d+)\s*\(([^)]+)\)\s*(?:\[([^\]]+)\])?\s*$", RegexOptions.Multiline)]
    private static partial Regex MigrationVersionRegex();
 
    /// <summary>
-   ///    Parses the migration version from a schema file's content.
+   ///    Formats a migration version the way it appears in the schema-file header: "identifier (name)" with
+   ///    an optional " [scope]" suffix. The writing counterpart of the regex this parser reads — keep the two
+   ///    in sync.
    /// </summary>
-   /// <param name="schemaFileContent">The full content of the schema file.</param>
-   /// <returns>
-   ///    A <see cref="SchemaFileMigrationInfo"/> containing the identifier and name of the migration
-   ///    that was current when the schema file was generated, or null if no migration version could be found
-   ///    (e.g., the schema file was generated from an empty database or has an invalid format).
-   /// </returns>
-   public static SchemaFileMigrationInfo? ParseMigrationVersion(string schemaFileContent)
+   /// <param name="identifier">The migration identifier.</param>
+   /// <param name="name">The migration name.</param>
+   /// <param name="scope">The scope, or null for the legacy scope-less form.</param>
+   public static string FormatMigrationVersion(long identifier, string name, string? scope)
    {
-      var match = MigrationVersionRegex().Match(schemaFileContent);
-
-      if (!match.Success)
-         return null;
-
-      if (!long.TryParse(match.Groups[1].Value, out var identifier))
-         return null;
-
-      var name = match.Groups[2].Value.Trim();
-
-      if (string.IsNullOrEmpty(name) || name == "none")
-         return null;
-
-      return new SchemaFileMigrationInfo(identifier, name);
+      return scope is null
+         ? $"{identifier} ({name})"
+         : $"{identifier} ({name}) [{scope}]";
    }
 
    /// <summary>
-   ///    Parses the migration version from a schema file at the specified path.
+   ///    Parses the migration versions from a schema file's content. The header carries one
+   ///    "-- Migration version: &lt;identifier&gt; (&lt;name&gt;) [&lt;scope&gt;]" line per scope; legacy
+   ///    headers carry a single line without the scope suffix, which is returned with a null scope.
+   /// </summary>
+   /// <param name="schemaFileContent">The full content of the schema file.</param>
+   /// <returns>
+   ///    One <see cref="SchemaFileMigrationInfo"/> per migration-version line in the header, in file order.
+   ///    Empty if no migration version could be found (e.g., the schema file was generated from an empty
+   ///    database or has an invalid format).
+   /// </returns>
+   public static IReadOnlyList<SchemaFileMigrationInfo> ParseMigrationVersion(string schemaFileContent)
+   {
+      var results = new List<SchemaFileMigrationInfo>();
+
+      foreach (Match match in MigrationVersionRegex().Matches(schemaFileContent))
+      {
+         if (!long.TryParse(match.Groups[1].Value, out var identifier))
+            continue;
+
+         var name = match.Groups[2].Value.Trim();
+
+         if (string.IsNullOrEmpty(name) || name == "none")
+            continue;
+
+         var scope = match.Groups[3].Success ? match.Groups[3].Value.Trim() : null;
+
+         if (string.IsNullOrEmpty(scope))
+            scope = null;
+
+         results.Add(new SchemaFileMigrationInfo(identifier, name, scope));
+      }
+
+      return results;
+   }
+
+   /// <summary>
+   ///    Parses the migration versions from a schema file at the specified path.
    /// </summary>
    /// <param name="schemaFilePath">The path to the schema file.</param>
    /// <returns>
-   ///    A <see cref="SchemaFileMigrationInfo"/> containing the identifier and name of the migration
-   ///    that was current when the schema file was generated, or null if no migration version could be found.
+   ///    One <see cref="SchemaFileMigrationInfo"/> per migration-version line in the header, in file order.
+   ///    Empty if no migration version could be found.
    /// </returns>
    /// <exception cref="FileNotFoundException">Thrown if the schema file does not exist.</exception>
-   public static SchemaFileMigrationInfo? ParseMigrationVersionFromFile(string schemaFilePath)
+   public static IReadOnlyList<SchemaFileMigrationInfo> ParseMigrationVersionFromFile(string schemaFilePath)
    {
       if (!File.Exists(schemaFilePath))
          throw new FileNotFoundException($"Schema file not found: {schemaFilePath}", schemaFilePath);
@@ -64,16 +89,16 @@ public static partial class SchemaFileParser
    }
 
    /// <summary>
-   ///    Asynchronously parses the migration version from a schema file at the specified path.
+   ///    Asynchronously parses the migration versions from a schema file at the specified path.
    /// </summary>
    /// <param name="schemaFilePath">The path to the schema file.</param>
    /// <param name="cancellationToken">A cancellation token.</param>
    /// <returns>
-   ///    A <see cref="SchemaFileMigrationInfo"/> containing the identifier and name of the migration
-   ///    that was current when the schema file was generated, or null if no migration version could be found.
+   ///    One <see cref="SchemaFileMigrationInfo"/> per migration-version line in the header, in file order.
+   ///    Empty if no migration version could be found.
    /// </returns>
    /// <exception cref="FileNotFoundException">Thrown if the schema file does not exist.</exception>
-   public static async Task<SchemaFileMigrationInfo?> ParseMigrationVersionFromFileAsync(string schemaFilePath, CancellationToken cancellationToken = default)
+   public static async Task<IReadOnlyList<SchemaFileMigrationInfo>> ParseMigrationVersionFromFileAsync(string schemaFilePath, CancellationToken cancellationToken = default)
    {
       if (!File.Exists(schemaFilePath))
          throw new FileNotFoundException($"Schema file not found: {schemaFilePath}", schemaFilePath);
@@ -83,15 +108,15 @@ public static partial class SchemaFileParser
    }
 
    /// <summary>
-   ///    Asynchronously parses the migration version from a stream containing schema file content.
+   ///    Asynchronously parses the migration versions from a stream containing schema file content.
    /// </summary>
    /// <param name="stream">The stream containing the schema file content.</param>
    /// <param name="cancellationToken">A cancellation token.</param>
    /// <returns>
-   ///    A <see cref="SchemaFileMigrationInfo"/> containing the identifier and name of the migration
-   ///    that was current when the schema file was generated, or null if no migration version could be found.
+   ///    One <see cref="SchemaFileMigrationInfo"/> per migration-version line in the header, in file order.
+   ///    Empty if no migration version could be found.
    /// </returns>
-   public static async Task<SchemaFileMigrationInfo?> ParseMigrationVersionFromStreamAsync(Stream stream, CancellationToken cancellationToken = default)
+   public static async Task<IReadOnlyList<SchemaFileMigrationInfo>> ParseMigrationVersionFromStreamAsync(Stream stream, CancellationToken cancellationToken = default)
    {
       using var reader = new StreamReader(stream, leaveOpen: true);
       var content = await reader.ReadToEndAsync(cancellationToken);

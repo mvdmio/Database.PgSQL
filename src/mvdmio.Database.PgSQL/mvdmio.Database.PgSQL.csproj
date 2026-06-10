@@ -51,6 +51,7 @@
     <PackageReference Include="Dapper" Version="2.1.66"/>
 
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
     <PackageReference Include="Npgsql" Version="10.0.1" />
     <PackageReference Include="Portable.System.DateTimeOnly" Version="9.0.1"/>
 
