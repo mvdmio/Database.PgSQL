@@ -49,7 +49,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    public async Task IsDatabaseEmptyAsync_WithNoMigrationsTable_ReturnsTrue()
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
-      var migrator = new DatabaseMigrator(db, NullLogger<DatabaseMigrator>.Instance, typeof(TestFixture).Assembly);
+      var migrator = new DatabaseMigrator(db, NullLoggerFactory.Instance, typeof(TestFixture).Assembly);
 
       var isEmpty = await migrator.IsDatabaseEmptyAsync(CancellationToken);
 
@@ -72,7 +72,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
          );
          """, ct: CancellationToken);
 
-      var migrator = new DatabaseMigrator(db, NullLogger<DatabaseMigrator>.Instance, typeof(TestFixture).Assembly);
+      var migrator = new DatabaseMigrator(db, NullLoggerFactory.Instance, typeof(TestFixture).Assembly);
 
       var isEmpty = await migrator.IsDatabaseEmptyAsync(CancellationToken);
 
@@ -97,7 +97,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
          VALUES (202505181000, 'TestMigration', NOW());
          """, ct: CancellationToken);
 
-      var migrator = new DatabaseMigrator(db, NullLogger<DatabaseMigrator>.Instance, typeof(TestFixture).Assembly);
+      var migrator = new DatabaseMigrator(db, NullLoggerFactory.Instance, typeof(TestFixture).Assembly);
 
       var isEmpty = await migrator.IsDatabaseEmptyAsync(CancellationToken);
 
@@ -114,7 +114,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrator = new DatabaseMigrator(
          db,
          null, // Will pick up schema.sql
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [TestAssembly],
          migrationRetriever);
 
@@ -139,7 +139,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrator = new DatabaseMigrator(
          db,
          "local", // Will pick up schema.local.sql
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [TestAssembly],
          migrationRetriever);
 
@@ -164,7 +164,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrator = new DatabaseMigrator(
          db,
          "LOCAL", // Case-insensitive lookup
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [TestAssembly],
          migrationRetriever);
 
@@ -181,7 +181,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       // First apply some migrations normally (without embedded schema)
-      var migratorWithoutSchema = new DatabaseMigrator(db, NullLogger<DatabaseMigrator>.Instance, typeof(TestFixture).Assembly);
+      var migratorWithoutSchema = new DatabaseMigrator(db, NullLoggerFactory.Instance, typeof(TestFixture).Assembly);
       await migratorWithoutSchema.MigrateDatabaseToLatestAsync(CancellationToken);
 
       var initialMigrationCount = (await migratorWithoutSchema.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).Count();
@@ -191,7 +191,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migratorWithSchema = new DatabaseMigrator(
          db,
          null,
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [TestAssembly],
          migrationRetriever);
 
@@ -223,7 +223,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
          """,
          ct: CancellationToken);
 
-      var migrator = new DatabaseMigrator(db, NullLogger<DatabaseMigrator>.Instance, typeof(TestFixture).Assembly);
+      var migrator = new DatabaseMigrator(db, NullLoggerFactory.Instance, typeof(TestFixture).Assembly);
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
@@ -254,7 +254,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrator = new DatabaseMigrator(
          db,
          null,
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [TestAssembly],
          migrationRetriever);
 
@@ -281,7 +281,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrator = new DatabaseMigrator(
          db,
          null,
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [], // No assemblies for schema discovery
          migrationRetriever);
 
@@ -302,7 +302,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrator = new DatabaseMigrator(
          db,
          "nonexistent", // No schema.nonexistent.sql exists
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [TestAssembly],
          migrationRetriever);
 
@@ -355,7 +355,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrator = new DatabaseMigrator(
          db,
          environment: null,
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [TestAssembly, SecondaryAssembly],
          migrationRetriever);
 
@@ -382,7 +382,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrator = new DatabaseMigrator(
          db,
          environment: null,
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [SecondaryAssembly, TestAssembly],
          migrationRetriever);
 
@@ -409,7 +409,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrator = new DatabaseMigrator(
          db,
          environment: "local",
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [TestAssembly, SecondaryAssembly],
          migrationRetriever);
 
@@ -481,7 +481,7 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       var migrator = new DatabaseMigrator(
          db,
          environment: null,
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [TestAssembly, SecondaryAssembly],
          migrationRetriever);
 

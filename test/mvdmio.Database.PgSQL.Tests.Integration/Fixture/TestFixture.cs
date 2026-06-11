@@ -19,7 +19,7 @@ public sealed class TestFixture : IAsyncLifetime
    {
       await DbContainer.StartAsync();
 
-      var databaseMigrator = new DatabaseMigrator(new DatabaseConnection(DbContainer.GetConnectionString()), NullLogger<DatabaseMigrator>.Instance, GetType().Assembly);
+      var databaseMigrator = new DatabaseMigrator(new DatabaseConnection(DbContainer.GetConnectionString()), NullLoggerFactory.Instance, GetType().Assembly);
       await databaseMigrator.MigrateDatabaseToLatestAsync();
    }
 

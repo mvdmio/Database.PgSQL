@@ -96,11 +96,11 @@ await session.CompleteAsync();
 ```csharp
 using mvdmio.Database.PgSQL.Migrations;
 
-var migrator = new DatabaseMigrator(db, logger, typeof(Program).Assembly);
+var migrator = new DatabaseMigrator(db, loggerFactory, typeof(Program).Assembly);
 await migrator.MigrateDatabaseToLatestAsync();
 ```
 
-`DatabaseMigrator` requires an `ILogger<DatabaseMigrator>` (from `Microsoft.Extensions.Logging.Abstractions`) so migration warnings and diagnostics flow into your application's logging. Pass `NullLogger<DatabaseMigrator>.Instance` if you do not use logging.
+`DatabaseMigrator` requires an `ILoggerFactory` (from `Microsoft.Extensions.Logging.Abstractions`) so migration warnings and diagnostics flow into your application's logging. Pass `NullLoggerFactory.Instance` if you do not use logging.
 
 #### Migration scopes
 
@@ -125,7 +125,7 @@ The first run of this version upgrades the migrations table in place: it adds a 
 
 > **One state cannot be healed automatically:** a database that was bootstrapped schema-first from **multiple assemblies** under an older version recorded only a single baseline row (the highest header version across all schemas). The backfill can attribute that row to one scope only — the other scopes have no baseline, so their folded-in migrations would be selected again and fail loudly on the schema-created objects. If you upgrade such a database, insert the missing scopes' baseline rows into `mvdmio.migrations` manually before running migrations.
 
-Source-breaking changes in this version: all `DatabaseMigrator` constructors require an `ILogger<DatabaseMigrator>`; `ExecutedMigrationModel` and `SchemaFileMigrationInfo` gained a nullable `Scope`; `SchemaFileParser.ParseMigrationVersion` and `SchemaExtractor.GetCurrentMigrationVersionAsync` return collections (one entry per scope).
+Source-breaking changes in this version: all `DatabaseMigrator` constructors require an `ILoggerFactory`; `ExecutedMigrationModel` and `SchemaFileMigrationInfo` gained a nullable `Scope`; `SchemaFileParser.ParseMigrationVersion` and `SchemaExtractor.GetCurrentMigrationVersionAsync` return collections (one entry per scope).
 
 #### Concurrent startup
 

@@ -50,13 +50,13 @@ public class PerScopeMigrationTests : IAsyncLifetime
 
       var scopeARetriever = new FixedMigrationSet(
          new CreateTableMigration(202606010000, "ScopeATable", "ScopeA", "scope_a_table"));
-      var migratorA = new DatabaseMigrator(db, NullLogger<DatabaseMigrator>.Instance, scopeARetriever);
+      var migratorA = new DatabaseMigrator(db, NullLoggerFactory.Instance, scopeARetriever);
       await migratorA.MigrateDatabaseToLatestAsync(CancellationToken);
 
       var scopeBRetriever = new FixedMigrationSet(
          new CreateTableMigration(202601010000, "ScopeBTableOne", "ScopeB", "scope_b_table_one"),
          new CreateTableMigration(202602010000, "ScopeBTableTwo", "ScopeB", "scope_b_table_two"));
-      var migratorB = new DatabaseMigrator(db, NullLogger<DatabaseMigrator>.Instance, scopeBRetriever);
+      var migratorB = new DatabaseMigrator(db, NullLoggerFactory.Instance, scopeBRetriever);
       await migratorB.MigrateDatabaseToLatestAsync(CancellationToken);
 
       (await db.Management.TableExistsAsync("public", "scope_a_table")).Should().BeTrue();
@@ -94,7 +94,7 @@ public class PerScopeMigrationTests : IAsyncLifetime
          """,
          ct: CancellationToken);
 
-      var migrator = new DatabaseMigrator(db, NullLogger<DatabaseMigrator>.Instance, new ReflectionMigrationRetriever(typeof(TestFixture).Assembly));
+      var migrator = new DatabaseMigrator(db, NullLoggerFactory.Instance, new ReflectionMigrationRetriever(typeof(TestFixture).Assembly));
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
@@ -144,10 +144,10 @@ public class PerScopeMigrationTests : IAsyncLifetime
          """,
          ct: CancellationToken);
 
-      var logger = new CapturingLogger();
+      var loggerFactory = new CapturingLoggerFactory();
       var retriever = new FixedMigrationSet(
          new CreateTableMigration(202601010000, "ScopeATable", "ScopeA", "scope_a_table"));
-      var migrator = new DatabaseMigrator(db, logger, retriever);
+      var migrator = new DatabaseMigrator(db, loggerFactory, retriever);
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
@@ -158,7 +158,7 @@ public class PerScopeMigrationTests : IAsyncLifetime
       executedMigrations.Should().Contain(m => m.Identifier == 202606010000 && m.Scope == null);
       executedMigrations.Should().Contain(m => m.Identifier == 202601010000 && m.Scope == "ScopeA");
 
-      logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning && e.Message.Contains("202606010000"));
+      loggerFactory.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning && e.Message.Contains("202606010000"));
    }
 
    [Fact]
@@ -174,7 +174,7 @@ public class PerScopeMigrationTests : IAsyncLifetime
       var migrator = new DatabaseMigrator(
          db,
          environment: null,
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [TestAssembly, SecondaryAssembly],
          migrationRetriever);
 
@@ -211,7 +211,7 @@ public class PerScopeMigrationTests : IAsyncLifetime
       var migrator = new DatabaseMigrator(
          db,
          environment: "legacymulti",
-         NullLogger<DatabaseMigrator>.Instance,
+         NullLoggerFactory.Instance,
          [TestAssembly, SecondaryAssembly],
          migrationRetriever);
 
@@ -240,7 +240,7 @@ public class PerScopeMigrationTests : IAsyncLifetime
          new CreateTableMigration(202603010000, "ScopeATwo", "ScopeA", "scope_a_two"),
          new CreateTableMigration(202602010000, "ScopeBOne", "ScopeB", "scope_b_one"),
          new CreateTableMigration(202604010000, "ScopeBTwo", "ScopeB", "scope_b_two"));
-      var migrator = new DatabaseMigrator(db, NullLogger<DatabaseMigrator>.Instance, retriever);
+      var migrator = new DatabaseMigrator(db, NullLoggerFactory.Instance, retriever);
 
       await migrator.MigrateDatabaseToAsync(202603010000, CancellationToken);
 
@@ -280,7 +280,28 @@ public class PerScopeMigrationTests : IAsyncLifetime
    }
 #pragma warning restore PGSQL0001
 
-   private sealed class CapturingLogger : ILogger<DatabaseMigrator>
+   private sealed class CapturingLoggerFactory : ILoggerFactory
+   {
+      private readonly CapturingLogger _logger = new();
+
+      public List<(LogLevel Level, string Message)> Entries => _logger.Entries;
+
+      public ILogger CreateLogger(string categoryName)
+      {
+         return _logger;
+      }
+
+      public void AddProvider(ILoggerProvider provider)
+      {
+         // No-op.
+      }
+
+      public void Dispose()
+      {
+      }
+   }
+
+   private sealed class CapturingLogger : ILogger
    {
       public List<(LogLevel Level, string Message)> Entries { get; } = [];
 

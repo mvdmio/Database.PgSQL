@@ -253,7 +253,7 @@ internal sealed class DatabaseMigrationRuntime : IMigrationRuntime
    public DatabaseMigrationRuntime(string connectionString, string? environmentName, MigrationProjectContext project)
    {
       _connection = new DatabaseConnection(connectionString);
-      _migrator = new DatabaseMigrator(_connection, environmentName, new ConsoleMigratorLogger(), [project.Assembly], project.MigrationRetriever);
+      _migrator = new DatabaseMigrator(_connection, environmentName, new ConsoleLoggerFactory(), [project.Assembly], project.MigrationRetriever);
    }
 
    public async ValueTask DisposeAsync()
@@ -279,6 +279,23 @@ internal sealed class DatabaseMigrationRuntime : IMigrationRuntime
    public async Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken)
    {
       await _migrator.MigrateDatabaseToAsync(targetIdentifier, cancellationToken);
+   }
+}
+
+internal sealed class ConsoleLoggerFactory : ILoggerFactory
+{
+   public ILogger CreateLogger(string categoryName)
+   {
+      return new ConsoleMigratorLogger();
+   }
+
+   public void AddProvider(ILoggerProvider provider)
+   {
+      // No-op.
+   }
+
+   public void Dispose()
+   {
    }
 }
 

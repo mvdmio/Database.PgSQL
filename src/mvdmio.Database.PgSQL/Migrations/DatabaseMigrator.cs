@@ -1,5 +1,6 @@
 using JetBrains.Annotations;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using mvdmio.Database.PgSQL.Exceptions;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers;
@@ -40,13 +41,27 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
-   /// <param name="logger">The logger to use for migration warnings and diagnostics.</param>
    /// <param name="assembliesContainingMigrations">
    ///    List of assemblies to use for searching <see cref="IDbMigration" />
    ///    classes. These assemblies are also searched for embedded schema resources.
    /// </param>
-   public DatabaseMigrator(DatabaseConnection connection, ILogger<DatabaseMigrator> logger, params Assembly[] assembliesContainingMigrations)
-      : this(connection, environment: null, logger, assembliesContainingMigrations)
+   [Obsolete(message: "Use the constructor that accepts an ILoggerFactory; in the 1.0.0 release the loggerFactory parameter becomes required.")]
+   public DatabaseMigrator(DatabaseConnection connection, params Assembly[] assembliesContainingMigrations)
+      : this(connection, environment: null, NullLoggerFactory.Instance, assembliesContainingMigrations)
+   {
+   }
+
+   /// <summary>
+   ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval.
+   /// </summary>
+   /// <param name="connection">The database connection to use for migrations.</param>
+   /// <param name="loggerFactory">The logger factory to use for logging migration warnings and diagnostics.</param>
+   /// <param name="assembliesContainingMigrations">
+   ///    List of assemblies to use for searching <see cref="IDbMigration" />
+   ///    classes. These assemblies are also searched for embedded schema resources.
+   /// </param>
+   public DatabaseMigrator(DatabaseConnection connection, ILoggerFactory loggerFactory, params Assembly[] assembliesContainingMigrations)
+      : this(connection, environment: null, loggerFactory, assembliesContainingMigrations)
    {
    }
 
@@ -60,13 +75,13 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    schema.{environment}.sql resource (case-insensitive). Falls back to schema.sql if not found.
    ///    If the database is empty, the embedded schema is applied before running migrations.
    /// </param>
-   /// <param name="logger">The logger to use for migration warnings and diagnostics.</param>
+   /// <param name="loggerFactory">The logger factory to use for logging migration warnings and diagnostics.</param>
    /// <param name="assembliesContainingMigrations">
    ///    List of assemblies to use for searching <see cref="IDbMigration" />
    ///    classes. These assemblies are also searched for embedded schema resources.
    /// </param>
-   public DatabaseMigrator(DatabaseConnection connection, string? environment, ILogger<DatabaseMigrator> logger, params Assembly[] assembliesContainingMigrations)
-      : this(connection, environment, logger, assembliesContainingMigrations, new ReflectionMigrationRetriever(assembliesContainingMigrations))
+   public DatabaseMigrator(DatabaseConnection connection, string? environment, ILoggerFactory loggerFactory, params Assembly[] assembliesContainingMigrations)
+      : this(connection, environment, loggerFactory, assembliesContainingMigrations, new ReflectionMigrationRetriever(assembliesContainingMigrations))
    {
    }
 
@@ -74,10 +89,10 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class with a custom migration retriever.
    /// </summary>
    /// <param name="connection">The database connection to use for migrations.</param>
-   /// <param name="logger">The logger to use for migration warnings and diagnostics.</param>
+   /// <param name="loggerFactory">The logger factory to use for logging migration warnings and diagnostics.</param>
    /// <param name="migrationRetriever">The migration retriever to use.</param>
-   public DatabaseMigrator(DatabaseConnection connection, ILogger<DatabaseMigrator> logger, IMigrationRetriever migrationRetriever)
-      : this(connection, environment: null, logger, [], migrationRetriever)
+   public DatabaseMigrator(DatabaseConnection connection, ILoggerFactory loggerFactory, IMigrationRetriever migrationRetriever)
+      : this(connection, environment: null, loggerFactory, [], migrationRetriever)
    {
    }
 
@@ -91,7 +106,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    schema.{environment}.sql resource (case-insensitive). Falls back to schema.sql if not found.
    ///    If the database is empty, the embedded schema is applied before running migrations.
    /// </param>
-   /// <param name="logger">The logger to use for migration warnings and diagnostics.</param>
+   /// <param name="loggerFactory">The logger factory to use for logging migration warnings and diagnostics.</param>
    /// <param name="assembliesForSchemaDiscovery">
    ///    Assemblies to search for embedded schema resources. Pass empty array if schema discovery is not needed.
    /// </param>
@@ -99,13 +114,13 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    public DatabaseMigrator(
       DatabaseConnection connection,
       string? environment,
-      ILogger<DatabaseMigrator> logger,
+      ILoggerFactory loggerFactory,
       Assembly[] assembliesForSchemaDiscovery,
       IMigrationRetriever migrationRetriever)
    {
       _connection = connection;
       _environment = environment;
-      _logger = logger;
+      _logger = loggerFactory.CreateLogger<DatabaseMigrator>();
       _assemblies = assembliesForSchemaDiscovery;
       _migrationRetriever = migrationRetriever;
    }
