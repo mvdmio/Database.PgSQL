@@ -904,4 +904,92 @@ public class SchemaExtractionTests : TestBase
       currentMigrations[0].Name.Should().Be("ComplexTable");
       currentMigrations[0].Scope.Should().Be("mvdmio.Database.PgSQL.Tests.Integration");
    }
+
+   [Fact]
+   public async Task GetCurrentMigrationVersionAsync_WithOwnedScopes_ExcludesForeignScopesAndKeepsLegacyRows()
+   {
+      // A shared database: the migrations table also carries another app's scope and a legacy
+      // scope-less row. With ownership declared, only the owned scope's watermark is reported;
+      // legacy rows cannot be attributed to a scope at export time, so they keep their entry.
+      await InsertForeignAndLegacyMigrationRowsAsync();
+
+      var extractor = new SchemaExtractor(Db, includedSchemas: null, ownedScopes: ["mvdmio.Database.PgSQL.Tests.Integration"]);
+
+      var currentMigrations = await extractor.GetCurrentMigrationVersionAsync(CancellationToken);
+
+      currentMigrations.Should().HaveCount(2);
+      currentMigrations.Should().Contain(m => m.Scope == "mvdmio.Database.PgSQL.Tests.Integration" && m.Identifier == 202505192230);
+      currentMigrations.Should().Contain(m => m.Scope == null && m.Identifier == 202301010000);
+      currentMigrations.Should().NotContain(m => m.Scope == "Foreign.App");
+   }
+
+   [Fact]
+   public async Task GetCurrentMigrationVersionAsync_WithoutOwnedScopes_ReturnsEveryScope()
+   {
+      await InsertForeignAndLegacyMigrationRowsAsync();
+
+      var extractor = new SchemaExtractor(Db, includedSchemas: null);
+
+      var currentMigrations = await extractor.GetCurrentMigrationVersionAsync(CancellationToken);
+
+      currentMigrations.Should().Contain(m => m.Scope == "mvdmio.Database.PgSQL.Tests.Integration");
+      currentMigrations.Should().Contain(m => m.Scope == "Foreign.App");
+      currentMigrations.Should().Contain(m => m.Scope == null);
+   }
+
+   [Fact]
+   public async Task GenerateSchemaScriptAsync_WithOwnedScopes_OmitsForeignScopeHeaderLines()
+   {
+      await InsertForeignAndLegacyMigrationRowsAsync();
+
+      var extractor = new SchemaExtractor(Db, includedSchemas: null, ownedScopes: ["mvdmio.Database.PgSQL.Tests.Integration"]);
+
+      var script = await extractor.GenerateSchemaScriptAsync(CancellationToken);
+
+      script.Should().Contain("Migration version: 202505192230 (ComplexTable) [mvdmio.Database.PgSQL.Tests.Integration]");
+      script.Should().NotContain("Foreign.App");
+   }
+
+   [Fact]
+   public async Task GenerateSchemaScriptAsync_WithIncludedSchemasAndOwnedScopes_ExportsOnlyOwnedWatermarkAndIncludedSchemas()
+   {
+      // The reporter's shape: multiple apps share one database (foreign scope rows present), and this
+      // app's export is filtered to its own schemas AND its own scope. Neither the body nor the header
+      // may name the other app's objects or watermark.
+      await InsertForeignAndLegacyMigrationRowsAsync();
+
+      var extractor = new SchemaExtractor(Db, includedSchemas: ["test_schema"], ownedScopes: ["mvdmio.Database.PgSQL.Tests.Integration"]);
+
+      var script = await extractor.GenerateSchemaScriptAsync(CancellationToken);
+
+      script.Should().Contain("Migration version: 202505192230 (ComplexTable) [mvdmio.Database.PgSQL.Tests.Integration]");
+      script.Should().NotContain("Foreign.App");
+      script.Should().Contain("CREATE SCHEMA IF NOT EXISTS \"test_schema\";");
+      script.Should().NotContain("CREATE SCHEMA IF NOT EXISTS \"identity\";");
+   }
+
+   [Fact]
+   public async Task GenerateSchemaScriptAsync_WithOwnedScopeThatHasNoExecutedMigrations_EmitsNoneHeader()
+   {
+      // Owning a scope with no executed migrations degrades exactly as an empty database does, so a
+      // schema-first bootstrap of that app alone stays self-consistent.
+      var extractor = new SchemaExtractor(Db, includedSchemas: null, ownedScopes: ["App.That.Never.Ran"]);
+
+      var script = await extractor.GenerateSchemaScriptAsync(CancellationToken);
+
+      script.Should().Contain("-- Migration version: (none)");
+      script.Should().NotContain("Migration version: 202505192230");
+   }
+
+   private async Task InsertForeignAndLegacyMigrationRowsAsync()
+   {
+      await Db.Dapper.ExecuteAsync(
+         """
+         INSERT INTO "mvdmio"."migrations" (identifier, name, executed_at, scope)
+         VALUES (202607101400, 'ForeignTable', NOW(), 'Foreign.App'),
+                (202301010000, 'LegacyRow', NOW(), NULL);
+         """,
+         ct: CancellationToken
+      );
+   }
 }

@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers;
@@ -467,6 +468,49 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
          foreach (var resource in resources)
             resource.Stream.Dispose();
       }
+   }
+
+   [Fact]
+   public async Task MigrateDatabaseToLatestAsync_WithForeignScopeInSchemaHeader_IgnoresGhostBaselineAndRunsThatScopesMigrations()
+   {
+      // Models an app whose pulled schema header names another assembly's scope (a `db pull` from a shared
+      // database), bootstrapped together with that other assembly — which has migrations but no schema file
+      // of its own. The ghost header line must not fabricate a baseline for the other scope: all of its
+      // migrations run from zero, and the ignored line is warned about.
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      var loggerFactory = new CapturingLoggerFactory();
+      var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly, SecondaryAssembly);
+      var migrator = new DatabaseMigrator(
+         db,
+         environment: "ghostheader", // schema.ghostheader.sql exists only in the primary assembly
+         loggerFactory,
+         [TestAssembly],
+         migrationRetriever);
+
+      await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      // The primary schema was applied and its own scope's baseline holds.
+      (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
+
+      // Every secondary-scope migration ran — the ghost header line did not suppress them.
+      (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeTrue();
+      (await db.Management.TableExistsAsync("public", "secondary_follow_up_table")).Should().BeTrue();
+
+      var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
+      executedMigrations.Should().Contain(m => m.Identifier == 202505181000 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration");
+      executedMigrations.Should().Contain(m => m.Identifier == 202505181100 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
+      executedMigrations.Should().Contain(m => m.Identifier == 202505190000 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
+
+      // No ghost baseline row: the secondary scope's rows all come from actually-run migrations, and the
+      // ignored header line (202505190000) exists exactly once — as the executed migration, not a baseline.
+      executedMigrations.Count(m => m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema").Should().Be(2);
+
+      // The ignored header line was warned about, naming the file and the foreign scope.
+      loggerFactory.Entries.Should().ContainSingle(e =>
+         e.Level == LogLevel.Warning &&
+         e.Message.Contains("mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema") &&
+         e.Message.Contains("schema.ghostheader.sql"));
    }
 
    [Fact]

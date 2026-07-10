@@ -187,10 +187,14 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
          await AcquireMigrationLockAsync(cancellationToken);
          lockAcquired = true;
 
+         // Discover migrations once for the whole run; schema application needs them to decide which
+         // scopes each schema file's assembly vouches for.
+         var discoveredMigrations = _migrationRetriever.RetrieveMigrations().ToArray();
+
          // Check if database is empty and we have a schema resource to apply
          if (await ShouldApplySchemaAsync(targetIdentifier, cancellationToken))
          {
-            await ApplySchemaAsync(cancellationToken);
+            await ApplySchemaAsync(discoveredMigrations, cancellationToken);
          }
          else
          {
@@ -198,9 +202,8 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
             _scopeColumnExists = true;
          }
 
-         // Read executed rows and discover migrations once for the whole run; the backfill returns the
-         // executed set with its attributions applied so the selection below needs no second read.
-         var discoveredMigrations = _migrationRetriever.RetrieveMigrations().ToArray();
+         // Read executed rows once; the backfill returns the executed set with its attributions applied
+         // so the selection below needs no second read.
          var executedMigrations = (await RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
 
          executedMigrations = await BackfillScopesAsync(executedMigrations, discoveredMigrations, cancellationToken);
@@ -346,10 +349,13 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <summary>
    ///    Applies all embedded schema resources to the database in assembly order.
    ///    Each assembly contributes at most one schema file. One baseline migration row is recorded per scope,
-   ///    using the highest identifier for that scope across all applied schema headers. Version lines without
-   ///    a scope (legacy headers) record a single scope-less baseline that the backfill later attributes.
+   ///    using the highest identifier for that scope across all applied schema headers — but only for scopes
+   ///    the contributing file's assembly vouches for (see <see cref="SchemaBaselineSelector" />); foreign
+   ///    header lines are ignored with a warning so they cannot suppress another assembly's migrations.
+   ///    Version lines without a scope (legacy headers) record a scope-less baseline that the backfill later
+   ///    attributes.
    /// </summary>
-   private async Task ApplySchemaAsync(CancellationToken cancellationToken)
+   private async Task ApplySchemaAsync(IReadOnlyCollection<IDbMigration> discoveredMigrations, CancellationToken cancellationToken)
    {
       var schemas = await EmbeddedSchemaDiscovery.ReadAllSchemaContentsAsync(_assemblies, _environment, cancellationToken);
 
@@ -363,40 +369,65 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
          await MigrationsTableManager.EnsureTableAsync(_connection, cancellationToken);
          _scopeColumnExists = true;
 
-         var migrationInfos = new List<SchemaFileMigrationInfo>();
+         var headers = new List<SchemaFileHeader>();
 
-         foreach (var (content, _, _) in schemas)
+         foreach (var (content, resourceName, assembly) in schemas)
          {
             if (string.IsNullOrEmpty(content))
                continue;
 
             await _connection.Dapper.ExecuteAsync(content, ct: cancellationToken);
 
-            migrationInfos.AddRange(SchemaFileParser.ParseMigrationVersion(content));
+            headers.Add(new SchemaFileHeader(
+               resourceName,
+               assembly.GetName().Name ?? assembly.ToString(),
+               SchemaFileParser.ParseMigrationVersion(content),
+               GetVouchedScopes(assembly, discoveredMigrations)
+            ));
          }
 
-         // Record one baseline row per scope: the highest version for that scope across all applied schemas.
-         var scopedBaselines = migrationInfos
-            .Where(info => info.Scope is not null)
-            .GroupBy(info => info.Scope!, StringComparer.Ordinal)
-            .Select(group => group.OrderByDescending(info => info.Identifier).First());
+         var selection = SchemaBaselineSelector.SelectBaselines(headers);
 
-         // Legacy scope-less header lines are recorded individually, not collapsed: each represents a
-         // different assembly's baseline, and the backfill attributes each to its scope by identifier.
-         // Collapsing them to the highest would leave every other scope without a watermark, re-running
-         // migrations whose effects the schema already contains.
-         var legacyBaselines = migrationInfos
-            .Where(info => info.Scope is null)
-            .GroupBy(info => info.Identifier)
-            .Select(group => group.First());
+         foreach (var rejection in selection.Rejected)
+         {
+            _logger.LogWarning(
+               "Ignoring migration-version header line for scope {Scope} (identifier {Identifier}) in schema resource '{ResourceName}' from assembly '{AssemblyName}': " +
+               "the assembly does not vouch for that scope, so no baseline row is recorded and that scope's migrations run from its own watermark. " +
+               "Declare scope ownership ('scopes' in .mvdmio-migrations.yml) and re-run 'db pull' to remove foreign scopes from the header.",
+               rejection.HeaderLine.Scope,
+               rejection.HeaderLine.Identifier,
+               rejection.ResourceName,
+               rejection.AssemblyName
+            );
+         }
 
-         var baselines = scopedBaselines.Concat(legacyBaselines).OrderBy(info => info.Identifier);
-
-         foreach (var baseline in baselines)
+         foreach (var baseline in selection.Baselines)
          {
             await InsertMigrationRowAsync(baseline.Identifier, baseline.Name, baseline.Scope, cancellationToken);
          }
       });
+   }
+
+   /// <summary>
+   ///    The scopes a schema file's assembly vouches for: the scopes of migrations discovered from that
+   ///    assembly, plus the assembly's simple name (the default scope, which also covers an assembly that
+   ///    folded all of its migrations into its schema and therefore contributes none to discover).
+   /// </summary>
+   private static IReadOnlyCollection<string> GetVouchedScopes(Assembly assembly, IReadOnlyCollection<IDbMigration> discoveredMigrations)
+   {
+      var scopes = new HashSet<string>(StringComparer.Ordinal);
+
+      var assemblyName = assembly.GetName().Name;
+      if (assemblyName is not null)
+         scopes.Add(assemblyName);
+
+      foreach (var migration in discoveredMigrations)
+      {
+         if (migration.GetType().Assembly == assembly)
+            scopes.Add(migration.Scope);
+      }
+
+      return scopes;
    }
 
    /// <summary>

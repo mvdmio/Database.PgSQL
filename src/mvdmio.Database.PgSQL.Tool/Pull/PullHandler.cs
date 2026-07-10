@@ -62,7 +62,7 @@ internal sealed class PullHandler
 
       try
       {
-         schemaResult = await _schemaExportService.ExportAsync(connectionString, config.Schemas, cancellationToken);
+         schemaResult = await _schemaExportService.ExportAsync(connectionString, config.Schemas, config.Scopes, cancellationToken);
       }
       catch (InvalidOperationException ex)
       {

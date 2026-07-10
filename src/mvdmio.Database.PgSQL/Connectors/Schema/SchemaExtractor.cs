@@ -20,6 +20,7 @@ public sealed class SchemaExtractor
    private readonly DatabaseConnection _db;
    private readonly SchemaCatalogReader _catalog;
    private readonly IReadOnlyCollection<string>? _includedSchemas;
+   private readonly IReadOnlyCollection<string>? _ownedScopes;
 
    /// <summary>
    ///    Initializes a new instance of the <see cref="SchemaExtractor"/> class.
@@ -36,9 +37,27 @@ public sealed class SchemaExtractor
    /// <param name="db">The database connection to use for schema extraction.</param>
    /// <param name="includedSchemas">Optional set of schemas to export. When null or empty, all user schemas are exported.</param>
    public SchemaExtractor(DatabaseConnection db, IReadOnlyCollection<string>? includedSchemas)
+      : this(db, includedSchemas, ownedScopes: null)
+   {
+   }
+
+   /// <summary>
+   ///    Initializes a new instance of the <see cref="SchemaExtractor"/> class.
+   /// </summary>
+   /// <param name="db">The database connection to use for schema extraction.</param>
+   /// <param name="includedSchemas">Optional set of schemas to export. When null or empty, all user schemas are exported.</param>
+   /// <param name="ownedScopes">
+   ///    Optional set of migration scopes the exporting application owns. When set, the migration-version
+   ///    header reports watermarks only for these scopes (plus legacy scope-less rows, which cannot be
+   ///    attributed to a scope at export time). When null or empty, all scopes are reported. Declare
+   ///    ownership when exporting from a database shared by multiple applications, so the header cannot
+   ///    carry another application's watermark.
+   /// </param>
+   public SchemaExtractor(DatabaseConnection db, IReadOnlyCollection<string>? includedSchemas, IReadOnlyCollection<string>? ownedScopes)
    {
       _db = db;
       _includedSchemas = includedSchemas is { Count: > 0 } ? includedSchemas : null;
+      _ownedScopes = ownedScopes is { Count: > 0 } ? ownedScopes : null;
       _catalog = new SchemaCatalogReader(db, _includedSchemas);
    }
 
@@ -49,9 +68,16 @@ public sealed class SchemaExtractor
    public IReadOnlyCollection<string>? IncludedSchemas => _includedSchemas;
 
    /// <summary>
+   ///    Gets the migration scopes the exporting application owns, or null when all scopes are reported.
+   /// </summary>
+   [PublicAPI]
+   public IReadOnlyCollection<string>? OwnedScopes => _ownedScopes;
+
+   /// <summary>
    ///    Gets the current migration version per scope: the highest executed identifier within each scope.
    ///    Rows recorded before scopes existed (and not yet backfilled) are reported as a single entry with a
-   ///    null scope.
+   ///    null scope. When <see cref="OwnedScopes" /> is set, only the owned scopes (plus the scope-less
+   ///    entry, which cannot be attributed to a scope at export time) are reported.
    /// </summary>
    /// <param name="cancellationToken">A cancellation token.</param>
    /// <returns>
@@ -70,6 +96,8 @@ public sealed class SchemaExtractor
 
       // The scope column only exists once the new migrator has touched the database; exporting from a
       // not-yet-upgraded database must still work, so fall back to a scope-less select in that case.
+      // The owned-scopes filter does not apply there: every row is scope-less, and scope-less rows keep
+      // their representation regardless of the filter.
       var scopeColumnExists = await MigrationsTableManager.ScopeColumnExistsAsync(_db, cancellationToken);
 
       if (!scopeColumnExists)
@@ -88,6 +116,14 @@ public sealed class SchemaExtractor
          )).ToArray();
       }
 
+      var ownedScopesFilter = _ownedScopes is null
+         ? string.Empty
+         : "WHERE scope IS NULL OR scope = ANY(:ownedScopes)";
+
+      var parameters = _ownedScopes is null
+         ? null
+         : new Dictionary<string, object?> { { "ownedScopes", _ownedScopes.ToArray() } };
+
       return (await _db.Dapper.QueryAsync<ExecutedMigrationModel>(
          $"""
          SELECT DISTINCT ON (scope)
@@ -96,8 +132,10 @@ public sealed class SchemaExtractor
             executed_at AS executedAtUtc,
             scope AS scope
          FROM {MIGRATIONS_TABLE_FULLY_QUALIFIED}
+         {ownedScopesFilter}
          ORDER BY scope, identifier DESC
          """,
+         parameters,
          ct: cancellationToken
       )).ToArray();
    }

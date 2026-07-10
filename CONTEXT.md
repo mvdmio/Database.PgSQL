@@ -19,3 +19,11 @@ _Avoid_: Assembly name (it defaults to that but is not bound to it), namespace, 
 **Watermark**:
 The highest executed **Identifier** within a single **Scope**. Migrations with an identifier above their scope's watermark are pending. Tracked per scope, not globally.
 _Avoid_: High-water mark, version, checkpoint.
+
+**Owned scope**:
+A **Scope** an application declares as its own in the tool configuration (`scopes` in `.mvdmio-migrations.yml`). Schema export writes header watermark lines only for owned scopes, so a schema pulled from a shared database never names another application's timeline. Undeclared means all scopes (legacy behavior).
+_Avoid_: Included scope, exported scope.
+
+**Vouched scope**:
+A **Scope** an assembly may establish a schema-first baseline for: the scopes of migrations discovered from that assembly, plus the assembly's simple name. Header lines for non-vouched scopes are ignored with a warning during bootstrap.
+_Avoid_: Trusted scope, verified scope.

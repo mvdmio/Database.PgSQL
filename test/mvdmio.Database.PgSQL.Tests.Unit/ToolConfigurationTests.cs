@@ -59,6 +59,34 @@ public class ToolConfigurationTests
    }
 
    [Fact]
+   public void Deserialize_WithScopes_ParsesCorrectly()
+   {
+      var yaml = """
+         schemas:
+           - billing
+         scopes:
+           - MyApp.Data
+           - MyApp.Billing
+         """;
+
+      var config = Deserialize(yaml);
+
+      config.Scopes.Should().BeEquivalentTo(["MyApp.Data", "MyApp.Billing"]);
+   }
+
+   [Fact]
+   public void Deserialize_WithoutScopes_ParsesWithNull()
+   {
+      var yaml = """
+         project: src/MyApp.Data
+         """;
+
+      var config = Deserialize(yaml);
+
+      config.Scopes.Should().BeNull();
+   }
+
+   [Fact]
    public void Deserialize_WithOldConnectionStringField_IgnoresItGracefully()
    {
       var yaml = """
@@ -160,6 +188,35 @@ public class ToolConfigurationTests
          savedYaml.Should().NotContain("- \"\"");
 
          config.Schemas.Should().BeEquivalentTo(["billing", "public"]);
+      }
+      finally
+      {
+         Directory.Delete(tempDirectory, true);
+      }
+   }
+
+   [Fact]
+   public void Save_WithScopes_NormalizesAndOmitsEmptyEntries()
+   {
+      var tempDirectory = Path.Combine(Path.GetTempPath(), $"tool-config-tests-{Guid.NewGuid():N}");
+      Directory.CreateDirectory(tempDirectory);
+
+      try
+      {
+         var config = new ToolConfiguration
+         {
+            Scopes = [" MyApp.Data ", string.Empty, "MyApp.Data", "MyApp.Billing", "   "]
+         };
+
+         config.Save(tempDirectory);
+
+         var savedYaml = File.ReadAllText(Path.Combine(tempDirectory, ToolConfiguration.CONFIG_FILE_NAME));
+         savedYaml.Should().Contain("scopes:");
+         savedYaml.Should().Contain("- MyApp.Data");
+         savedYaml.Should().Contain("- MyApp.Billing");
+         savedYaml.Should().NotContain("- \"\"");
+
+         config.Scopes.Should().BeEquivalentTo(["MyApp.Data", "MyApp.Billing"]);
       }
       finally
       {

@@ -13,7 +13,9 @@ The migration runner is safe to call from multiple application instances startin
 
 Migrations are tracked **per scope** (defaulting to the declaring assembly's simple name, overridable on `IDbMigration`): each scope keeps its own watermark, so multiple assemblies migrating the same database advance independently and can never silently suppress each other's migrations. Existing databases are upgraded in place on the next run, with a temporary backfill attributing existing rows to their scope. See [docs/adr/0002-per-scope-migration-watermarks.md](docs/adr/0002-per-scope-migration-watermarks.md).
 
-The CLI tool now supports an optional `schemas` configuration value so multi-project solutions can export only the PostgreSQL schemas owned by each project. When omitted or empty, exports still include all user schemas.
+Schema-first bootstrap only trusts a schema file's header for scopes its own assembly **vouches for**: the scopes of migrations discovered from that assembly, plus the assembly's simple name. Header lines naming any other scope — for example from a schema pulled off a shared database without declared scope ownership — are ignored with a logged warning, so a foreign header line can never fabricate a baseline that silently skips another assembly's migrations. See [docs/adr/0003-scope-ownership-and-baseline-vouching.md](docs/adr/0003-scope-ownership-and-baseline-vouching.md).
+
+The CLI tool supports an optional `schemas` configuration value so multi-project solutions can export only the PostgreSQL schemas owned by each project (when omitted or empty, exports still include all user schemas), and an optional `scopes` configuration value declaring which migration scopes the project owns, so schemas pulled from a shared database carry only the owning project's migration watermark in their header. Declaring `scopes` is recommended whenever multiple applications share one database.
 
 ## Packages
 

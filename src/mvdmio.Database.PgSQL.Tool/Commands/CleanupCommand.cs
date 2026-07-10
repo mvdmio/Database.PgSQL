@@ -46,7 +46,7 @@ internal static class CleanupCommand
 
             try
             {
-               schemaResult = await schemaExportService.ExportAsync(connectionString, config.Schemas, cancellationToken);
+               schemaResult = await schemaExportService.ExportAsync(connectionString, config.Schemas, config.Scopes, cancellationToken);
             }
             catch (InvalidOperationException ex)
             {

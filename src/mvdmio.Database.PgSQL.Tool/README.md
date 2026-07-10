@@ -81,6 +81,8 @@ The exported header records one `-- Migration version: <id> (<name>) [<scope>]` 
 
 Set `schemas` in `.mvdmio-migrations.yml` to export only specific PostgreSQL schemas. When omitted or empty, `db pull` and `db cleanup` export all user schemas. `public` is only included when listed explicitly.
 
+Set `scopes` in `.mvdmio-migrations.yml` to declare which migration scopes this application owns (scope names match `IDbMigration.Scope`; by default, the migrations assembly's simple name). When set, the exported header carries watermark lines only for the owned scopes, so a schema pulled from a database shared by multiple applications cannot carry another application's watermark — a foreign watermark line would otherwise make a schema-first bootstrap silently skip that application's migrations. When omitted or empty, all scopes are exported. Declaring `scopes` is recommended whenever multiple applications share one database. An owned scope without executed migrations exports the `(none)` header form; scope-less rows from not-yet-upgraded databases always keep their header line.
+
 Exported table definitions preserve PostgreSQL identity columns and `GENERATED ALWAYS AS (...) STORED` columns.
 
 ### `db cleanup`
@@ -129,6 +131,8 @@ schemasDirectory: Schemas
 schemas:
   - billing
   - identity
+scopes:
+  - MyApp.Data
 connectionStrings:
   local: Host=localhost;Database=mydb;Username=postgres;Password=secret
   acc: Host=acc-server;Database=mydb;Username=postgres;Password=secret

@@ -57,6 +57,7 @@ public class PullHandlerTests
          BasePath = Path.Combine("C:", "repo"),
          SchemasDirectory = "Schemas",
          Schemas = ["billing", "identity"],
+         Scopes = ["MyApp.Billing"],
          ConnectionStrings = new Dictionary<string, string>
          {
             ["local"] = "Host=localhost;Database=localdb"
@@ -67,6 +68,7 @@ public class PullHandlerTests
 
       schemaExportService.ConnectionString.Should().Be("Host=localhost;Database=localdb");
       schemaExportService.Schemas.Should().BeEquivalentTo(["billing", "identity"]);
+      schemaExportService.OwnedScopes.Should().BeEquivalentTo(["MyApp.Billing"]);
       fileSystem.CreatedDirectories.Should().ContainSingle().Which.Should().Be(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")));
       fileSystem.Writes.Should().ContainSingle();
       fileSystem.Writes.Single().Key.Should().Be(Path.Combine(Path.GetFullPath(Path.Combine("C:", "repo", "Schemas")), "schema.local.sql"));
@@ -114,16 +116,19 @@ public class PullHandlerTests
    {
       public string? ConnectionString { get; private set; }
       public IReadOnlyCollection<string>? Schemas { get; private set; }
+      public IReadOnlyCollection<string>? OwnedScopes { get; private set; }
       public SchemaExportResult Result { get; set; } = new(string.Empty, [], [], []);
 
       public override Task<SchemaExportResult> ExportAsync(
          string connectionString,
          IReadOnlyCollection<string>? schemas = null,
+         IReadOnlyCollection<string>? ownedScopes = null,
          CancellationToken cancellationToken = default
       )
       {
          ConnectionString = connectionString;
          Schemas = schemas;
+         OwnedScopes = ownedScopes;
          return Task.FromResult(Result);
       }
    }
@@ -150,6 +155,7 @@ public class PullHandlerTests
       public override Task<SchemaExportResult> ExportAsync(
          string connectionString,
          IReadOnlyCollection<string>? schemas = null,
+         IReadOnlyCollection<string>? ownedScopes = null,
          CancellationToken cancellationToken = default
       )
       {

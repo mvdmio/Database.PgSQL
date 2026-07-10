@@ -20,10 +20,11 @@ public class SchemaExportServiceTests
       var factory = new FakeSchemaExportClientFactory(client);
       var service = new SchemaExportService(factory);
 
-      var result = await service.ExportAsync("Host=localhost;Database=mydb", ["billing"], cancellationToken);
+      var result = await service.ExportAsync("Host=localhost;Database=mydb", ["billing"], ["MyApp.Billing"], cancellationToken);
 
       factory.ConnectionString.Should().Be("Host=localhost;Database=mydb");
       factory.Schemas.Should().BeEquivalentTo(["billing"]);
+      factory.OwnedScopes.Should().BeEquivalentTo(["MyApp.Billing"]);
       result.Script.Should().Be("-- schema");
       result.Tables.Should().ContainSingle();
       result.Constraints.Should().ContainSingle();
@@ -54,7 +55,7 @@ public class SchemaExportServiceTests
       };
       var service = new SchemaExportService(new FakeSchemaExportClientFactory(client));
 
-      var result = await service.ExportAsync("Host=localhost;Database=mydb", ["billing"], cancellationToken);
+      var result = await service.ExportAsync("Host=localhost;Database=mydb", ["billing"], cancellationToken: cancellationToken);
 
       result.Warnings.Should().ContainSingle();
       result.Warnings.Single().Should().Contain("billing.invoice.fk_invoice_user");
@@ -90,7 +91,7 @@ public class SchemaExportServiceTests
       };
       var service = new SchemaExportService(new FakeSchemaExportClientFactory(client));
 
-      var result = await service.ExportAsync("Host=localhost;Database=mydb", ["billing"], cancellationToken);
+      var result = await service.ExportAsync("Host=localhost;Database=mydb", ["billing"], cancellationToken: cancellationToken);
 
       result.Warnings.Should().ContainSingle();
       result.Warnings.Single().Should().Contain("billing.invoice.status");
@@ -107,7 +108,7 @@ public class SchemaExportServiceTests
       };
       var service = new SchemaExportService(new FakeSchemaExportClientFactory(client));
 
-      var action = () => service.ExportAsync("Host=localhost;Database=mydb", ["missing_schema"], cancellationToken);
+      var action = () => service.ExportAsync("Host=localhost;Database=mydb", ["missing_schema"], cancellationToken: cancellationToken);
 
       var exception = await action.Should().ThrowAsync<InvalidOperationException>();
       exception.Which.Message.Should().Contain("missing_schema");
@@ -124,11 +125,13 @@ public class SchemaExportServiceTests
 
       public string? ConnectionString { get; private set; }
       public IReadOnlyCollection<string>? Schemas { get; private set; }
+      public IReadOnlyCollection<string>? OwnedScopes { get; private set; }
 
-      public ISchemaExportClient Create(string connectionString, IReadOnlyCollection<string>? schemas)
+      public ISchemaExportClient Create(string connectionString, IReadOnlyCollection<string>? schemas, IReadOnlyCollection<string>? ownedScopes)
       {
          ConnectionString = connectionString;
          Schemas = schemas;
+         OwnedScopes = ownedScopes;
          return _client;
       }
    }

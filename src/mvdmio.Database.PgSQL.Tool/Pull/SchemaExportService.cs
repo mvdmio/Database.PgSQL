@@ -23,10 +23,11 @@ internal class SchemaExportService
    public virtual async Task<SchemaExportResult> ExportAsync(
       string connectionString,
       IReadOnlyCollection<string>? schemas = null,
+      IReadOnlyCollection<string>? ownedScopes = null,
       CancellationToken cancellationToken = default
    )
    {
-      await using var client = _clientFactory.Create(connectionString, schemas);
+      await using var client = _clientFactory.Create(connectionString, schemas, ownedScopes);
 
       var availableSchemas = await client.GetExportableSchemasAsync(cancellationToken);
       ValidateSchemas(schemas, availableSchemas);
@@ -109,7 +110,7 @@ internal sealed record SchemaExportResult(
 
 internal interface ISchemaExportClientFactory
 {
-   ISchemaExportClient Create(string connectionString, IReadOnlyCollection<string>? schemas);
+   ISchemaExportClient Create(string connectionString, IReadOnlyCollection<string>? schemas, IReadOnlyCollection<string>? ownedScopes);
 }
 
 internal interface ISchemaExportClient : IAsyncDisposable
@@ -122,9 +123,9 @@ internal interface ISchemaExportClient : IAsyncDisposable
 
 internal sealed class SchemaExportClientFactory : ISchemaExportClientFactory
 {
-   public ISchemaExportClient Create(string connectionString, IReadOnlyCollection<string>? schemas)
+   public ISchemaExportClient Create(string connectionString, IReadOnlyCollection<string>? schemas, IReadOnlyCollection<string>? ownedScopes)
    {
-      return new SchemaExportClient(new DatabaseConnection(connectionString), schemas);
+      return new SchemaExportClient(new DatabaseConnection(connectionString), schemas, ownedScopes);
    }
 }
 
@@ -133,10 +134,10 @@ internal sealed class SchemaExportClient : ISchemaExportClient
    private readonly DatabaseConnection _connection;
    private readonly SchemaExtractor _schemaExtractor;
 
-   public SchemaExportClient(DatabaseConnection connection, IReadOnlyCollection<string>? schemas)
+   public SchemaExportClient(DatabaseConnection connection, IReadOnlyCollection<string>? schemas, IReadOnlyCollection<string>? ownedScopes)
    {
       _connection = connection;
-      _schemaExtractor = new SchemaExtractor(connection, schemas);
+      _schemaExtractor = new SchemaExtractor(connection, schemas, ownedScopes);
    }
 
    public async ValueTask DisposeAsync()
