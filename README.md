@@ -1,50 +1,31 @@
 # mvdmio.Database.PgSQL
 
-PostgreSQL tooling for .NET.
+PostgreSQL tooling for .NET, in two packages:
 
-This repository contains two publishable packages:
+- **[`mvdmio.Database.PgSQL`](src/mvdmio.Database.PgSQL/README.md)** — the library you use from application code:
+  queries, transactions, bulk operations, generated repositories, migrations, and schema management.
+- **[`mvdmio.Database.PgSQL.Tool`](src/mvdmio.Database.PgSQL.Tool/README.md)** — a `dotnet` tool exposed as `db` for
+  creating and running migrations, exporting schema files, copying data between environments, and cleaning up
+  obsolete migrations.
 
-- `mvdmio.Database.PgSQL`: a .NET library for PostgreSQL access, transactions, bulk operations, schema management, migrations, and generated repositories.
-- `mvdmio.Database.PgSQL.Tool`: a `dotnet` global/local tool exposed as `db` for creating migrations, applying them, pulling schema files, and cleaning up obsolete migrations.
+Both target `net8.0`, `net9.0`, and `net10.0`. Use the library on its own, or add the tool when you also want a
+command-line migration workflow.
 
-The library package also ships MSBuild props that automatically embed `Schemas/**/*.sql` files for both direct package consumers and downstream projects reached through transitive project/package references. When `DatabaseMigrator` is given multiple assemblies, schemas from every assembly are applied in order on a cold-start migration.
-
-The migration runner is safe to call from multiple application instances starting at once: it serializes each run with a session-scoped PostgreSQL advisory lock so migrations are applied exactly once, with no configuration required. Run migrations against a direct or session-pooled connection (not PgBouncer transaction-pooling). See [docs/adr/0001-advisory-lock-for-migration-runner.md](docs/adr/0001-advisory-lock-for-migration-runner.md).
-
-Migrations are tracked **per scope** (defaulting to the declaring assembly's simple name, overridable on `IDbMigration`): each scope keeps its own watermark, so multiple assemblies migrating the same database advance independently and can never silently suppress each other's migrations. Existing databases are upgraded in place on the next run, with a temporary backfill attributing existing rows to their scope. See [docs/adr/0002-per-scope-migration-watermarks.md](docs/adr/0002-per-scope-migration-watermarks.md).
-
-Schema-first bootstrap only trusts a schema file's header for scopes its own assembly **vouches for**: the scopes of migrations discovered from that assembly, plus the assembly's simple name. Header lines naming any other scope — for example from a schema pulled off a shared database without declared scope ownership — are ignored with a logged warning, so a foreign header line can never fabricate a baseline that silently skips another assembly's migrations. See [docs/adr/0003-scope-ownership-and-baseline-vouching.md](docs/adr/0003-scope-ownership-and-baseline-vouching.md).
-
-The CLI tool supports an optional `schemas` configuration value so multi-project solutions can export only the PostgreSQL schemas owned by each project (when omitted or empty, exports still include all user schemas), and an optional `scopes` configuration value declaring which migration scopes the project owns, so schemas pulled from a shared database carry only the owning project's migration watermark in their header. Declaring `scopes` is recommended whenever multiple applications share one database.
-
-## Packages
-
-### `mvdmio.Database.PgSQL`
-
-Use this package in application code.
-
-Install:
+## Install
 
 ```bash
+# In your application project
 dotnet add package mvdmio.Database.PgSQL
+
+# The CLI, globally...
+dotnet tool install --global mvdmio.Database.PgSQL.Tool
+
+# ...or into a tool manifest
+dotnet new tool-manifest
+dotnet tool install mvdmio.Database.PgSQL.Tool
 ```
 
-What it includes:
-
-- Dapper-based query and command execution for PostgreSQL
-- Transaction helpers
-- Bulk copy and upsert operations
-- Schema inspection and schema export
-- Migration runner
-- Source-generated repositories for annotated table models
-
-Streaming COPY sessions created with `BeginCopyAsync(...)` should be used with `await using`; failed writes now clean up the importer and release the connection through async disposal.
-
-Schema export integration tests cover both true identity columns and sequence-backed defaults, verify that standalone unique indexes are preserved in exported schema files, and verify that exported schema files execute against a fresh empty PostgreSQL database.
-
-Exported `schema.sql` files include an auto-generated header comment warning that the file should not be modified directly and that migration files should be changed instead.
-
-Quick example:
+## Query From Code
 
 ```csharp
 using mvdmio.Database.PgSQL;
@@ -59,36 +40,44 @@ var users = await db.Dapper.QueryAsync<User>(
 );
 ```
 
-Package README:
+## Or Let The Repository Be Generated For You
 
-- [`src/mvdmio.Database.PgSQL/README.md`](src/mvdmio.Database.PgSQL/README.md)
+Annotate a table model:
 
-### `mvdmio.Database.PgSQL.Tool`
+```csharp
+using mvdmio.Database.PgSQL.Attributes;
 
-Use this package when you want a CLI for migration and schema workflows.
+[Table("public.users")]
+public partial class UserTable
+{
+   [PrimaryKey]
+   [Generated]
+   public long UserId { get; set; }
 
-Install globally:
-
-```bash
-dotnet tool install --global mvdmio.Database.PgSQL.Tool
+   [Unique]
+   public string UserName { get; set; } = string.Empty;
+}
 ```
 
-Or install locally to a tool manifest:
+...and a typed repository is generated at build time, along with the command and data types it uses:
 
-```bash
-dotnet new tool-manifest
-dotnet tool install mvdmio.Database.PgSQL.Tool
+```csharp
+var repository = new UserRepository(db);
+
+var created = await repository.CreateAsync(new CreateUserCommand { UserName = "alice" }, ct);
+var found = await repository.GetByUserNameAsync("alice", ct);
+var deleted = await repository.DeleteByUserIdAsync(created.UserId, ct);
 ```
 
-After installation, the command is `db`.
+Full walkthrough: [Generated Repositories](src/mvdmio.Database.PgSQL/README.md#generated-repositories).
 
-Typical workflow:
+## Migrate From The Command Line
 
 ```bash
-db init
-db migration create AddUsersTable
-db migrate latest
-db pull
+db init                              # create .mvdmio-migrations.yml
+db migration create AddUsersTable    # scaffold a migration
+db migrate latest                    # apply pending migrations
+db pull                              # export the current schema to Schemas/
 ```
 
 Refresh a local database from another configured environment:
@@ -97,38 +86,40 @@ Refresh a local database from another configured environment:
 db copy --from prod --to local
 ```
 
-`db copy` truncates all destination tables and streams data via PostgreSQL binary `COPY`. It honors the `schemas` config, skips generated and `IDENTITY ALWAYS` columns, and resets identity / serial sequences on the destination so subsequent inserts continue past the copied rows. Requires the destination user to be a superuser (uses `session_replication_role = replica` to bypass FK ordering). Run `db migrate latest --environment <to>` on the destination first so the schema matches the source.
+## What The Library Gives You
 
-Package README:
+- **Queries and commands** through Dapper, with `snake_case` to `PascalCase` column mapping and PostgreSQL-typed
+  parameters
+- **Transactions**, either around a delegate or driven explicitly with an isolation level
+- **Bulk operations** built on PostgreSQL binary `COPY`: bulk insert, streaming copy, upsert, insert-or-skip,
+  temp-table staging, and table-to-table copy across connections
+- **Generated repositories**: annotate a table model and get typed CRUD, lookups by primary key and unique column,
+  and DI registration generated at build time
+- **Migrations from application code**, tracked per scope so several assemblies can migrate one database
+  independently, and serialized by an advisory lock so concurrently starting instances apply them exactly once
+- **Schema-first bootstrap**: `Schemas/**/*.sql` files are embedded automatically and applied to an empty database
+  instead of replaying every migration
+- **Schema management**: table and schema existence checks, catalog inspection, and full schema export
 
-- [`src/mvdmio.Database.PgSQL.Tool/README.md`](src/mvdmio.Database.PgSQL.Tool/README.md)
+Usage and examples: **[library documentation](src/mvdmio.Database.PgSQL/README.md)**.
 
-## When To Use Which Package
+## What The CLI Gives You
 
-- Use `mvdmio.Database.PgSQL` when writing application or service code that talks to PostgreSQL.
-- Use `mvdmio.Database.PgSQL.Tool` when you want a CLI for migration authoring, migration execution, and schema export.
-- Use both when your application uses the library and your team also wants a repeatable migration workflow from the command line.
+| Command                      | Purpose                                                         |
+|------------------------------|-----------------------------------------------------------------|
+| `db init`                    | Create the `.mvdmio-migrations.yml` configuration file            |
+| `db migration create <name>` | Scaffold a timestamped migration class                            |
+| `db migrate latest`          | Apply all pending migrations                                      |
+| `db migrate to <identifier>` | Apply migrations up to a specific identifier                      |
+| `db pull`                    | Export the current database schema to a schema file                |
+| `db cleanup`                 | Refresh schema files and delete migrations they have superseded    |
+| `db copy --from x --to y`    | Copy all table data between configured environments                |
 
-## Repository Layout
+Every command reads connection strings and project layout from `.mvdmio-migrations.yml`. The commands that talk to a
+database — `db migrate latest`, `db migrate to`, and `db pull` — take `--environment`/`-e` to pick which one, or
+`--connection-string` to bypass the config.
 
-```text
-src/
-  mvdmio.Database.PgSQL/        Main NuGet package
-  mvdmio.Database.PgSQL.Tool/   CLI tool package
-  mvdmio.Database.PgSQL.Analyzers/ Analyzer/source generator support
-test/
-  mvdmio.Database.PgSQL.Tests.Unit/
-  mvdmio.Database.PgSQL.Tests.Integration/
-  mvdmio.Database.PgSQL.Analyzers.Tests/
-```
-
-## Build And Test
-
-```bash
-dotnet format
-dotnet build
-dotnet test
-```
+Options and configuration: **[CLI documentation](src/mvdmio.Database.PgSQL.Tool/README.md)**.
 
 ## License
 

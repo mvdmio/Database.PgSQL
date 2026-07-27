@@ -42,11 +42,14 @@ Creates a `.mvdmio-migrations.yml` file in your project.
 
 Creates a timestamped migration class you can fill in with SQL.
 
-Example:
-
 ```bash
 db migration create AddUsersTable
 ```
+
+The file is written to the configured `migrationsDirectory` as `_<YYYYMMDDHHmm>_<name>.cs` — for example
+`Migrations/_202602161430_AddUsersTable.cs`. Its namespace is the enclosing project's root namespace followed by the
+path from the project to that directory, so the file compiles where it lands. The file name is the convention the
+library requires: the timestamp becomes the migration's identifier and orders it against the others.
 
 ### `db migrate latest`
 
@@ -75,13 +78,20 @@ db pull
 db pull --environment prod
 ```
 
-By default, schema files are written into `Schemas/`.
+Schema files are written into the configured `schemasDirectory` (`Schemas/` by default) as
+`schema.<environment>.sql` — where the environment is the one `--environment` names, or the first entry in
+`connectionStrings` when it is omitted. Only `--connection-string`, which belongs to no environment, produces a plain
+`schema.sql`. Files in that directory are embedded into the project's assembly automatically, so the library can apply
+them to an empty database instead of replaying every migration.
 
-The exported header records one `-- Migration version: <id> (<name>) [<scope>]` line per migration scope, so a schema-first bootstrap can establish the correct baseline for every scope. Older scope-less schema files are still read.
+`db pull` starts the file with an `AUTO-GENERATED FILE — DO NOT MODIFY` banner: change a migration and re-run
+`db pull` rather than editing the schema file by hand.
+
+The exported header records one `-- Migration version: <id> (<name>) [<scope>]` line per migration scope, so a schema-first bootstrap can establish the correct baseline for every scope.
 
 Set `schemas` in `.mvdmio-migrations.yml` to export only specific PostgreSQL schemas. When omitted or empty, `db pull` and `db cleanup` export all user schemas. `public` is only included when listed explicitly.
 
-Set `scopes` in `.mvdmio-migrations.yml` to declare which migration scopes this application owns (scope names match `IDbMigration.Scope`; by default, the migrations assembly's simple name). When set, the exported header carries watermark lines only for the owned scopes, so a schema pulled from a database shared by multiple applications cannot carry another application's watermark — a foreign watermark line would otherwise make a schema-first bootstrap silently skip that application's migrations. When omitted or empty, all scopes are exported. Declaring `scopes` is recommended whenever multiple applications share one database. An owned scope without executed migrations exports the `(none)` header form; scope-less rows from not-yet-upgraded databases always keep their header line.
+Set `scopes` in `.mvdmio-migrations.yml` to declare which migration scopes this application owns — scope names match `IDbMigration.Scope`, which defaults to the migrations assembly's simple name. The exported header then carries watermark lines only for those scopes, so a schema pulled from a database shared with other applications cannot claim their migrations are further along than they are. **Declare `scopes` whenever several applications share one database**; without it the header exports every scope it finds, and applying such a schema elsewhere can skip the other application's migrations. An owned scope with no executed migrations exports the `(none)` header form.
 
 Exported table definitions preserve PostgreSQL identity columns and `GENERATED ALWAYS AS (...) STORED` columns.
 
@@ -158,8 +168,8 @@ db pull --environment local
 
 ## Companion Library
 
-This tool is designed to work with [`mvdmio.Database.PgSQL`](../mvdmio.Database.PgSQL/README.md).
+This tool is designed to work with [`mvdmio.Database.PgSQL`](https://github.com/mvdmio/mvdmio.Database.PgSQL/blob/main/src/mvdmio.Database.PgSQL/README.md).
 
 ## License
 
-MIT. See [`../../LICENSE`](../../LICENSE).
+MIT. See [LICENSE](https://github.com/mvdmio/mvdmio.Database.PgSQL/blob/main/LICENSE).
