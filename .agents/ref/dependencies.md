@@ -5,6 +5,7 @@
 | Package | Purpose |
 |---------|---------|
 | `Dapper` | Micro-ORM for queries |
+| `linq2db` | LINQ provider behind the query surface (`db.Linq`, generated `Query()`) — see ADR 0004 |
 | `Npgsql` | PostgreSQL ADO.NET provider |
 | `Microsoft.Extensions.DependencyInjection.Abstractions` | DI integration |
 | `Portable.System.DateTimeOnly` | `DateOnly`/`TimeOnly` support on older TFMs |

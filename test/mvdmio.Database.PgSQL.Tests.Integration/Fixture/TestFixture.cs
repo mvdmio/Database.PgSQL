@@ -19,8 +19,25 @@ public sealed class TestFixture : IAsyncLifetime
    {
       await DbContainer.StartAsync();
 
-      var databaseMigrator = new DatabaseMigrator(new DatabaseConnection(DbContainer.GetConnectionString()), NullLoggerFactory.Instance, GetType().Assembly);
+      await using var connection = new DatabaseConnection(DbContainer.GetConnectionString());
+
+      var databaseMigrator = new DatabaseMigrator(connection, NullLoggerFactory.Instance, GetType().Assembly);
       await databaseMigrator.MigrateDatabaseToLatestAsync();
+
+      // Committed rather than migrated: the migration tests assert on the exact set of migrations this assembly ships.
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_profiles (
+            profile_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            handle     TEXT NOT NULL UNIQUE,
+            nickname   TEXT NULL,
+            birth_date DATE NOT NULL,
+            wake_time  TIME NOT NULL,
+            home_page  TEXT NULL,
+            metadata   JSONB NULL
+         )
+         """
+      );
    }
 
    public async ValueTask DisposeAsync()

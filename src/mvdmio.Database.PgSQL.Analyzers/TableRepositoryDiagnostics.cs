@@ -96,4 +96,14 @@ internal static class TableRepositoryDiagnostics
       isEnabledByDefault: true,
       description: "Generated repository companion types require unique names or an existing partial class with the same name."
    );
+
+   public static readonly DiagnosticDescriptor UnmappableQueryPropertyType = new(
+      id: "PGSQL0011",
+      title: "Property type cannot be mapped by the query surface",
+      messageFormat: "'{0}.{1}' has type '{2}', which the query surface cannot map; register a conversion with LinqDatabaseConnector.ConfigureMappingSchema",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Warning,
+      isEnabledByDefault: true,
+      description: "Query() can only translate property types the query surface knows how to convert. Other types need a conversion registered through the mapping hook."
+   );
 }

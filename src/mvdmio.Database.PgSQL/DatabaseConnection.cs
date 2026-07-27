@@ -2,6 +2,7 @@ using Dapper;
 using JetBrains.Annotations;
 using mvdmio.Database.PgSQL.Connectors;
 using mvdmio.Database.PgSQL.Connectors.Bulk;
+using mvdmio.Database.PgSQL.Connectors.Linq;
 using mvdmio.Database.PgSQL.Dapper;
 using mvdmio.Database.PgSQL.Exceptions;
 using Npgsql;
@@ -33,6 +34,9 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
 
    /// <inheritdoc cref="BulkConnector" />
    public BulkConnector Bulk { get; }
+
+   /// <inheritdoc cref="LinqDatabaseConnector" />
+   public LinqDatabaseConnector Linq { get; }
 
    /// <inheritdoc cref="DatabaseConnectionInfo" />
    public DatabaseConnectionInfo Info { get; }
@@ -70,6 +74,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       Dapper = new DapperDatabaseConnector(this);
       Management = new ManagementDatabaseConnector(this);
       Bulk = new BulkConnector(this);
+      Linq = new LinqDatabaseConnector(this);
       Info = new DatabaseConnectionInfo(dataSource.ConnectionString);
    }
 
@@ -88,6 +93,8 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       {
          if (_disposed)
             return;
+
+         await Linq.DisposeAsync();
 
          if (_openConnection is not null)
          {
@@ -125,6 +132,8 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       {
          if (_disposed)
             return;
+
+         Linq.Dispose();
 
          if (_openConnection is not null)
          {

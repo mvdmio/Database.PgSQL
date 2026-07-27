@@ -35,3 +35,7 @@ _Avoid_: Entity, model, POCO, mapping.
 **Entity name**:
 A **Table definition**'s class name with the `Table` suffix removed. The stem every generated type name is built from, so it — not the table name — is what appears in consuming code.
 _Avoid_: Table name, class name, type name.
+
+**Query surface**:
+The deferred, composable read path over a **Table definition**'s table, reached through a generated repository's `Query()` and backed by the `Linq` adapter. Read-only and single-table: it never mutates and never spans tables. Distinct from the Dapper surface, which every other generated method runs on — the two derive from the same **Table definition** but keep separate conversion registries.
+_Avoid_: LINQ provider (that is the dependency underneath), ORM, query builder.

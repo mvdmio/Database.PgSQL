@@ -37,6 +37,7 @@ public class TableRepositoryGeneratorTests
          public class DatabaseConnection
          {
             public Connectors.DapperDatabaseConnector Dapper { get; } = new Connectors.DapperDatabaseConnector();
+            public Connectors.Linq.LinqDatabaseConnector Linq { get; } = new Connectors.Linq.LinqDatabaseConnector();
          }
 
          public static class ServiceCollectionExtensions
@@ -53,6 +54,25 @@ public class TableRepositoryGeneratorTests
             public System.Threading.Tasks.Task<T?> QuerySingleOrDefaultAsync<T>(string sql, System.Collections.Generic.IDictionary<string, object?>? parameters = null, System.TimeSpan? commandTimeout = null, System.Threading.CancellationToken ct = default) => throw null!;
             public System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<T>> QueryAsync<T>(string sql, System.Collections.Generic.IDictionary<string, object?>? parameters = null, System.TimeSpan? commandTimeout = null, System.Threading.CancellationToken ct = default) => throw null!;
             public System.Threading.Tasks.Task<int> ExecuteAsync(string sql, System.Collections.Generic.IDictionary<string, object?>? parameters = null, System.TimeSpan? commandTimeout = null, System.Threading.CancellationToken ct = default) => throw null!;
+         }
+      }
+
+      namespace mvdmio.Database.PgSQL.Connectors.Linq
+      {
+         public sealed class LinqDatabaseConnector
+         {
+            public System.Linq.IQueryable<TEntity> Query<TEntity>(System.TimeSpan? commandTimeout = null) where TEntity : class => throw null!;
+         }
+
+         public sealed class QueryEntityMappingBuilder<TEntity>
+            where TEntity : class
+         {
+            public QueryEntityMappingBuilder<TEntity> Column<TProperty>(System.Linq.Expressions.Expression<System.Func<TEntity, TProperty>> property, string columnName, bool isPrimaryKey = false) => throw null!;
+         }
+
+         public static class QueryMappings
+         {
+            public static void Register<TEntity>(string schemaName, string tableName, System.Action<QueryEntityMappingBuilder<TEntity>> configure) where TEntity : class { }
          }
       }
       """;
@@ -101,6 +121,104 @@ public class TableRepositoryGeneratorTests
       generatedSource.Should().Contain("DeleteByUserNameAsync");
       generatedSource.Should().Contain("INSERT INTO \"public\".\"users\" (\"user_name\", \"firstName\")");
       generatedSource.Should().Contain("RETURNING \"user_id\" AS \"UserId\", \"user_name\" AS \"UserName\", \"firstName\" AS \"FirstName\"");
+      generatedSource.Should().Contain("IQueryable<UserData> Query(TimeSpan? commandTimeout = null);");
+      generatedSource.Should().Contain("return _db.Linq.Query<UserData>(commandTimeout);");
+      registrationSource.Should().Contain("[global::System.Runtime.CompilerServices.ModuleInitializer]");
+      registrationSource.Should().Contain("QueryMappings.Register<global::Demo.UserData>(");
+      registrationSource.Should().Contain(".Column(x => x.UserId, \"user_id\", isPrimaryKey: true)");
+      registrationSource.Should().Contain(".Column(x => x.FirstName, \"firstName\")");
+   }
+
+   [Fact]
+   public void MappablePropertyTypes_ProduceNoWarning()
+   {
+      var source = """
+         using mvdmio.Database.PgSQL.Attributes;
+         using System;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         public enum Status { Active, Archived }
+
+         [Table("public.everything")]
+         public partial class EverythingTable
+         {
+            [PrimaryKey]
+            public Guid Id { get; set; }
+
+            public bool Flag { get; set; }
+            public byte Tiny { get; set; }
+            public sbyte SignedTiny { get; set; }
+            public short Small { get; set; }
+            public ushort UnsignedSmall { get; set; }
+            public int Number { get; set; }
+            public uint UnsignedNumber { get; set; }
+            public long Big { get; set; }
+            public ulong UnsignedBig { get; set; }
+            public float Single { get; set; }
+            public double Double { get; set; }
+            public decimal Money { get; set; }
+            public char Letter { get; set; }
+            public string Text { get; set; } = string.Empty;
+            public string? OptionalText { get; set; }
+            public byte[] Blob { get; set; } = Array.Empty<byte>();
+            public DateTime Moment { get; set; }
+            public DateTimeOffset OffsetMoment { get; set; }
+            public DateOnly Day { get; set; }
+            public TimeOnly Time { get; set; }
+            public TimeSpan Duration { get; set; }
+            public int? OptionalNumber { get; set; }
+            public DateOnly? OptionalDay { get; set; }
+            public Status State { get; set; }
+            public Status? OptionalState { get; set; }
+            public Uri? Link { get; set; }
+            public Dictionary<string, string>? Metadata { get; set; }
+         }
+         """;
+
+      var result = RunGenerator(source);
+
+      result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0011");
+   }
+
+   [Fact]
+   public void UnmappablePropertyType_ProducesWarning()
+   {
+      var source = """
+         using mvdmio.Database.PgSQL.Attributes;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         public class Address
+         {
+            public string City { get; set; } = string.Empty;
+         }
+
+         [Table("public.users")]
+         public partial class UserTable
+         {
+            [PrimaryKey]
+            public long UserId { get; set; }
+
+            public string UserName { get; set; } = string.Empty;
+            public Address? HomeAddress { get; set; }
+            public List<string> Tags { get; set; } = new();
+            public Dictionary<string, int>? Counters { get; set; }
+         }
+         """;
+
+      var result = RunGenerator(source);
+
+      var warnings = result.Diagnostics.Where(x => x.Id == "PGSQL0011").ToList();
+
+      warnings.Should().HaveCount(3);
+      warnings.Should().AllSatisfy(x => x.Severity.Should().Be(DiagnosticSeverity.Warning));
+      warnings.Select(x => x.GetMessage()).Should().Contain(x => x.Contains("HomeAddress", StringComparison.Ordinal));
+      warnings.Select(x => x.GetMessage()).Should().Contain(x => x.Contains("Tags", StringComparison.Ordinal));
+      warnings.Select(x => x.GetMessage()).Should().Contain(x => x.Contains("Counters", StringComparison.Ordinal));
+      result.GeneratedSources.Should().NotBeEmpty("the warning must not stop generation");
    }
 
    [Fact]

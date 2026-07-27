@@ -11,6 +11,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine("#nullable enable");
       builder.AppendLine("using System;");
       builder.AppendLine("using System.Collections.Generic;");
+      builder.AppendLine("using System.Linq;");
       builder.AppendLine("using System.Threading;");
       builder.AppendLine("using System.Threading.Tasks;");
 
@@ -75,6 +76,7 @@ internal static class TableRepositorySourceBuilder
          builder.AppendLine($"   Task<bool> DeleteBy{property.PropertyName}Async({property.TypeName} {property.ParameterName}, CancellationToken ct = default);");
       }
 
+      builder.AppendLine($"   IQueryable<{model.DataTypeName}> Query(TimeSpan? commandTimeout = null);");
       builder.AppendLine("}");
    }
 
@@ -110,7 +112,18 @@ internal static class TableRepositorySourceBuilder
          AppendDeleteByMethod(builder, model, property);
       }
 
+      builder.AppendLine();
+      AppendQueryMethod(builder, model);
+
       builder.AppendLine("}");
+   }
+
+   private static void AppendQueryMethod(StringBuilder builder, TableDefinitionModel model)
+   {
+      builder.AppendLine($"   public IQueryable<{model.DataTypeName}> Query(TimeSpan? commandTimeout = null)");
+      builder.AppendLine("   {");
+      builder.AppendLine($"      return _db.Linq.Query<{model.DataTypeName}>(commandTimeout);");
+      builder.AppendLine("   }");
    }
 
    private static void AppendCreateMethod(StringBuilder builder, TableDefinitionModel model)

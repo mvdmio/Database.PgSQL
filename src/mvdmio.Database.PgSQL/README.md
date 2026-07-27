@@ -19,6 +19,7 @@ Targets `net8.0`, `net9.0`, and `net10.0`.
 - [Execute work inside transactions](#transactions)
 - [Bulk copy, upsert, and insert-or-skip](#bulk-operations) large batches of rows
 - [Generate repositories](#generated-repositories) from annotated table models
+- [Compose queries at runtime](#composable-queries) over an `IQueryable<T>` that translates to SQL
 - [Run migrations](#migrations) from application code — tracked per scope and safe under concurrent startup
 - [Inspect and export the database schema](#schema-inspection-and-export)
 - [Wait for `NOTIFY` messages](#listennotify) on a channel
@@ -177,9 +178,10 @@ await db.Dapper.ExecuteAsync(
 ### Errors
 
 A failed query throws `QueryException`, which carries the offending SQL in its `Sql` property and includes it in
-`ToString()`. Migration failures throw `MigrationException`. Both derive from `DatabaseException`, so
-`catch (DatabaseException)` covers query and migration failures. Invalid arguments and misuse still surface as the
-usual `ArgumentException`/`InvalidOperationException`, and bulk `COPY` failures can surface Npgsql's own
+`ToString()`. Migration failures throw `MigrationException`. A composed query that cannot be turned into SQL throws
+`QueryTranslationException` — there is no SQL yet at that point. All three derive from `DatabaseException`, so
+`catch (DatabaseException)` covers them. Invalid arguments and misuse still surface as the usual
+`ArgumentException`/`InvalidOperationException`, and bulk `COPY` failures can surface Npgsql's own
 `PostgresException`.
 
 ## Transactions
@@ -405,6 +407,108 @@ The repository exposes:
 - `UpdateAsync(Update…Command, CancellationToken)` → the updated row, matched on the primary key
 - `DeleteBy{Property}Async(value, CancellationToken)` → `true` when a row was deleted; one method per primary key and
   `[Unique]` property
+- `Query(TimeSpan? commandTimeout = null)` → an `IQueryable<…Data>` you compose against — see
+  [Composable Queries](#composable-queries)
+
+### Composable Queries
+
+`Query()` returns a deferred `IQueryable<…Data>` over the table. Nothing runs until you materialize it, and what you
+compose translates to SQL rather than being filtered in memory:
+
+```csharp
+var repository = new UserRepository(db);
+
+var page = await repository.Query()
+   .Where(x => x.FirstName == firstName && x.LastLoginAt > cutoff)
+   .OrderByDescending(x => x.LastLoginAt)
+   .ThenBy(x => x.UserName)
+   .Skip(20)
+   .Take(20)
+   .ToListAsync(ct);
+```
+
+Values that come from local variables become SQL parameters, not inlined literals, so PostgreSQL can reuse the query
+plan.
+
+Because it is the framework's own `IQueryable<T>`, you can hand it to anything that consumes one — including an
+ASP.NET Core OData action, where `[EnableQuery]` composes `$filter`, `$orderby`, `$top` and `$skip` onto it and the
+database does the work:
+
+```csharp
+[HttpGet]
+[EnableQuery]
+public IQueryable<UserData> Get() => _repository.Query();
+```
+
+`Query()` is declared on the generated interface as well as the class, so a test can hand a caller a fake:
+
+```csharp
+public IQueryable<UserData> Query(TimeSpan? commandTimeout = null) => _users.AsQueryable();
+```
+
+#### Awaiting a query
+
+Materialization methods live in `mvdmio.Database.PgSQL`, so a `using mvdmio.Database.PgSQL;` is all you need:
+
+| Method                                  | Returns                                          |
+|-----------------------------------------|--------------------------------------------------|
+| `ToListAsync(ct)`                       | `List<T>`                                        |
+| `FirstAsync(ct)` / `FirstOrDefaultAsync(ct)` | the first row; `FirstAsync` throws when there is none |
+| `SingleAsync(ct)` / `SingleOrDefaultAsync(ct)` | the only row                               |
+| `CountAsync(ct)` / `LongCountAsync(ct)` | the row count                                    |
+| `AnyAsync(ct)`                          | whether any row matched                          |
+
+The synchronous LINQ operators — `ToList()`, `First()`, `Single()`, `Count()`, `Any()` — work too. The queryable is
+also an `IAsyncEnumerable<T>`, so frameworks that detect asynchronous enumeration use it without knowing about this
+package:
+
+```csharp
+await foreach (var user in (IAsyncEnumerable<UserData>)repository.Query().Where(x => x.LastLoginAt != null))
+{
+   // …
+}
+```
+
+#### What translates
+
+Equality, inequality, ordering comparisons, and `&&`/`||` combinations; `OrderBy`/`OrderByDescending` with
+`ThenBy`/`ThenByDescending`; `Skip` and `Take`; `Count`, `LongCount` and `Any`; and the single-row operators. Null
+comparison follows C#, not SQL: `x.Nickname != "bobby"` returns the rows where `nickname` is null, the way the C# you
+wrote reads.
+
+An expression that cannot be translated throws `QueryTranslationException` — a client error, not a server error. A
+query that reaches the database and fails there throws the usual `QueryException` with the SQL attached.
+
+#### Connections, transactions, and timeouts
+
+A query executes against the connection and transaction that are current *when it runs*, not when it was composed, so
+composing before opening a transaction and enumerating inside it reads your own writes. Composing does not touch the
+database. Executing opens the connection if it is not open yet, and leaves it open — a queryable can be enumerated
+again at any time, so there is no point at which the query surface could close it for you. It closes with the
+`DatabaseConnection`, or when you call `Close()` yourself. Enumerating a query whose `DatabaseConnection` has been
+disposed throws `ObjectDisposedException`.
+
+SQL is generated for the newest PostgreSQL dialect the package knows about. Override it per connection when you target
+an older server:
+
+```csharp
+db.Linq.Dialect = PostgresDialect.V13;
+```
+
+Pass `commandTimeout` to bound a query you know may be expensive. There is no default — like every other adapter here,
+the timeout is yours to set:
+
+```csharp
+var report = await repository.Query().Where(x => x.LastLoginAt < cutoff).ToListAsync(ct);
+var slowReport = await repository.Query(TimeSpan.FromMinutes(2)).ToListAsync(ct);
+```
+
+The query surface is read-only. Mutation stays on the generated commands and on `db.Dapper` and `db.Bulk`. It also
+applies no limits of its own: no page cap, no row ceiling, and no per-column restriction on what may be filtered or
+sorted. If you expose a query surface to callers you do not trust — an OData endpoint, for instance — constraining it
+is yours to do.
+
+Cross-table queries are not supported: a query covers the one table its table model describes.
 
 ### Attributes
 
@@ -625,8 +729,9 @@ Synchronous `Wait(channel)` and `Wait(channel, timeout)` overloads are available
 
 ## Type Handling
 
-These types work out of the box, as parameters and in results: `DateOnly`, `TimeOnly`, `Uri`, and
-`Dictionary<string, string>` mapped to `jsonb`.
+These types work out of the box, as parameters and in results, on `db.Dapper` and on [composable
+queries](#composable-queries) alike: `DateOnly`, `TimeOnly`, `Uri`, and `Dictionary<string, string>` mapped to
+`jsonb`.
 
 Enums are stored as strings, but have to be registered once at startup:
 
@@ -636,6 +741,25 @@ services.AddEnumDapperTypeHandlers(typeof(Program).Assembly);
 
 Every enum in the given assemblies is mapped. The mapping applies process-wide rather than per service collection, so
 calling it once is enough.
+
+### Types the query surface does not know
+
+`db.Dapper` and the query surface keep separate conversion registries, so a Dapper type handler you wrote yourself
+does not reach `Query()`. Register the equivalent once at startup, before the first query runs:
+
+```csharp
+using LinqToDB;
+using mvdmio.Database.PgSQL.Connectors.Linq;
+
+LinqDatabaseConnector.ConfigureMappingSchema(schema =>
+{
+   schema.SetConverter<Money, decimal>(x => x.Amount);
+   schema.SetConverter<decimal, Money>(x => new Money(x));
+});
+```
+
+Like the Dapper handler registry this applies process-wide. `PGSQL0011` warns at build time when a table model has a
+property type the query surface cannot map, so you find out before the query runs.
 
 ## Build-Time Diagnostics
 
@@ -653,10 +777,12 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0008` | Error    | `[Table]` value is not `table` or `schema.table`                                   |
 | `PGSQL0009` | Error    | A property is not a public instance property with a public getter and setter        |
 | `PGSQL0010` | Error    | A generated type name is already taken by a non-partial type in the same namespace  |
+| `PGSQL0011` | Warning  | A property type cannot be mapped by the query surface — register a conversion       |
 
 `PGSQL0001` is a warning rather than an error because you can implement `Identifier` and `Name` yourself instead of
 following the naming convention. If you do neither, a misnamed migration class throws the moment those properties are
-read.
+read. `PGSQL0011` is a warning because the rest of the repository still works — only `Query()` cannot handle that
+column until a conversion is registered.
 
 ## CLI Tool
 

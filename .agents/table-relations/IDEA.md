@@ -6,7 +6,7 @@ Status: needs-triage
 
 A **Table definition** describes one table in isolation. It declares a table name, per-property column names, a primary key, unique columns, and generated columns — and nothing about how that table relates to any other. There is no foreign-key concept, no navigation property, and no way to say that one **Table definition** references another.
 
-Everything downstream inherits that limitation. Generated repositories can only ever emit single-table SQL, and the query surface in [queryable generated repositories](../specs/queryable-generated-repositories.md) is single-table for exactly this reason: the provider it sits on expresses joins perfectly well, but the generator has no relation model to generate them from.
+Everything downstream inherits that limitation. Generated repositories can only ever emit single-table SQL, and the **query surface** ([ADR 0004](../../docs/adr/0004-linq2db-as-the-queryable-provider.md)) is single-table for exactly this reason: the provider it sits on expresses joins perfectly well, but the generator has no relation model to generate them from.
 
 It surfaced because an OData endpoint over a generated repository cannot support `$expand` without one. `$expand` and navigation-property filtering are the same requirement wearing two names, and both need a relation model.
 

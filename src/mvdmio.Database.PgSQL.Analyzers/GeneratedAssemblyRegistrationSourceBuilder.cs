@@ -50,8 +50,49 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
       builder.AppendLine();
       builder.AppendLine("      return services;");
       builder.AppendLine("   }");
+      builder.AppendLine();
+      AppendQueryMappingRegistration(builder, models);
       builder.AppendLine("}");
       return builder.ToString();
+   }
+
+   /// <remarks>
+   ///    Emitted as a module initializer so the mappings are in place before any generated repository can be used,
+   ///    without the library having to discover them by reflection.
+   /// </remarks>
+   private static void AppendQueryMappingRegistration(StringBuilder builder, ImmutableArray<TableDefinitionModel> models)
+   {
+      var ordered = models
+         .OrderBy(x => x.NamespaceName, StringComparer.Ordinal)
+         .ThenBy(x => x.DataTypeName, StringComparer.Ordinal)
+         .ToImmutableArray();
+
+      builder.AppendLine("   [global::System.Runtime.CompilerServices.ModuleInitializer]");
+      builder.AppendLine("   internal static void RegisterQueryMappings()");
+      builder.AppendLine("   {");
+
+      foreach (var model in ordered)
+      {
+         builder.AppendLine($"      global::mvdmio.Database.PgSQL.Connectors.Linq.QueryMappings.Register<{QualifyTypeName(model.NamespaceName, model.DataTypeName)}>(");
+         builder.AppendLine($"         {ToLiteral(model.SchemaName)},");
+         builder.AppendLine($"         {ToLiteral(model.TableName)},");
+         builder.AppendLine("         static entity => entity");
+
+         foreach (var property in model.DataProperties)
+         {
+            var primaryKeyArgument = property.IsPrimaryKey ? ", isPrimaryKey: true" : string.Empty;
+            builder.AppendLine($"            .Column(x => x.{property.PropertyName}, {ToLiteral(property.ColumnName)}{primaryKeyArgument})");
+         }
+
+         builder.AppendLine("      );");
+      }
+
+      builder.AppendLine("   }");
+   }
+
+   private static string ToLiteral(string value)
+   {
+      return $"\"{value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
    }
 
    private static string QualifyTypeName(string namespaceName, string typeName)

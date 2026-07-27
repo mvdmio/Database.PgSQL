@@ -11,3 +11,4 @@ PGSQL0007 | Generation | Error | Table definition has no updatable columns
 PGSQL0008 | Generation | Error | Invalid table name
 PGSQL0009 | Generation | Error | Unsupported table property shape
 PGSQL0010 | Generation | Error | Generated type name collision
+PGSQL0011 | Generation | Warning | Property type cannot be mapped by the query surface

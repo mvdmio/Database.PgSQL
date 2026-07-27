@@ -94,8 +94,20 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
-      var properties = allProperties
-         .Where(IsSupportedProperty)
+      var mappedProperties = allProperties.Where(IsSupportedProperty).ToImmutableArray();
+
+      foreach (var property in mappedProperties.Where(x => !QueryMappableTypes.IsMappable(x.Type)))
+      {
+         diagnostics.Add(Diagnostic.Create(
+            TableRepositoryDiagnostics.UnmappableQueryPropertyType,
+            property.Locations.FirstOrDefault() ?? classSyntax.Identifier.GetLocation(),
+            classSymbol.Name,
+            property.Name,
+            property.Type.ToDisplayString()
+         ));
+      }
+
+      var properties = mappedProperties
          .Select(CreatePropertyModel)
          .ToImmutableArray();
 

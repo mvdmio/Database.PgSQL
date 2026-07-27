@@ -8,6 +8,7 @@ mvdmio.Database.PgSQL/
 │   ├── mvdmio.Database.PgSQL/              # Main library (NuGet package)
 │   │   ├── Connectors/
 │   │   │   ├── Bulk/                       # Bulk ops: Copy, InsertOrUpdate, InsertOrSkip
+│   │   │   ├── Linq/                       # Query surface: linq2db adapter, mapping schema, queryable decorator
 │   │   │   ├── Schema/                     # Schema extraction / export (SchemaExtractor)
 │   │   │   ├── DapperDatabaseConnector.cs  # Dapper wrapper
 │   │   │   └── ManagementDatabaseConnector.cs
@@ -50,6 +51,10 @@ The analyzer project is referenced by the library as an analyzer and ships insid
 - `Dapper` — `DapperDatabaseConnector`: query/execute with connection + transaction handling.
 - `Management` — `ManagementDatabaseConnector`: `TableExistsAsync`, `SchemaExistsAsync`, schema extraction.
 - `Bulk` — `BulkConnector`: high-performance `Copy`, `InsertOrUpdate`, `InsertOrSkip`.
+- `Linq` — `LinqDatabaseConnector`: the query surface behind a generated repository's `Query()`. Owns a non-owning
+  linq2db context rebuilt whenever the connection or ambient transaction changes, plus the process-wide mapping schema
+  and its customization hook. Read [ADR 0004](../../docs/adr/0004-linq2db-as-the-queryable-provider.md) before
+  changing it.
 
 ## Migration framework
 

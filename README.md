@@ -69,6 +69,18 @@ var found = await repository.GetByUserNameAsync("alice", ct);
 var deleted = await repository.DeleteByUserIdAsync(created.UserId, ct);
 ```
 
+Need a query whose shape is only known at runtime? Every generated repository also hands you an `IQueryable<T>` that
+translates to SQL:
+
+```csharp
+var page = await repository.Query()
+   .Where(x => x.UserName == name)
+   .OrderBy(x => x.UserName)
+   .Skip(20)
+   .Take(20)
+   .ToListAsync(ct);
+```
+
 Full walkthrough: [Generated Repositories](src/mvdmio.Database.PgSQL/README.md#generated-repositories).
 
 ## Migrate From The Command Line
@@ -95,6 +107,8 @@ db copy --from prod --to local
   temp-table staging, and table-to-table copy across connections
 - **Generated repositories**: annotate a table model and get typed CRUD, lookups by primary key and unique column,
   and DI registration generated at build time
+- **Composable queries**: a deferred `IQueryable<T>` per table for filters, ordering and paging decided at runtime —
+  hand it to an OData endpoint or anything else that consumes a queryable
 - **Migrations from application code**, tracked per scope so several assemblies can migrate one database
   independently, and serialized by an advisory lock so concurrently starting instances apply them exactly once
 - **Schema-first bootstrap**: `Schemas/**/*.sql` files are embedded automatically and applied to an empty database
