@@ -27,3 +27,11 @@ _Avoid_: Included scope, exported scope.
 **Vouched scope**:
 A **Scope** an assembly may establish a schema-first baseline for: the scopes of migrations discovered from that assembly, plus the assembly's simple name. Header lines for non-vouched scopes are ignored with a warning during bootstrap.
 _Avoid_: Trusted scope, verified scope.
+
+**Table definition**:
+A class that declares one database table's shape — its name, its columns, and which column is the primary key. The single source every generated type for that table derives from. Named with a `Table` suffix by convention.
+_Avoid_: Entity, model, POCO, mapping.
+
+**Entity name**:
+A **Table definition**'s class name with the `Table` suffix removed. The stem every generated type name is built from, so it — not the table name — is what appears in consuming code.
+_Avoid_: Table name, class name, type name.
