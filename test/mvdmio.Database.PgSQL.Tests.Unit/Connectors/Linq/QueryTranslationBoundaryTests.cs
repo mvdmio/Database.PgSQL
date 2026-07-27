@@ -11,7 +11,7 @@ public class QueryTranslationBoundaryTests
    public void Execute_WhenTheFailedExecutionSentSql_ReportsThatSql()
    {
       var lastSql = "SELECT * FROM the_previous_query";
-      var source = new LinqQuerySource(() => throw new NotSupportedException(), () => lastSql);
+      var source = new LinqQuerySource(new object(), () => throw new NotSupportedException(), () => lastSql);
 
       var failure = Assert.Throws<QueryException>(
          () => QueryTranslationBoundary.Execute<int>(
@@ -32,7 +32,7 @@ public class QueryTranslationBoundaryTests
    public void Execute_WhenTheFailureSentNoSqlAtAll_DoesNotReportThePreviousQuerysSql()
    {
       // A failure before the command was built — a dropped connection, say — leaves the previous query's SQL behind.
-      var source = new LinqQuerySource(() => throw new NotSupportedException(), () => "SELECT * FROM the_previous_query");
+      var source = new LinqQuerySource(new object(), () => throw new NotSupportedException(), () => "SELECT * FROM the_previous_query");
 
       var failure = Assert.Throws<QueryException>(
          () => QueryTranslationBoundary.Execute<int>(
@@ -47,7 +47,7 @@ public class QueryTranslationBoundaryTests
    [Fact]
    public async Task ExecuteAsync_AppliesTheSameSqlAttribution()
    {
-      var source = new LinqQuerySource(() => throw new NotSupportedException(), () => "SELECT * FROM the_previous_query");
+      var source = new LinqQuerySource(new object(), () => throw new NotSupportedException(), () => "SELECT * FROM the_previous_query");
 
       var failure = await Assert.ThrowsAsync<QueryException>(
          () => QueryTranslationBoundary.ExecuteAsync<int>(
@@ -62,7 +62,7 @@ public class QueryTranslationBoundaryTests
    [Fact]
    public void Execute_ForAFailureThisLibraryDoesNotOwn_LeavesItAlone()
    {
-      var source = new LinqQuerySource(() => throw new NotSupportedException(), () => null);
+      var source = new LinqQuerySource(new object(), () => throw new NotSupportedException(), () => null);
 
       Assert.Throws<InvalidOperationException>(
          () => QueryTranslationBoundary.Execute<int>(() => throw new InvalidOperationException("Sequence contains no elements"), source)

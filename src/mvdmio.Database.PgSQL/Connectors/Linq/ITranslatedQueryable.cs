@@ -17,4 +17,9 @@ internal interface ITranslatedQueryable
    ///    The composed expression. For a root this is a constant node holding the decorator itself.
    /// </summary>
    Expression Expression { get; }
+
+   /// <summary>
+   ///    The query source this queryable composes over, which is what the rewriter resolves its root against.
+   /// </summary>
+   LinqQuerySource Source { get; }
 }

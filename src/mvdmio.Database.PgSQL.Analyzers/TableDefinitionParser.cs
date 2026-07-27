@@ -13,6 +13,20 @@ internal static class TableDefinitionParser
    private const string UNIQUE_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.UniqueAttribute";
    private const string COLUMN_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.ColumnAttribute";
    private const string GENERATED_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.GeneratedAttribute";
+   private const string RELATION_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.RelationAttribute";
+
+   /// <summary>
+   ///    The collection types a relation to many rows may be declared as. The generated mirror is always a concrete
+   ///    list, so this only decides what the table definition itself is allowed to say.
+   /// </summary>
+   private static readonly HashSet<string> _toManyCollectionTypeNames = new(StringComparer.Ordinal) {
+      "System.Collections.Generic.List<T>",
+      "System.Collections.Generic.IList<T>",
+      "System.Collections.Generic.ICollection<T>",
+      "System.Collections.Generic.IEnumerable<T>",
+      "System.Collections.Generic.IReadOnlyList<T>",
+      "System.Collections.Generic.IReadOnlyCollection<T>"
+   };
 
    private static readonly SymbolDisplayFormat _typeDisplayFormat = new(
       globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
@@ -74,7 +88,11 @@ internal static class TableDefinitionParser
          .OfType<IPropertySymbol>()
          .ToImmutableArray();
 
-      var invalidProperties = allProperties
+      // The relation attribute is the only opt-out from column mapping, and it opts out its own property only.
+      var relationProperties = allProperties.Where(x => HasAttribute(x, RELATION_ATTRIBUTE_FULL_NAME)).ToImmutableArray();
+      var columnCandidates = allProperties.Where(x => !HasAttribute(x, RELATION_ATTRIBUTE_FULL_NAME)).ToImmutableArray();
+
+      var invalidProperties = columnCandidates
          .Where(ShouldValidateProperty)
          .Where(x => !IsSupportedProperty(x))
          .ToImmutableArray();
@@ -94,7 +112,7 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
-      var mappedProperties = allProperties.Where(IsSupportedProperty).ToImmutableArray();
+      var mappedProperties = columnCandidates.Where(IsSupportedProperty).ToImmutableArray();
 
       foreach (var property in mappedProperties.Where(x => !QueryMappableTypes.IsMappable(x.Type)))
       {
@@ -194,11 +212,13 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
+      var relations = ParseRelations(classSymbol, relationProperties, diagnostics);
       var accessibility = classSymbol.DeclaredAccessibility == Accessibility.Public ? "public" : "internal";
       var model = new TableDefinitionModel(
          classSymbol.ContainingNamespace.IsGlobalNamespace ? string.Empty : classSymbol.ContainingNamespace.ToDisplayString(),
          accessibility,
          classSymbol.Name,
+         GetFullName(classSymbol),
          entityName,
          $"{entityName}Data",
          $"Create{entityName}Command",
@@ -212,10 +232,124 @@ internal static class TableDefinitionParser
          properties.Where(x => !x.IsGenerated).ToImmutableArray(),
          ImmutableArray.Create(primaryKey).AddRange(mutableUpdateProperties),
          lookupProperties,
-         mutableUpdateProperties
+         mutableUpdateProperties,
+         relations
       );
 
       return new ParseResult(model, diagnostics.ToImmutable());
+   }
+
+   /// <remarks>
+   ///    Only what one table can decide on its own is checked here: the property's shape, its type, and whether it
+   ///    contradicts a column attribute. Whether the target is a table definition and whether the named foreign key
+   ///    exists and can join are cross-table questions, answered once every table has been parsed. A relation that
+   ///    fails a check here is dropped and the rest of the table still generates.
+   /// </remarks>
+   private static ImmutableArray<RelationDeclarationModel> ParseRelations(
+      INamedTypeSymbol classSymbol,
+      ImmutableArray<IPropertySymbol> relationProperties,
+      ImmutableArray<Diagnostic>.Builder diagnostics
+   )
+   {
+      var relations = ImmutableArray.CreateBuilder<RelationDeclarationModel>();
+
+      foreach (var property in relationProperties)
+      {
+         var location = property.Locations.FirstOrDefault();
+
+         if (!IsSupportedProperty(property))
+         {
+            diagnostics.Add(Diagnostic.Create(TableRepositoryDiagnostics.UnsupportedRelationPropertyShape, location, classSymbol.Name, property.Name));
+            continue;
+         }
+
+         if (HasAttribute(property, COLUMN_ATTRIBUTE_FULL_NAME))
+         {
+            diagnostics.Add(Diagnostic.Create(TableRepositoryDiagnostics.RelationCannotBeAColumn, location, classSymbol.Name, property.Name));
+            continue;
+         }
+
+         if (!TryGetRelationTarget(property.Type, out var target, out var isToMany))
+         {
+            diagnostics.Add(Diagnostic.Create(TableRepositoryDiagnostics.UnsupportedRelationPropertyType, location, classSymbol.Name, property.Name, property.Type.ToDisplayString()));
+            continue;
+         }
+
+         // A relation is always an outer join, so a relation to one row that promises a value cannot be honoured.
+         // Left alone when the file has nullable reference types switched off, where the annotation cannot be written.
+         if (!isToMany && property.NullableAnnotation == NullableAnnotation.NotAnnotated)
+         {
+            diagnostics.Add(Diagnostic.Create(TableRepositoryDiagnostics.RelationToOneMustBeNullable, location, classSymbol.Name, property.Name));
+            continue;
+         }
+
+         var foreignKeyPropertyName = property.GetAttributes()
+            .First(x => x.AttributeClass?.ToDisplayString() == RELATION_ATTRIBUTE_FULL_NAME)
+            .ConstructorArguments.FirstOrDefault().Value as string;
+
+         relations.Add(
+            new RelationDeclarationModel(
+               property.Name,
+               GetFullName(target),
+               target.ToDisplayString(),
+               foreignKeyPropertyName ?? string.Empty,
+               isToMany,
+               location
+            )
+         );
+      }
+
+      return relations.ToImmutable();
+   }
+
+   /// <summary>
+   ///    Reads the relation's target and its cardinality off the property's type, which is the only place either is
+   ///    stated.
+   /// </summary>
+   private static bool TryGetRelationTarget(ITypeSymbol propertyType, out INamedTypeSymbol target, out bool isToMany)
+   {
+      target = null!;
+      isToMany = false;
+
+      if (propertyType is INamedTypeSymbol { IsGenericType: true } collection
+          && _toManyCollectionTypeNames.Contains(collection.OriginalDefinition.ToDisplayString()))
+      {
+         isToMany = true;
+
+         return IsTargetCandidate(collection.TypeArguments[0], out target);
+      }
+
+      // A sequence this does not support is rejected as an unsupported type rather than read as a single target, so
+      // the diagnostic names the real mistake instead of complaining that the collection is not a table definition.
+      if (propertyType.SpecialType != SpecialType.System_String && IsSequence(propertyType))
+         return false;
+
+      return IsTargetCandidate(propertyType, out target);
+   }
+
+   private static bool IsTargetCandidate(ITypeSymbol candidate, out INamedTypeSymbol target)
+   {
+      if (candidate is INamedTypeSymbol { TypeKind: TypeKind.Class } named)
+      {
+         target = named;
+         return true;
+      }
+
+      target = null!;
+      return false;
+   }
+
+   private static bool IsSequence(ITypeSymbol type)
+   {
+      return type is IArrayTypeSymbol
+             || type.AllInterfaces.Any(x => x.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T);
+   }
+
+   private static string GetFullName(INamedTypeSymbol type)
+   {
+      return type.ContainingNamespace.IsGlobalNamespace
+         ? type.Name
+         : $"{type.ContainingNamespace.ToDisplayString()}.{type.Name}";
    }
 
    private static bool IsPartial(INamedTypeSymbol classSymbol)

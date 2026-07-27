@@ -34,13 +34,12 @@ public sealed class TableRepositoryGenerator : IIncrementalGenerator
             return;
 
          var source = TableRepositorySourceBuilder.Build(result.Model);
-         var hintName = string.IsNullOrWhiteSpace(result.Model.NamespaceName)
-            ? result.Model.TableClassName
-            : $"{result.Model.NamespaceName}.{result.Model.TableClassName}";
 
-         productionContext.AddSource($"{hintName.Replace('.', '_')}.Repository.g.cs", source);
+         productionContext.AddSource($"{HintNameFor(result.Model)}.Repository.g.cs", source);
       });
 
+      // Relations are resolved here rather than per table, because a relation names another table definition and the
+      // per-table output only ever sees its own.
       context.RegisterSourceOutput(compilationAndDefinitions, static (productionContext, tuple) =>
       {
          var compilation = tuple.Left;
@@ -50,8 +49,25 @@ public sealed class TableRepositoryGenerator : IIncrementalGenerator
          if (models.Length == 0)
             return;
 
-         var source = GeneratedAssemblyRegistrationSourceBuilder.Build(compilation.AssemblyName ?? string.Empty, models);
+         var resolved = RelationResolver.Resolve(models);
+
+         foreach (var diagnostic in resolved.Diagnostics)
+         {
+            productionContext.ReportDiagnostic(diagnostic);
+         }
+
+         foreach (var table in resolved.Tables.Where(x => !x.Relations.IsEmpty))
+         {
+            productionContext.AddSource($"{HintNameFor(table.Model)}.Relations.g.cs", TableRelationsSourceBuilder.Build(table));
+         }
+
+         var source = GeneratedAssemblyRegistrationSourceBuilder.Build(compilation.AssemblyName ?? string.Empty, resolved.Tables);
          productionContext.AddSource("GeneratedAssemblyRegistration.g.cs", source);
       });
+   }
+
+   private static string HintNameFor(TableDefinitionModel model)
+   {
+      return model.TableClassFullName.Replace('.', '_');
    }
 }

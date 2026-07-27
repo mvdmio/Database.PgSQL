@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using System.Collections.Immutable;
 
 namespace mvdmio.Database.PgSQL.Analyzers;
@@ -8,6 +9,7 @@ internal sealed class TableDefinitionModel
       string namespaceName,
       string accessibility,
       string tableClassName,
+      string tableClassFullName,
       string entityName,
       string dataTypeName,
       string createCommandTypeName,
@@ -21,12 +23,14 @@ internal sealed class TableDefinitionModel
       ImmutableArray<PropertyDefinitionModel> createProperties,
       ImmutableArray<PropertyDefinitionModel> updateProperties,
       ImmutableArray<PropertyDefinitionModel> lookupProperties,
-      ImmutableArray<PropertyDefinitionModel> mutableUpdateProperties
+      ImmutableArray<PropertyDefinitionModel> mutableUpdateProperties,
+      ImmutableArray<RelationDeclarationModel> relations
    )
    {
       NamespaceName = namespaceName;
       Accessibility = accessibility;
       TableClassName = tableClassName;
+      TableClassFullName = tableClassFullName;
       EntityName = entityName;
       DataTypeName = dataTypeName;
       CreateCommandTypeName = createCommandTypeName;
@@ -41,11 +45,16 @@ internal sealed class TableDefinitionModel
       UpdateProperties = updateProperties;
       LookupProperties = lookupProperties;
       MutableUpdateProperties = mutableUpdateProperties;
+      Relations = relations;
    }
 
    public string NamespaceName { get; }
    public string Accessibility { get; }
    public string TableClassName { get; }
+
+   /// <summary>The namespace-qualified name of the table definition class, which is how a relation names its target.</summary>
+   public string TableClassFullName { get; }
+
    public string EntityName { get; }
    public string DataTypeName { get; }
    public string CreateCommandTypeName { get; }
@@ -60,6 +69,47 @@ internal sealed class TableDefinitionModel
    public ImmutableArray<PropertyDefinitionModel> UpdateProperties { get; }
    public ImmutableArray<PropertyDefinitionModel> LookupProperties { get; }
    public ImmutableArray<PropertyDefinitionModel> MutableUpdateProperties { get; }
+
+   /// <summary>
+   ///    The relations declared on this table, as declared. Whether each one resolves is decided once every table has
+   ///    been parsed — see <see cref="RelationResolver" />.
+   /// </summary>
+   public ImmutableArray<RelationDeclarationModel> Relations { get; }
+}
+
+/// <summary>
+///    One relation as it was declared, before anything cross-table has been checked.
+/// </summary>
+internal sealed class RelationDeclarationModel
+{
+   public RelationDeclarationModel(
+      string propertyName,
+      string targetClassFullName,
+      string targetTypeDisplayName,
+      string foreignKeyPropertyName,
+      bool isToMany,
+      Location? location
+   )
+   {
+      PropertyName = propertyName;
+      TargetClassFullName = targetClassFullName;
+      TargetTypeDisplayName = targetTypeDisplayName;
+      ForeignKeyPropertyName = foreignKeyPropertyName;
+      IsToMany = isToMany;
+      Location = location;
+   }
+
+   public string PropertyName { get; }
+
+   /// <summary>The namespace-qualified name of the target table definition class.</summary>
+   public string TargetClassFullName { get; }
+
+   /// <summary>The target as the developer wrote it, for a diagnostic message to quote.</summary>
+   public string TargetTypeDisplayName { get; }
+
+   public string ForeignKeyPropertyName { get; }
+   public bool IsToMany { get; }
+   public Location? Location { get; }
 }
 
 internal sealed class PropertyDefinitionModel

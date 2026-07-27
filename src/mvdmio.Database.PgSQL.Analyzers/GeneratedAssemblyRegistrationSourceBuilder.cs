@@ -5,7 +5,7 @@ namespace mvdmio.Database.PgSQL.Analyzers;
 
 internal static class GeneratedAssemblyRegistrationSourceBuilder
 {
-   public static string Build(string assemblyName, ImmutableArray<TableDefinitionModel> models)
+   public static string Build(string assemblyName, ImmutableArray<ResolvedTable> tables)
    {
       var serviceName = ToPascalIdentifier(assemblyName);
       if (string.IsNullOrWhiteSpace(serviceName))
@@ -18,8 +18,8 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
       var className = $"MvdmioGenerated{serviceName}ServiceCollectionExtensions";
       var methodName = $"Add{serviceName}";
 
-      var registrations = models
-         .Select(x => new { x.NamespaceName, x.RepositoryInterfaceTypeName, x.RepositoryTypeName })
+      var registrations = tables
+         .Select(x => new { x.Model.NamespaceName, x.Model.RepositoryInterfaceTypeName, x.Model.RepositoryTypeName })
          .Distinct()
          .OrderBy(x => x.NamespaceName, StringComparer.Ordinal)
          .ThenBy(x => x.RepositoryInterfaceTypeName, StringComparer.Ordinal)
@@ -51,28 +51,31 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
       builder.AppendLine("      return services;");
       builder.AppendLine("   }");
       builder.AppendLine();
-      AppendQueryMappingRegistration(builder, models);
+      AppendQueryMappingRegistration(builder, tables);
       builder.AppendLine("}");
       return builder.ToString();
    }
 
    /// <remarks>
    ///    Emitted as a module initializer so the mappings are in place before any generated repository can be used,
-   ///    without the library having to discover them by reflection.
+   ///    without the library having to discover them by reflection. Relations are registered here too, in the same
+   ///    callback as the entity's columns, so both ends of every relation are always registered together.
    /// </remarks>
-   private static void AppendQueryMappingRegistration(StringBuilder builder, ImmutableArray<TableDefinitionModel> models)
+   private static void AppendQueryMappingRegistration(StringBuilder builder, ImmutableArray<ResolvedTable> tables)
    {
-      var ordered = models
-         .OrderBy(x => x.NamespaceName, StringComparer.Ordinal)
-         .ThenBy(x => x.DataTypeName, StringComparer.Ordinal)
+      var ordered = tables
+         .OrderBy(x => x.Model.NamespaceName, StringComparer.Ordinal)
+         .ThenBy(x => x.Model.DataTypeName, StringComparer.Ordinal)
          .ToImmutableArray();
 
       builder.AppendLine("   [global::System.Runtime.CompilerServices.ModuleInitializer]");
       builder.AppendLine("   internal static void RegisterQueryMappings()");
       builder.AppendLine("   {");
 
-      foreach (var model in ordered)
+      foreach (var table in ordered)
       {
+         var model = table.Model;
+
          builder.AppendLine($"      global::mvdmio.Database.PgSQL.Connectors.Linq.QueryMappings.Register<{QualifyTypeName(model.NamespaceName, model.DataTypeName)}>(");
          builder.AppendLine($"         {ToLiteral(model.SchemaName)},");
          builder.AppendLine($"         {ToLiteral(model.TableName)},");
@@ -82,6 +85,15 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
          {
             var primaryKeyArgument = property.IsPrimaryKey ? ", isPrimaryKey: true" : string.Empty;
             builder.AppendLine($"            .Column(x => x.{property.PropertyName}, {ToLiteral(property.ColumnName)}{primaryKeyArgument})");
+         }
+
+         foreach (var relation in table.Relations)
+         {
+            // The type arguments are stated because a property typed as a concrete list satisfies both Relation
+            // overloads, which would make the call ambiguous if they were left to be inferred.
+            builder.AppendLine(
+               $"            .Relation<{relation.TargetDataTypeName}, {relation.ThisKey.TypeName}, {relation.TargetKey.TypeName}>(x => x.{relation.PropertyName}, x => x.{relation.ThisKey.PropertyName}, x => x.{relation.TargetKey.PropertyName})"
+            );
          }
 
          builder.AppendLine("      );");

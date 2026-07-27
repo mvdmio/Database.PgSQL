@@ -95,6 +95,7 @@ public sealed class LinqDatabaseConnector
 
       return new TranslatedQueryable<TEntity>(
          new LinqQuerySource(
+            this,
             () => ResolveContext(commandTimeout).GetTable<TEntity>(),
             GetLastSql
          )

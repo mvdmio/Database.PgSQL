@@ -57,7 +57,7 @@ public class TranslatedQueryableAsyncTests
    {
       var root = new AsyncOnlyQueryable<string>(items);
 
-      return new TranslatedQueryable<string>(new LinqQuerySource(() => root, () => null));
+      return new TranslatedQueryable<string>(new LinqQuerySource(new object(), () => root, () => null));
    }
 
    /// <summary>

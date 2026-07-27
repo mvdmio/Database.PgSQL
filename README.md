@@ -42,7 +42,7 @@ var users = await db.Dapper.QueryAsync<User>(
 
 ## Or Let The Repository Be Generated For You
 
-Annotate a table model:
+Annotate a table definition:
 
 ```csharp
 using mvdmio.Database.PgSQL.Attributes;
@@ -105,10 +105,12 @@ db copy --from prod --to local
 - **Transactions**, either around a delegate or driven explicitly with an isolation level
 - **Bulk operations** built on PostgreSQL binary `COPY`: bulk insert, streaming copy, upsert, insert-or-skip,
   temp-table staging, and table-to-table copy across connections
-- **Generated repositories**: annotate a table model and get typed CRUD, lookups by primary key and unique column,
+- **Generated repositories**: annotate a table definition and get typed CRUD, lookups by primary key and unique column,
   and DI registration generated at build time
 - **Composable queries**: a deferred `IQueryable<T>` per table for filters, ordering and paging decided at runtime —
   hand it to an OData endpoint or anything else that consumes a queryable
+- **Table relations**: declare that one table definition points at another and filter, order and eagerly load across it,
+  without writing the join
 - **Migrations from application code**, tracked per scope so several assemblies can migrate one database
   independently, and serialized by an advisory lock so concurrently starting instances apply them exactly once
 - **Schema-first bootstrap**: `Schemas/**/*.sql` files are embedded automatically and applied to an empty database

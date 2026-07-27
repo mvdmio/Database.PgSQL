@@ -40,4 +40,65 @@ public sealed class QueryEntityMappingBuilder<TEntity>
 
       return this;
    }
+
+   /// <summary>
+   ///    Maps a relation property of <typeparamref name="TEntity" /> to the one row it points at.
+   /// </summary>
+   /// <typeparam name="TTarget">The generated data type on the other side of the relation.</typeparam>
+   /// <typeparam name="TThisKey">The type of the key on this side.</typeparam>
+   /// <typeparam name="TTargetKey">The type of the key on the other side.</typeparam>
+   /// <param name="property">An expression selecting the relation property to map.</param>
+   /// <param name="thisKey">An expression selecting the key on this side of the relation.</param>
+   /// <param name="targetKey">An expression selecting the key on the other side of the relation.</param>
+   /// <returns>The same builder, so calls can be chained.</returns>
+   /// <remarks>
+   ///    Always an outer join. That is the query surface's contract — a foreign key pointing at a missing row yields
+   ///    nothing rather than dropping the row that holds it — and stating it here means a consumer changing the
+   ///    provider's global default cannot change what generated code means.
+   /// </remarks>
+   public QueryEntityMappingBuilder<TEntity> Relation<TTarget, TThisKey, TTargetKey>(
+      Expression<Func<TEntity, TTarget?>> property,
+      Expression<Func<TEntity, TThisKey>> thisKey,
+      Expression<Func<TTarget, TTargetKey>> targetKey
+   )
+      where TTarget : class
+   {
+      ArgumentNullException.ThrowIfNull(property);
+      ArgumentNullException.ThrowIfNull(thisKey);
+      ArgumentNullException.ThrowIfNull(targetKey);
+
+      _builder.Association(property!, thisKey, targetKey, canBeNull: true);
+
+      return this;
+   }
+
+   /// <summary>
+   ///    Maps a relation property of <typeparamref name="TEntity" /> to the many rows it points at.
+   /// </summary>
+   /// <typeparam name="TTarget">The generated data type on the other side of the relation.</typeparam>
+   /// <typeparam name="TThisKey">The type of the key on this side.</typeparam>
+   /// <typeparam name="TTargetKey">The type of the key on the other side.</typeparam>
+   /// <param name="property">An expression selecting the relation property to map.</param>
+   /// <param name="thisKey">An expression selecting the key on this side of the relation.</param>
+   /// <param name="targetKey">An expression selecting the key on the other side of the relation.</param>
+   /// <returns>The same builder, so calls can be chained.</returns>
+   /// <remarks>
+   ///    A property typed as a concrete list satisfies this overload and the single-target one both, so generated code
+   ///    states its type arguments explicitly. A hand-written call resolves without them.
+   /// </remarks>
+   public QueryEntityMappingBuilder<TEntity> Relation<TTarget, TThisKey, TTargetKey>(
+      Expression<Func<TEntity, IEnumerable<TTarget>>> property,
+      Expression<Func<TEntity, TThisKey>> thisKey,
+      Expression<Func<TTarget, TTargetKey>> targetKey
+   )
+      where TTarget : class
+   {
+      ArgumentNullException.ThrowIfNull(property);
+      ArgumentNullException.ThrowIfNull(thisKey);
+      ArgumentNullException.ThrowIfNull(targetKey);
+
+      _builder.Association(property, thisKey, targetKey, canBeNull: true);
+
+      return this;
+   }
 }

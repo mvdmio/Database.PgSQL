@@ -1,15 +1,120 @@
 using JetBrains.Annotations;
+using LinqToDB;
 using LinqToDB.Async;
+using mvdmio.Database.PgSQL.Connectors.Linq;
+using System.Linq.Expressions;
 
 namespace mvdmio.Database.PgSQL;
 
 /// <summary>
-///    Awaitable materialization for the queryables returned by generated repositories, so a query can be executed
-///    without blocking a request thread and without importing the query provider's own namespace.
+///    Awaitable materialization and relation materialization for the queryables returned by generated repositories, so
+///    a query can be executed and can pull in related rows without blocking a request thread and without importing the
+///    query provider's own namespace.
 /// </summary>
 [PublicAPI]
 public static class QueryableExtensions
 {
+   /// <summary>
+   ///    Materializes a relation along with the rows of the query. Without this the relation property stays null, or
+   ///    empty for a collection: nothing is loaded behind your back.
+   /// </summary>
+   /// <typeparam name="TEntity">The element type of the query.</typeparam>
+   /// <typeparam name="TProperty">The type of the relation property.</typeparam>
+   /// <param name="source">The query to materialize the relation on.</param>
+   /// <param name="property">An expression selecting the relation property to materialize.</param>
+   /// <returns>The query, remembering the relation so a further level can be chained onto it.</returns>
+   /// <remarks>
+   ///    A relation to one row folds into the query as an outer join. A relation to many rows costs one extra
+   ///    statement per level, each of which re-runs the query above it as a derived table.
+   /// </remarks>
+   public static IIncludedQueryable<TEntity, TProperty> Include<TEntity, TProperty>(this IQueryable<TEntity> source, Expression<Func<TEntity, TProperty?>> property)
+      where TEntity : class
+   {
+      ArgumentNullException.ThrowIfNull(source);
+      ArgumentNullException.ThrowIfNull(property);
+
+      return Record<TEntity, TProperty>(source, new IncludeStep((queryable, rewriter) => ((IQueryable<TEntity>)queryable).LoadWith(rewriter.Rewrite(property))));
+   }
+
+   /// <summary>
+   ///    Materializes a relation to many rows along with the rows of the query, loading only the related rows
+   ///    <paramref name="filter" /> keeps.
+   /// </summary>
+   /// <typeparam name="TEntity">The element type of the query.</typeparam>
+   /// <typeparam name="TProperty">The element type of the relation property.</typeparam>
+   /// <param name="source">The query to materialize the relation on.</param>
+   /// <param name="property">An expression selecting the relation property to materialize.</param>
+   /// <param name="filter">Scopes the related rows, independently of the query above it.</param>
+   /// <returns>The query, remembering the relation so a further level can be chained onto it.</returns>
+   public static IIncludedQueryable<TEntity, TProperty> Include<TEntity, TProperty>(
+      this IQueryable<TEntity> source,
+      Expression<Func<TEntity, IEnumerable<TProperty>>> property,
+      Expression<Func<IQueryable<TProperty>, IQueryable<TProperty>>> filter
+   )
+      where TEntity : class
+   {
+      ArgumentNullException.ThrowIfNull(source);
+      ArgumentNullException.ThrowIfNull(property);
+      ArgumentNullException.ThrowIfNull(filter);
+
+      return Record<TEntity, TProperty>(source, new IncludeStep((queryable, rewriter) => ((IQueryable<TEntity>)queryable).LoadWith(rewriter.Rewrite(property)!, rewriter.Rewrite(filter))));
+   }
+
+   /// <summary>
+   ///    Materializes a relation of the rows the previous materialization loaded.
+   /// </summary>
+   /// <typeparam name="TEntity">The element type of the query.</typeparam>
+   /// <typeparam name="TPreviousProperty">The type of the relation property most recently included.</typeparam>
+   /// <typeparam name="TProperty">The type of the relation property to materialize.</typeparam>
+   /// <param name="source">The query whose most recent materialization this one hangs off.</param>
+   /// <param name="property">An expression selecting the relation property to materialize.</param>
+   /// <returns>The query, remembering the relation so a further level can be chained onto it.</returns>
+   public static IIncludedQueryable<TEntity, TProperty> ThenInclude<TEntity, TPreviousProperty, TProperty>(
+      this IIncludedQueryable<TEntity, TPreviousProperty> source,
+      Expression<Func<TPreviousProperty, TProperty?>> property
+   )
+      where TEntity : class
+   {
+      ArgumentNullException.ThrowIfNull(source);
+      ArgumentNullException.ThrowIfNull(property);
+
+      return Record<TEntity, TProperty>(source, new IncludeStep((queryable, rewriter) => ((ILoadWithQueryable<TEntity, TPreviousProperty>)queryable).ThenLoad(rewriter.Rewrite(property))));
+   }
+
+   /// <summary>
+   ///    Materializes a relation of each row the previous materialization loaded into a collection.
+   /// </summary>
+   /// <typeparam name="TEntity">The element type of the query.</typeparam>
+   /// <typeparam name="TPreviousProperty">The element type of the relation property most recently included.</typeparam>
+   /// <typeparam name="TProperty">The type of the relation property to materialize.</typeparam>
+   /// <param name="source">The query whose most recent materialization this one hangs off.</param>
+   /// <param name="property">An expression selecting the relation property to materialize.</param>
+   /// <returns>The query, remembering the relation so a further level can be chained onto it.</returns>
+   public static IIncludedQueryable<TEntity, TProperty> ThenInclude<TEntity, TPreviousProperty, TProperty>(
+      this IIncludedQueryable<TEntity, IEnumerable<TPreviousProperty>> source,
+      Expression<Func<TPreviousProperty, TProperty?>> property
+   )
+      where TEntity : class
+   {
+      ArgumentNullException.ThrowIfNull(source);
+      ArgumentNullException.ThrowIfNull(property);
+
+      return Record<TEntity, TProperty>(source, new IncludeStep((queryable, rewriter) => ((ILoadWithQueryable<TEntity, IEnumerable<TPreviousProperty>>)queryable).ThenLoad(rewriter.Rewrite(property))));
+   }
+
+   /// <remarks>
+   ///    The step is recorded into the composed expression rather than handed to the provider now, so the query stays
+   ///    unbound until it executes. <see cref="IncludeRewriter" /> explains why that is not a preference.
+   /// </remarks>
+   private static IIncludedQueryable<TEntity, TProperty> Record<TEntity, TProperty>(IQueryable<TEntity> source, IncludeStep step)
+      where TEntity : class
+   {
+      if (source is not TranslatedQueryable<TEntity> translated)
+         throw new NotSupportedException($"Relations can only be materialized on a query from a generated repository's Query(), but this query is a '{source.GetType()}'.");
+
+      return translated.Including<TProperty>(step);
+   }
+
    /// <summary>
    ///    Asynchronously materializes the query into a list.
    /// </summary>

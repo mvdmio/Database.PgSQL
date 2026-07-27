@@ -1,6 +1,7 @@
 using LinqToDB;
 using LinqToDB.Internal.Async;
 using System.Collections;
+using System.Collections.Immutable;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -17,7 +18,7 @@ namespace mvdmio.Database.PgSQL.Connectors.Linq;
 ///    it is not optional: the provider's asynchronous operators dispatch on it, and a provider that lacks it silently
 ///    degrades every awaited query to synchronous enumeration. The unit tests hold that behaviour in place.
 /// </remarks>
-internal sealed class TranslatedQueryable<TElement> : IOrderedQueryable<TElement>, IAsyncEnumerable<TElement>, IQueryProviderAsync, ITranslatedQueryable, ISqlDiagnostics
+internal class TranslatedQueryable<TElement> : IOrderedQueryable<TElement>, IAsyncEnumerable<TElement>, IQueryProviderAsync, ITranslatedQueryable, ISqlDiagnostics
 {
    private readonly LinqQuerySource _source;
    private readonly Expression _expression;
@@ -52,6 +53,7 @@ internal sealed class TranslatedQueryable<TElement> : IOrderedQueryable<TElement
    public Type ElementType => typeof(TElement);
    public Expression Expression => _expression;
    public IQueryProvider Provider => this;
+   public LinqQuerySource Source => _source;
 
    public IEnumerator<TElement> GetEnumerator()
    {
@@ -98,11 +100,24 @@ internal sealed class TranslatedQueryable<TElement> : IOrderedQueryable<TElement
       )!;
    }
 
-   public IQueryable<TOther> CreateQuery<TOther>(Expression expression)
+   public virtual IQueryable<TOther> CreateQuery<TOther>(Expression expression)
    {
       ArgumentNullException.ThrowIfNull(expression);
 
       return new TranslatedQueryable<TOther>(_source, expression);
+   }
+
+   /// <summary>
+   ///    Records a materialization request on this composition, without binding anything to a connection yet.
+   /// </summary>
+   /// <typeparam name="TProperty">The type of the relation property being materialized.</typeparam>
+   /// <param name="step">The provider call that materializes the relation.</param>
+   /// <returns>The composition, remembering the relation so a further level can be chained onto it.</returns>
+   public IIncludedQueryable<TElement, TProperty> Including<TProperty>(IncludeStep step)
+   {
+      ArgumentNullException.ThrowIfNull(step);
+
+      return new IncludedQueryable<TElement, TProperty>(_source, IncludeRewriter.Record<TElement>(_expression, step));
    }
 
    public object? Execute(Expression expression)
@@ -197,11 +212,29 @@ internal sealed class TranslatedQueryable<TElement> : IOrderedQueryable<TElement
       throw new NotSupportedException($"The query provider did not produce an asynchronously enumerable query for '{typeof(TElement)}'.");
    }
 
+   /// <remarks>
+   ///    Materialization is translated here rather than where it was composed, so that everything the decorator
+   ///    guarantees survives a query that asked for it. See <see cref="IncludeRewriter" />.
+   /// </remarks>
    private (IQueryProvider Provider, Expression Expression) Resolve(Expression expression)
    {
-      var root = _source.ResolveRoot();
+      var rewriter = new QueryRootRewriter();
+      var root = rewriter.ResolveRoot(_source);
+      var materialized = IncludeRewriter.Rewrite(expression, (innermost, steps) => ApplyIncludes(rewriter, root, innermost, steps));
 
-      return (root.Provider, QueryRootRewriter.Rewrite(expression, root.Expression));
+      return (root.Provider, rewriter.Rewrite(materialized));
+   }
+
+   private static Expression ApplyIncludes(QueryRootRewriter rewriter, IQueryable root, Expression innermost, ImmutableArray<IncludeStep> steps)
+   {
+      var queryable = root.Provider.CreateQuery(rewriter.Rewrite(innermost));
+
+      foreach (var step in steps)
+      {
+         queryable = step.Apply(queryable, rewriter);
+      }
+
+      return queryable.Expression;
    }
 
    private static IQueryProviderAsync AsAsyncProvider(IQueryProvider provider)

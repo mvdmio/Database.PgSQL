@@ -38,6 +38,46 @@ public sealed class TestFixture : IAsyncLifetime
          )
          """
       );
+
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_authors (
+            author_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            name      TEXT NOT NULL UNIQUE,
+            mentor_id BIGINT NULL REFERENCES public.generated_authors (author_id)
+         )
+         """
+      );
+
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_books (
+            book_id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            title     TEXT NOT NULL UNIQUE,
+            author_id BIGINT NULL REFERENCES public.generated_authors (author_id),
+            editor_id BIGINT NULL REFERENCES public.generated_authors (author_id)
+         )
+         """
+      );
+
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_tags (
+            tag_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            label  TEXT NOT NULL UNIQUE
+         )
+         """
+      );
+
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_book_tags (
+            book_tag_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            book_id     BIGINT NOT NULL REFERENCES public.generated_books (book_id),
+            tag_id      BIGINT NOT NULL REFERENCES public.generated_tags (tag_id)
+         )
+         """
+      );
    }
 
    public async ValueTask DisposeAsync()

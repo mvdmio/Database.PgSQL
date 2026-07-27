@@ -18,7 +18,7 @@ Targets `net8.0`, `net9.0`, and `net10.0`.
 - [Run SQL queries and commands](#queries-and-commands) through `db.Dapper`
 - [Execute work inside transactions](#transactions)
 - [Bulk copy, upsert, and insert-or-skip](#bulk-operations) large batches of rows
-- [Generate repositories](#generated-repositories) from annotated table models
+- [Generate repositories](#generated-repositories) from annotated table definitions
 - [Compose queries at runtime](#composable-queries) over an `IQueryable<T>` that translates to SQL
 - [Run migrations](#migrations) from application code — tracked per scope and safe under concurrent startup
 - [Inspect and export the database schema](#schema-inspection-and-export)
@@ -326,7 +326,7 @@ that is the caller's job.
 
 ## Generated Repositories
 
-Annotate a table model and the package generates a typed repository for it at build time: no runtime reflection, no
+Annotate a table definition and the package generates a typed repository for it at build time: no runtime reflection, no
 hand-written CRUD SQL.
 
 ```csharp
@@ -388,7 +388,7 @@ otherwise:
 
 | Type                | Contains                                                      |
 |---------------------|---------------------------------------------------------------|
-| `UserData`          | Every mapped property — the type all reads and writes return   |
+| `UserData`          | Every mapped property, plus a mirrored property per relation — the type all reads and writes return |
 | `CreateUserCommand` | Every property except `[Generated]` ones                       |
 | `UpdateUserCommand` | The primary key, plus every other non-`[Generated]` property    |
 | `IUserRepository`   | The repository interface                                       |
@@ -536,7 +536,136 @@ applies no limits of its own: no page cap, no row ceiling, and no per-column res
 sorted. If you expose a query surface to callers you do not trust — an OData endpoint, for instance — constraining it
 is yours to do.
 
-Cross-table queries are not supported: a query covers the one table its table model describes.
+### Relations
+
+A query spans tables along a relation you declared. A relation lives on the table definition, next to the columns, as a
+property typed as the *other* table definition and annotated with the name of the foreign-key property that resolves it:
+
+```csharp
+[Table("public.books")]
+public partial class BookTable
+{
+   [PrimaryKey] [Generated] public long BookId { get; set; }
+   public string Title { get; set; } = string.Empty;
+   public long? AuthorId { get; set; }
+   public long? EditorId { get; set; }
+
+   [Relation(nameof(AuthorId))]
+   public AuthorTable? Author { get; set; }
+
+   [Relation(nameof(EditorId))]
+   public AuthorTable? Editor { get; set; }
+}
+
+[Table("public.authors")]
+public partial class AuthorTable
+{
+   [PrimaryKey] [Generated] public long AuthorId { get; set; }
+   public string Name { get; set; } = string.Empty;
+
+   [Relation(nameof(BookTable.AuthorId))]
+   public List<BookTable> Books { get; set; } = [];
+}
+```
+
+The property's type says everything except the foreign key:
+
+- Typed as the other table definition, it is a relation to **one** row, and the foreign key is the property you named on
+  *this* model. It must be nullable, because a relation is always an outer join.
+- Typed as a collection of the other table definition, it is a relation to **many** rows, and the foreign key is the
+  property you named on the *target* model. `List<T>`, `IList<T>`, `ICollection<T>`, `IEnumerable<T>`,
+  `IReadOnlyList<T>` and `IReadOnlyCollection<T>` are accepted; the generated data type always mirrors it as a
+  `List<T>` initialized to empty.
+
+The other end is always the target's primary key, so there is nothing else to state. Use `nameof` so renaming the
+foreign-key property is a build error rather than a wrong join. Each direction is declared on its own: a relation to a
+parent does not oblige the parent to declare the collection back. Two relations may point at the same target — a
+`CreatedByUserId` and an `UpdatedByUserId` both reaching the user table — and a relation may target its own table, in
+either direction, which is how a hierarchy works. Many-to-many needs no new concept: declare a relation to the join
+table, which is a table definition like any other, and a relation from there to the far side.
+
+A relation is not a column. It gets no column mapping, no `GetBy…`/`DeleteBy…` pair, and no place in the create and
+update commands, which stay as flat as the table they write to. It changes no SQL on `db.Dapper`, and it emits no DDL:
+the annotation is a claim about a foreign-key column that already exists, and nothing checks it against the real
+schema — name the wrong property and you get a wrong join at runtime, exactly as with a wrong `[Column]` name.
+
+#### Filtering and ordering across a relation
+
+Nothing new to learn: reach through the relation property and the join is generated for you.
+
+```csharp
+var byTolkien = await bookRepository.Query()
+   .Where(x => x.Author!.Name == "Tolkien")
+   .OrderBy(x => x.Author!.Name)
+   .ToListAsync(ct);
+
+// Two hops, and back the other way, work the same.
+var mentoredByTolkien = await bookRepository.Query().Where(x => x.Author!.Mentor!.Name == "Tolkien").ToListAsync(ct);
+var authorsOfNarnia = await authorRepository.Query().Where(x => x.Books.Any(b => b.Title == "Narnia")).ToListAsync(ct);
+```
+
+A relation is an outer join, so a book whose `AuthorId` is null is still returned by a query that does not mention the
+author. Once a predicate lands on the far side it narrows the result as the C# reads — `x.Author!.Name == "Tolkien"`
+drops that book, and so does `x.Author!.Name != null`.
+
+#### Materializing the related rows
+
+Filtering across a relation does not fetch it. Ask for the rows with `Include`, and chain further levels with
+`ThenInclude`:
+
+```csharp
+var authors = await authorRepository.Query()
+   .Include(x => x.Books)
+      .ThenInclude(x => x.Editor)
+   .ToListAsync(ct);
+```
+
+Without an `Include`, a relation property stays `null` — or empty, for a collection. Nothing is fetched behind your
+back and no query is ever issued from a property getter, so "not loaded" never turns into a surprise round trip.
+
+`Include` costs differently in each direction, and it is worth knowing which you are paying for:
+
+| Relation | Cost |
+|----------|------|
+| To one row  | Folds into the query as an outer join. No extra statement |
+| To many rows | One **additional statement per level**, each of which re-runs the query above it as a derived table rather than passing it a list of keys |
+
+So a three-level include over collections is four statements, each re-deriving its ancestors. This is the query
+provider's strategy and it cannot be configured.
+
+Because each detail statement re-derives its parents that way, a filter on the main query decides **which parents get
+detail rows** — it does not narrow the detail rows themselves. On a self-referencing hierarchy that is worth saying
+out loud: filtering the main query down to the roots still loads every child, including the rows the filter excluded.
+Scoping the detail rows takes the filtered overload:
+
+```csharp
+var authors = await authorRepository.Query()
+   .Include(x => x.Books, books => books.Where(b => b.PublishedAt > cutoff))
+   .ToListAsync(ct);
+```
+
+> **If you are exposing this through an OData endpoint, read this before you ship.** With the ASP.NET Core OData
+> defaults left alone, an expanded collection comes back **empty and without any error**: the detail queries run, the
+> rows are fetched, and the result is then discarded by the null-propagation rewriting OData applies to query providers
+> it does not recognise — and it recognises providers by namespace, from a list this package's provider is not on. Set
+> `HandleNullPropagation = HandleNullPropagationOption.False` on the query settings and check an expansion actually
+> returns rows before you rely on it. Nothing inside this package can detect the situation: the query surface behaves
+> correctly and the statements run.
+
+Operators may sit between `Include` and `ThenInclude`; the two only have to be named as one chain, which means naming
+the intermediate result as `IIncludedQueryable<TEntity, TProperty>` again:
+
+```csharp
+var filtered = (IIncludedQueryable<BookData, AuthorData>)bookRepository.Query()
+   .Include(x => x.Author)
+   .Where(x => x.Title == "Narnia");
+
+var books = await filtered.ThenInclude(x => x.Mentor).ToListAsync(ct);
+```
+
+`Include` and `ThenInclude` live in `mvdmio.Database.PgSQL` alongside the awaiting operators, so the same one `using`
+covers them. They need a query that came from a generated repository's `Query()`; handed anything else — an in-memory
+fake, for instance — they throw `NotSupportedException` rather than quietly loading nothing.
 
 ### Attributes
 
@@ -547,13 +676,14 @@ Cross-table queries are not supported: a query covers the one table its table mo
 | `[Unique]`      | Adds a `GetBy…`/`DeleteBy…` pair for that property                                                     |
 | `[Column("…")]` | Overrides the column name. Without it, the property name is converted to `snake_case`                    |
 | `[Generated]`   | The database produces the value (identity, computed, or defaulted): it is read back but never written   |
+| `[Relation("…")]` | Marks the property as a relation to another table definition rather than a column, naming the foreign-key property that resolves it |
 
 The `snake_case` conversion inserts an underscore before every uppercase letter, so `UserId` becomes `user_id` but
 `UserID` becomes `user_i_d` — name the column explicitly with `[Column]` when the property contains an acronym.
 
 ### Requirements
 
-The generator reports a build error when a table model does not satisfy these:
+The generator reports a build error when a table definition does not satisfy these:
 
 - The class is `partial`
 - `[Table]` names a valid `table` or `schema.table`
@@ -561,13 +691,15 @@ The generator reports a build error when a table model does not satisfy these:
 - At least one property is neither the primary key nor `[Generated]`, so there is something to update
 - Mapped properties are public, non-static, not indexers, and have both a public getter and setter
 - No two properties map to the same column, and no two lookup properties yield the same method name
+- A `[Relation]` property is a table definition or a supported collection of one, is nullable when it points at one row,
+  carries no `[Column]`, and names a foreign-key property that exists and can join the target's primary key
 
 A separate analyzer warns — rather than errors — when the class name does not end with `Table`, since the suffix only
 determines the generated names. See [Build-Time Diagnostics](#build-time-diagnostics) for the codes.
 
 ### Dependency Injection
 
-Every assembly containing table models also gets an `IServiceCollection` extension named after it — assembly
+Every assembly containing table definitions also gets an `IServiceCollection` extension named after it — assembly
 `MyApp.Data` produces `AddMyAppData()` in namespace `MyApp.Data`. It calls `AddDatabase()` and registers each
 generated repository as scoped against its interface, leaving any registration you made yourself in place:
 
@@ -786,7 +918,7 @@ LinqDatabaseConnector.ConfigureMappingSchema(schema =>
 });
 ```
 
-Like the Dapper handler registry this applies process-wide. `PGSQL0011` warns at build time when a table model has a
+Like the Dapper handler registry this applies process-wide. `PGSQL0011` warns at build time when a table definition has a
 property type the query surface cannot map, so you find out before the query runs.
 
 ## Build-Time Diagnostics
@@ -806,11 +938,20 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0009` | Error    | A property is not a public instance property with a public getter and setter        |
 | `PGSQL0010` | Error    | A generated type name is already taken by a non-partial type in the same namespace  |
 | `PGSQL0011` | Warning  | A property type cannot be mapped by the query surface — register a conversion       |
+| `PGSQL0012` | Error    | A `[Relation]` names a foreign-key property that does not exist                      |
+| `PGSQL0013` | Error    | A `[Relation]` foreign key cannot match the target's primary key type                |
+| `PGSQL0014` | Error    | A `[Relation]` target is not a `[Table]` class in the same compilation               |
+| `PGSQL0015` | Error    | A `[Relation]` to one row is not nullable                                            |
+| `PGSQL0016` | Error    | A `[Relation]` property type is neither a table definition nor a supported collection of one |
+| `PGSQL0017` | Error    | A `[Relation]` property is not a public instance property with a public getter and setter |
+| `PGSQL0018` | Error    | A property carries both `[Relation]` and `[Column]`                                  |
 
 `PGSQL0001` is a warning rather than an error because you can implement `Identifier` and `Name` yourself instead of
 following the naming convention. If you do neither, a misnamed migration class throws the moment those properties are
 read. `PGSQL0011` is a warning because the rest of the repository still works — only `Query()` cannot handle that
-column until a conversion is registered.
+column until a conversion is registered. `PGSQL0012` through `PGSQL0018` drop only the relation they describe and let
+the rest of the table generate, so the message you read is the mistake you made rather than a wall of
+type-not-found errors from everything that names the missing data type.
 
 ## CLI Tool
 

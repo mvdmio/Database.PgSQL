@@ -7,6 +7,8 @@ namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
 public class TableRepositoryGeneratorTests
 {
+   private static readonly CSharpParseOptions _parseOptions = CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview);
+
    private const string _RUNTIME_STUBS = """
       namespace mvdmio.Database.PgSQL.Attributes
       {
@@ -30,6 +32,27 @@ public class TableRepositoryGeneratorTests
 
          [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
          public sealed class GeneratedAttribute : System.Attribute { }
+
+         [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+         public sealed class RelationAttribute : System.Attribute
+         {
+            public RelationAttribute(string foreignKeyPropertyName) { }
+         }
+      }
+
+      namespace Microsoft.Extensions.DependencyInjection
+      {
+         public interface IServiceCollection { }
+      }
+
+      namespace Microsoft.Extensions.DependencyInjection.Extensions
+      {
+         public static class ServiceCollectionDescriptorExtensions
+         {
+            public static void TryAddScoped<TService, TImplementation>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+               where TService : class
+               where TImplementation : class, TService { }
+         }
       }
 
       namespace mvdmio.Database.PgSQL
@@ -68,6 +91,18 @@ public class TableRepositoryGeneratorTests
             where TEntity : class
          {
             public QueryEntityMappingBuilder<TEntity> Column<TProperty>(System.Linq.Expressions.Expression<System.Func<TEntity, TProperty>> property, string columnName, bool isPrimaryKey = false) => throw null!;
+
+            public QueryEntityMappingBuilder<TEntity> Relation<TTarget, TThisKey, TTargetKey>(
+               System.Linq.Expressions.Expression<System.Func<TEntity, TTarget?>> property,
+               System.Linq.Expressions.Expression<System.Func<TEntity, TThisKey>> thisKey,
+               System.Linq.Expressions.Expression<System.Func<TTarget, TTargetKey>> targetKey
+            ) where TTarget : class => throw null!;
+
+            public QueryEntityMappingBuilder<TEntity> Relation<TTarget, TThisKey, TTargetKey>(
+               System.Linq.Expressions.Expression<System.Func<TEntity, System.Collections.Generic.IEnumerable<TTarget>>> property,
+               System.Linq.Expressions.Expression<System.Func<TEntity, TThisKey>> thisKey,
+               System.Linq.Expressions.Expression<System.Func<TTarget, TTargetKey>> targetKey
+            ) where TTarget : class => throw null!;
          }
 
          public static class QueryMappings
@@ -297,25 +332,309 @@ public class TableRepositoryGeneratorTests
       result.GeneratedSources.Should().BeEmpty();
    }
 
+   private const string _VALID_RELATIONS = """
+      using mvdmio.Database.PgSQL.Attributes;
+      using System.Collections.Generic;
+
+      namespace Demo;
+
+      [Table("public.books")]
+      public partial class BookTable
+      {
+         [PrimaryKey]
+         [Generated]
+         public long BookId { get; set; }
+
+         public string Title { get; set; } = string.Empty;
+         public long? AuthorId { get; set; }
+         public long? EditorId { get; set; }
+
+         [Relation(nameof(AuthorId))]
+         public AuthorTable? Author { get; set; }
+
+         [Relation(nameof(EditorId))]
+         public AuthorTable? Editor { get; set; }
+      }
+
+      [Table("public.authors")]
+      public partial class AuthorTable
+      {
+         [PrimaryKey]
+         [Generated]
+         public long AuthorId { get; set; }
+
+         public string Name { get; set; } = string.Empty;
+
+         [Relation(nameof(BookTable.AuthorId))]
+         public List<BookTable> Books { get; set; } = new();
+      }
+      """;
+
+   [Fact]
+   public void ValidRelations_ProduceNoDiagnostics_AndMirrorTheRelationsOntoTheDataTypes()
+   {
+      var result = RunGenerator(_VALID_RELATIONS);
+
+      result.Diagnostics.Should().BeEmpty();
+
+      var bookRelations = GeneratedSource(result, "Demo_BookTable.Relations.g.cs");
+      var authorRelations = GeneratedSource(result, "Demo_AuthorTable.Relations.g.cs");
+      var registration = GeneratedSource(result, "GeneratedAssemblyRegistration.g.cs");
+
+      bookRelations.Should().Contain("public partial class BookData");
+      bookRelations.Should().Contain("public global::Demo.AuthorData? Author { get; set; }");
+      bookRelations.Should().Contain("public global::Demo.AuthorData? Editor { get; set; }");
+      authorRelations.Should().Contain("public global::System.Collections.Generic.List<global::Demo.BookData> Books { get; set; } = new();");
+
+      registration.Should().Contain(".Relation<global::Demo.AuthorData, long?, long>(x => x.Author, x => x.AuthorId, x => x.AuthorId)");
+      registration.Should().Contain(".Relation<global::Demo.AuthorData, long?, long>(x => x.Editor, x => x.EditorId, x => x.AuthorId)");
+      registration.Should().Contain(".Relation<global::Demo.BookData, long, long?>(x => x.Books, x => x.AuthorId, x => x.AuthorId)");
+   }
+
+   [Fact]
+   public void ValidRelations_ProduceCodeThatCompiles()
+   {
+      AssertGeneratedSourcesCompile(_VALID_RELATIONS);
+   }
+
+   /// <remarks>
+   ///    A property typed as a concrete list matches both <c>Relation</c> overloads, so generated code states its type
+   ///    arguments. A hand-written call has to resolve without them, and this holds the overload set to that.
+   /// </remarks>
+   [Fact]
+   public void AHandWrittenRelationCall_ResolvesWithoutTypeArguments()
+   {
+      var source = $$"""
+         {{_VALID_RELATIONS}}
+
+         public static class HandWritten
+         {
+            public static void Register(mvdmio.Database.PgSQL.Connectors.Linq.QueryEntityMappingBuilder<AuthorData> builder)
+            {
+               builder.Relation(x => x.Books, x => x.AuthorId, x => x.AuthorId);
+            }
+         }
+         """;
+
+      AssertGeneratedSourcesCompile(source);
+   }
+
+   [Fact]
+   public void RelationWithAnUnknownForeignKey_ProducesDiagnostic()
+   {
+      var result = RunGenerator(RelationSource("""
+         [Relation("NoSuchProperty")]
+            public AuthorTable? Author { get; set; }
+         """));
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0012");
+      result.Diagnostics.Single(x => x.Id == "PGSQL0012").Severity.Should().Be(DiagnosticSeverity.Error);
+      result.GeneratedSources.Should().NotBeEmpty("one invalid relation must not stop the table from generating");
+   }
+
+   [Fact]
+   public void RelationWithAForeignKeyThatCannotMatchThePrimaryKey_ProducesDiagnostic()
+   {
+      var result = RunGenerator(RelationSource("""
+         [Relation(nameof(Title))]
+            public AuthorTable? Author { get; set; }
+         """));
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0013");
+      result.GeneratedSources.Should().NotBeEmpty();
+   }
+
+   [Fact]
+   public void RelationToSomethingThatIsNotATableDefinition_ProducesDiagnostic()
+   {
+      var source = """
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         public class Elsewhere
+         {
+            public long Id { get; set; }
+         }
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            public long? AuthorId { get; set; }
+
+            [Relation(nameof(AuthorId))]
+            public Elsewhere? Author { get; set; }
+         }
+         """;
+
+      var result = RunGenerator(source);
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0014");
+      result.GeneratedSources.Should().NotBeEmpty();
+   }
+
+   [Fact]
+   public void RelationToOneRowThatIsNotNullable_ProducesDiagnostic()
+   {
+      var result = RunGenerator(RelationSource("""
+         [Relation(nameof(AuthorId))]
+            public AuthorTable Author { get; set; } = new();
+         """));
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0015");
+      result.GeneratedSources.Should().NotBeEmpty();
+   }
+
+   [Fact]
+   public void RelationOnAnUnsupportedPropertyType_ProducesDiagnostic()
+   {
+      var result = RunGenerator(RelationSource("""
+         [Relation(nameof(AuthorId))]
+            public System.Collections.Generic.HashSet<AuthorTable> Authors { get; set; } = new();
+         """));
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0016");
+      result.GeneratedSources.Should().NotBeEmpty();
+   }
+
+   [Fact]
+   public void RelationOnAnUnsupportedPropertyShape_ProducesDiagnostic()
+   {
+      var source = """
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            public long? AuthorId { get; set; }
+
+            [Relation(nameof(AuthorId))]
+            public AuthorTable? Author { get; private set; }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """;
+
+      var result = RunGenerator(source);
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0017");
+      result.GeneratedSources.Should().NotBeEmpty();
+   }
+
+   [Fact]
+   public void RelationCombinedWithAColumnAttribute_ProducesDiagnostic()
+   {
+      var result = RunGenerator(RelationSource("""
+         [Relation(nameof(AuthorId))]
+            [Column("author")]
+            public AuthorTable? Author { get; set; }
+         """));
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0018");
+      result.GeneratedSources.Should().NotBeEmpty();
+   }
+
+   /// <summary>
+   ///    A book table carrying whichever relation member the caller spells out, plus the author table it points at.
+   /// </summary>
+   private static string RelationSource(string member)
+   {
+      return $$"""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            public string Title { get; set; } = string.Empty;
+            public long? AuthorId { get; set; }
+
+            {{member}}
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """;
+   }
+
+   private static string GeneratedSource(GeneratorRunResult result, string hintName)
+   {
+      return result.GeneratedSources.Single(x => x.HintName == hintName).SourceText.ToString();
+   }
+
+   /// <summary>
+   ///    Compiles the generator's output alongside the source that produced it, which is the only thing that proves the
+   ///    emitted mapping calls resolve against the overloads the library actually ships.
+   /// </summary>
+   private static void AssertGeneratedSourcesCompile(string source)
+   {
+      CreateDriver().RunGeneratorsAndUpdateCompilation(CreateCompilation(source), out var updated, out _);
+
+      var errors = updated.GetDiagnostics().Where(x => x.Severity == DiagnosticSeverity.Error).ToList();
+
+      errors.Should().BeEmpty(string.Join(Environment.NewLine, errors.Select(x => x.ToString())));
+   }
+
    private static GeneratorRunResult RunGenerator(string source)
    {
-      var parseOptions = CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview);
+      return CreateDriver().RunGenerators(CreateCompilation(source)).GetRunResult().Results.Single();
+   }
+
+   /// <remarks>
+   ///    The driver parses the sources it adds itself, and refuses to add them to a compilation parsed at another
+   ///    language version, so it is handed the same options.
+   /// </remarks>
+   private static GeneratorDriver CreateDriver()
+   {
+      return CSharpGeneratorDriver.Create(
+         generators: [new TableRepositoryGenerator().AsSourceGenerator()],
+         additionalTexts: null,
+         parseOptions: _parseOptions,
+         optionsProvider: null
+      );
+   }
+
+   private static CSharpCompilation CreateCompilation(string source)
+   {
       var syntaxTrees = new[]
       {
-         CSharpSyntaxTree.ParseText(SourceText.From(source), parseOptions),
-         CSharpSyntaxTree.ParseText(SourceText.From(_RUNTIME_STUBS), parseOptions)
+         CSharpSyntaxTree.ParseText(SourceText.From(source), _parseOptions),
+         CSharpSyntaxTree.ParseText(SourceText.From(_RUNTIME_STUBS), _parseOptions)
       };
 
-      var compilation = CSharpCompilation.Create(
+      // Nullable reference types are on, the way a consumer's project has them: a relation to one row states its
+      // cardinality partly through nullability, which cannot be read at all in a nullable-oblivious compilation.
+      return CSharpCompilation.Create(
          assemblyName: "GeneratorTests",
          syntaxTrees: syntaxTrees,
          references: GetMetadataReferences(),
-         options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+         options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary).WithNullableContextOptions(NullableContextOptions.Enable)
       );
-
-      GeneratorDriver driver = CSharpGeneratorDriver.Create(new TableRepositoryGenerator());
-      driver = driver.RunGenerators(compilation);
-      return driver.GetRunResult().Results.Single();
    }
 
    private static IEnumerable<MetadataReference> GetMetadataReferences()
