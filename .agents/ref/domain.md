@@ -18,7 +18,10 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 ├── CONTEXT.md
 ├── docs/adr/
 │   ├── 0001-advisory-lock-for-migration-runner.md
-│   └── 0002-per-scope-migration-watermarks.md
+│   ├── 0002-per-scope-migration-watermarks.md
+│   ├── 0003-scope-ownership-and-baseline-vouching.md
+│   ├── 0004-linq2db-as-the-queryable-provider.md
+│   └── 0005-table-relations-on-relation-properties.md
 └── src/
 ```
 

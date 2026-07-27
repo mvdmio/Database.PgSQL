@@ -1,6 +1,6 @@
 # mvdmio.Database.PgSQL
 
-Glossary for the PostgreSQL data-access and migration library. Defines the domain language used when reasoning about migrations, their identity, and how they are tracked.
+Glossary for the PostgreSQL data-access and migration library. Defines the domain language used when reasoning about migrations and their identity, about the table definitions code is generated from, and about the query surface generated over them.
 
 ## Language
 
@@ -36,8 +36,16 @@ _Avoid_: Entity, model, POCO, mapping.
 A **Table definition**'s class name with the `Table` suffix removed. The stem every generated type name is built from, so it — not the table name — is what appears in consuming code.
 _Avoid_: Table name, class name, type name.
 
+**Relation**:
+A declared correspondence between two **Table definitions**, resolved through the foreign-key column one of the two holds. One-directional: each direction is declared on its own, and declaring one does not imply the other. A claim about columns that already exist — declaring a relation never creates a database foreign key and never verifies that one is there.
+_Avoid_: Association (that is the LINQ provider's word), foreign key (that is the database constraint), relationship, join.
+
+**Relation property**:
+The member on a **Table definition** that declares a **Relation** — typed as the other Table definition, naming the foreign-key property that resolves it, and carrying the cardinality in its own type. Not a column: it is skipped by column mapping and mirrored onto the generated data type, where each end appears as that table's generated data type.
+_Avoid_: Navigation property (it implies lazy loading and change tracking, which this library does not have), reference, link.
+
 **Query surface**:
-The deferred, composable read path over a **Table definition**'s table, reached through a generated repository's `Query()` and backed by the `Linq` adapter. Read-only and single-table: it never mutates and never spans tables. Distinct from the Dapper surface, which every other generated method runs on — the two derive from the same **Table definition** but keep separate conversion registries.
+The deferred, composable read path over a **Table definition**'s table, reached through a generated repository's `Query()` and backed by the `Linq` adapter. Read-only: it never mutates. It spans tables only along a declared **Relation** — filtering and ordering across one, and materializing the related rows when explicitly asked. Distinct from the Dapper surface, which every other generated method runs on and which never spans tables — the two derive from the same **Table definition** but keep separate conversion registries.
 _Avoid_: LINQ provider (that is the dependency underneath), ORM, query builder.
 
 **Query front-end**:
@@ -45,5 +53,5 @@ A consumer-side component that turns an external request into LINQ operators ove
 _Avoid_: API layer, query API, OData layer, presentation layer.
 
 **Translation boundary**:
-The line between expressions the **Query surface** converts to SQL and those it refuses. Crossing it raises a query translation exception; the surface never silently falls back to evaluating in memory. Read-only and single-table by construction, but beyond that the translatable set cannot be enumerated from the type system — it is established by test, per **Query front-end**.
+The line between expressions the **Query surface** converts to SQL and those it refuses. Crossing it raises a query translation exception; the surface never silently falls back to evaluating in memory. Read-only by construction, and cross-table only along a declared **Relation**, but beyond that the translatable set cannot be enumerated from the type system — it is established by test, per **Query front-end**.
 _Avoid_: Supported operators, provider limits, capability set.
