@@ -11,6 +11,7 @@ TDD is the expectation: write tests before implementing, and always add/modify t
 | `test/mvdmio.Database.PgSQL.Tests.Unit/` | net9.0 | Pure unit tests — no database |
 | `test/mvdmio.Database.PgSQL.Tests.Integration/` | net10.0 | Database tests via Testcontainers |
 | `test/mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema/` | — | A second assembly with its own migrations/schema, referenced by the integration suite to exercise multi-assembly / multi-scope and embedded-schema scenarios |
+| `test/mvdmio.Database.PgSQL.Tests.Integration.OData/` | net10.0 | OData conformance suite over the query surface — its own container, its own fixtures, and the only project that takes an OData dependency |
 | `test/mvdmio.Database.PgSQL.Analyzers.Tests/` | — | Roslyn analyzer tests |
 
 ## Unit tests
@@ -25,6 +26,18 @@ TDD is the expectation: write tests before implementing, and always add/modify t
 - Inherit from `TestBase`. It builds a `DatabaseConnection` against the shared `Testcontainers` PostgreSQL container, opens a transaction in `InitializeAsync`, and **rolls it back in `DisposeAsync`** — so each test is isolated and leaves no state behind. Use the `Db` property and the `CancellationToken` it exposes.
 - Test migrations live under `Fixture/Migrations/`; embedded test schemas under `Schemas/` (embedded with `LogicalName` = filename).
 - The `SecondarySchema` project provides a separate assembly when a test needs migrations/schema from more than one assembly.
+
+## The OData conformance suite
+
+- Location: `test/mvdmio.Database.PgSQL.Tests.Integration.OData/`. Its own container, its own copies of `TestBase` and
+  the fixture, and the only project referencing `Microsoft.AspNetCore.OData` — so the front-end-agnostic guarantee in
+  ADR 0004 stays true of the shipped packages.
+- Drives OData in-process (`Fixture/ODataQuery.cs`) with no web host. `Fixture/ODataConfiguration.cs` owns the
+  recommended configuration; the project `README.md` is the consumer-facing walkthrough and the results table.
+- Tests assert rows *and* SQL shape, because column narrowing, `LIMIT`/`OFFSET`, an aggregate count and parameterization
+  are otherwise indistinguishable from a correct row set. SQL is read through the internal `QueryDiagnostics` helper.
+- When adding a conformance case, put a query-option case in `QueryOptionConformanceTests` and a `$filter` function case
+  in `FilterFunctionConformanceTests`, whose theories are grouped by family.
 
 ## Conventions
 

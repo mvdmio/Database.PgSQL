@@ -36,7 +36,7 @@ A comprehensive `.editorconfig` governs formatting. Run `dotnet format` before b
 ## Visibility
 
 - Public surface is annotated with `[PublicAPI]` (JetBrains.Annotations).
-- Internals are exposed to the test projects via `InternalsVisibleTo` (`...Tests.Unit`, `...Tests.Integration`).
+- Internals are exposed to the test projects via `InternalsVisibleTo` (`...Tests.Unit`, `...Tests.Integration`, `...Tests.Integration.OData`). One item group in `mvdmio.Database.PgSQL.csproj` owns the whole list — add there, not in a second group.
 
 ## Documentation
 

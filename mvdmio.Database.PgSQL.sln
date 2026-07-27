@@ -26,6 +26,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "mvdmio.Database.PgSQL.Analy
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema", "test\mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema\mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema.csproj", "{22CBFBD8-4ACA-46B9-8022-7AC61A95A7C2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "mvdmio.Database.PgSQL.Tests.Integration.OData", "test\mvdmio.Database.PgSQL.Tests.Integration.OData\mvdmio.Database.PgSQL.Tests.Integration.OData.csproj", "{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -120,6 +122,18 @@ Global
 		{22CBFBD8-4ACA-46B9-8022-7AC61A95A7C2}.Release|x64.Build.0 = Release|Any CPU
 		{22CBFBD8-4ACA-46B9-8022-7AC61A95A7C2}.Release|x86.ActiveCfg = Release|Any CPU
 		{22CBFBD8-4ACA-46B9-8022-7AC61A95A7C2}.Release|x86.Build.0 = Release|Any CPU
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}.Debug|x64.Build.0 = Debug|Any CPU
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}.Debug|x86.Build.0 = Debug|Any CPU
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}.Release|x64.ActiveCfg = Release|Any CPU
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}.Release|x64.Build.0 = Release|Any CPU
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}.Release|x86.ActiveCfg = Release|Any CPU
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -129,5 +143,6 @@ Global
 		{9E1E6EB5-169D-4BEC-BE94-78736D1889FC} = {4097A127-FA62-4FFB-90D8-B6E5431F244D}
 		{37139982-144F-40A6-9290-8E36474216B1} = {4097A127-FA62-4FFB-90D8-B6E5431F244D}
 		{22CBFBD8-4ACA-46B9-8022-7AC61A95A7C2} = {4097A127-FA62-4FFB-90D8-B6E5431F244D}
+		{C1BD5972-F5D2-4394-8B84-29B6B47ED4D2} = {4097A127-FA62-4FFB-90D8-B6E5431F244D}
 	EndGlobalSection
 EndGlobal

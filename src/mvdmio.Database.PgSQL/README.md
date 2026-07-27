@@ -431,14 +431,42 @@ Values that come from local variables become SQL parameters, not inlined literal
 plan.
 
 Because it is the framework's own `IQueryable<T>`, you can hand it to anything that consumes one — including an
-ASP.NET Core OData action, where `[EnableQuery]` composes `$filter`, `$orderby`, `$top` and `$skip` onto it and the
-database does the work:
+ASP.NET Core OData endpoint, where `$filter`, `$orderby`, `$top`, `$skip`, `$count`, `$select` and `$apply` all reach
+the database:
 
 ```csharp
 [HttpGet]
-[EnableQuery]
-public IQueryable<UserData> Get() => _repository.Query();
+public IActionResult Get(ODataQueryOptions<UserData> options)
+{
+   var query = options.ApplyTo(
+      _repository.Query(),
+      new ODataQuerySettings { HandleNullPropagation = HandleNullPropagationOption.False }
+   );
+
+   return Ok(((IEnumerable)query).Cast<object>().ToList());
+}
 ```
+
+Two things about that snippet are load-bearing, and neither is discoverable. `HandleNullPropagation` **must** be
+disabled — left at its default, OData guards every property access, which breaks `substring` outright and makes every
+predicate non-indexable. And the query is materialized inside the action rather than returned as an `IQueryable` for
+`[EnableQuery]` to enumerate, because the output formatter enumerates after the response headers are written and turns a
+translation failure into a truncated `200` instead of a `400`.
+
+Build the EDM model from the generated `…Data` type, since that is what `Query()` returns, and enable the query options
+you want — every one of them is off by default and `$top` is capped at zero, so an unconfigured endpoint rejects
+everything:
+
+```csharp
+builder.Services.AddControllers().AddOData(
+   options => options.Select().Filter().OrderBy().Count().SetMaxTop(100).AddRouteComponents("odata", model)
+);
+```
+
+The full walkthrough — the settings to copy, the functions to block, which query options and `$filter` functions are
+known to work, where the behaviour differs from an Entity Framework Core-backed endpoint, and which generated property
+types an OData model cannot represent — is in the
+[OData walkthrough](https://github.com/mvdmio/mvdmio.Database.PgSQL/blob/main/test/mvdmio.Database.PgSQL.Tests.Integration.OData/README.md).
 
 `Query()` is declared on the generated interface as well as the class, so a test can hand a caller a fake:
 

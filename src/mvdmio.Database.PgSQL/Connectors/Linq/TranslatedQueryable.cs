@@ -17,7 +17,7 @@ namespace mvdmio.Database.PgSQL.Connectors.Linq;
 ///    it is not optional: the provider's asynchronous operators dispatch on it, and a provider that lacks it silently
 ///    degrades every awaited query to synchronous enumeration. The unit tests hold that behaviour in place.
 /// </remarks>
-internal sealed class TranslatedQueryable<TElement> : IOrderedQueryable<TElement>, IAsyncEnumerable<TElement>, IQueryProviderAsync, ITranslatedQueryable
+internal sealed class TranslatedQueryable<TElement> : IOrderedQueryable<TElement>, IAsyncEnumerable<TElement>, IQueryProviderAsync, ITranslatedQueryable, ISqlDiagnostics
 {
    private readonly LinqQuerySource _source;
    private readonly Expression _expression;

@@ -29,6 +29,7 @@ mvdmio.Database.PgSQL/
 │   ├── mvdmio.Database.PgSQL.Tests.Unit/
 │   ├── mvdmio.Database.PgSQL.Tests.Integration/
 │   ├── mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema/  # 2nd assembly for multi-assembly / multi-schema tests
+│   ├── mvdmio.Database.PgSQL.Tests.Integration.OData/            # OData conformance suite over the query surface
 │   └── mvdmio.Database.PgSQL.Analyzers.Tests/
 ├── docs/adr/                               # Architecture decision records
 ├── CONTEXT.md                              # Domain glossary

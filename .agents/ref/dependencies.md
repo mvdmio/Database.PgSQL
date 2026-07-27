@@ -31,6 +31,9 @@ Packed as a `dotnet tool` with command name `db`. References the main library.
 | `AwesomeAssertions` | Fluent assertions |
 | `Testcontainers.PostgreSql` | PostgreSQL container for integration tests |
 | `Microsoft.NET.Test.Sdk` / `xunit.runner.visualstudio` / `coverlet.collector` | Test host, runner, coverage |
+| `Microsoft.AspNetCore.OData` | **`Tests.Integration.OData` only** — the query front-end the conformance suite drives. Never referenced by anything packable. Its assembly targets `net8.0` and runs on `net10.0`; the 10.x preview line is breaking (it changes the CLR types behind `Edm.Date` and `Edm.TimeOfDay`) |
+
+That project also needs `<FrameworkReference Include="Microsoft.AspNetCore.App" />`: it uses the plain SDK because it hosts nothing, and the OData package brings only its own OData libraries, so the ASP.NET Core types come from the shared framework.
 
 No mocking framework is used — testability comes from interface seams (e.g. `IMigrationRetriever`, `ISchemaExportClientFactory`) and hand-written fakes/fixtures.
 

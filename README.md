@@ -117,6 +117,11 @@ db copy --from prod --to local
 
 Usage and examples: **[library documentation](src/mvdmio.Database.PgSQL/README.md)**.
 
+Wiring an OData endpoint onto a generated repository's `Query()`:
+**[OData walkthrough](test/mvdmio.Database.PgSQL.Tests.Integration.OData/README.md)** — the two settings you must set,
+which query options and `$filter` functions reach the database, and where the behaviour differs from an Entity Framework
+Core-backed endpoint.
+
 ## What The CLI Gives You
 
 | Command                      | Purpose                                                         |
