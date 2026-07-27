@@ -39,3 +39,11 @@ _Avoid_: Table name, class name, type name.
 **Query surface**:
 The deferred, composable read path over a **Table definition**'s table, reached through a generated repository's `Query()` and backed by the `Linq` adapter. Read-only and single-table: it never mutates and never spans tables. Distinct from the Dapper surface, which every other generated method runs on — the two derive from the same **Table definition** but keep separate conversion registries.
 _Avoid_: LINQ provider (that is the dependency underneath), ORM, query builder.
+
+**Query front-end**:
+A consumer-side component that turns an external request into LINQ operators over the **Query surface** — an OData endpoint, for example. Always outside this library, which depends on none and knows of none.
+_Avoid_: API layer, query API, OData layer, presentation layer.
+
+**Translation boundary**:
+The line between expressions the **Query surface** converts to SQL and those it refuses. Crossing it raises a query translation exception; the surface never silently falls back to evaluating in memory. Read-only and single-table by construction, but beyond that the translatable set cannot be enumerated from the type system — it is established by test, per **Query front-end**.
+_Avoid_: Supported operators, provider limits, capability set.
