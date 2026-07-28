@@ -72,6 +72,10 @@ var deleted = await repository.DeleteByPrimaryKeyAsync(created.UserId, ct);
 The primary key may be composite — mark two or more properties `[PrimaryKey]` and the generated lookup, delete and update
 address the row by all of them, in the order you declared them.
 
+A property's type also tells the query surface whether its column can hold null, so a predicate over a non-nullable
+column reaches PostgreSQL without an `OR column IS NULL` alternative that could never match — and can use an index.
+Where the type cannot say it, `[Column(Null = true)]` and `[Column(NotNull = true)]` do.
+
 Need a query whose shape is only known at runtime? Every generated repository also hands you an `IQueryable<T>` that
 translates to SQL:
 
@@ -111,7 +115,8 @@ db copy --from prod --to local
 - **Generated repositories**: annotate a table definition and get typed CRUD, lookups by primary key and unique column,
   and DI registration generated at build time
 - **Composable queries**: a deferred `IQueryable<T>` per table for filters, ordering and paging decided at runtime —
-  hand it to an OData endpoint or anything else that consumes a queryable
+  hand it to an OData endpoint or anything else that consumes a queryable, with each column's declared nullability
+  carried into the SQL so a predicate stays sargable
 - **Table relations**: declare that one table definition points at another and filter, order and eagerly load across it,
   without writing the join
 - **Migrations from application code**, tracked per scope so several assemblies can migrate one database

@@ -212,4 +212,33 @@ internal static class TableRepositoryDiagnostics
       isEnabledByDefault: true,
       description: "A nullable key member is a key the database would reject, and it is also what would let the query surface widen a relation's join with an 'or both are null' alternative, which costs the join its index. Refusing it here makes that shape unreachable."
    );
+
+   // Abandons nothing, unlike the key diagnostic above. A contradictory nullability claim leaves every generated
+   // signature well-defined, so dropping the claim and reporting it is one error rather than a cascade of
+   // type-not-found errors across the consumer's own code.
+
+   /// <summary>
+   ///    Which contradiction a declared nullability claim is, as <see cref="ContradictoryColumnNullability" />'s third
+   ///    argument. Stated here rather than at the call site so all four read as one diagnostic with four causes.
+   /// </summary>
+   public const string NULLABILITY_REASON_NOT_NULL_OVER_A_NULLABLE_TYPE = "NotNull says it cannot hold null, but its type can";
+
+   /// <inheritdoc cref="NULLABILITY_REASON_NOT_NULL_OVER_A_NULLABLE_TYPE" />
+   public const string NULLABILITY_REASON_NULL_OVER_A_NON_NULLABLE_VALUE_TYPE = "Null says it can hold null, but a non-nullable value type cannot";
+
+   /// <inheritdoc cref="NULLABILITY_REASON_NOT_NULL_OVER_A_NULLABLE_TYPE" />
+   public const string NULLABILITY_REASON_BOTH_DIRECTIONS = "Null and NotNull are both set, and they cannot both be true";
+
+   /// <inheritdoc cref="NULLABILITY_REASON_NOT_NULL_OVER_A_NULLABLE_TYPE" />
+   public const string NULLABILITY_REASON_NULL_ON_A_KEY_MEMBER = "Null says it can hold null, but a [PrimaryKey] member cannot";
+
+   public static readonly DiagnosticDescriptor ContradictoryColumnNullability = new(
+      id: "PGSQL0021",
+      title: "Contradictory column nullability",
+      messageFormat: "'{0}.{1}' declares a column nullability that contradicts itself: {2}",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "[Column]'s Null and NotNull override what a property's type says about the column it maps to, so a claim that contradicts the type, the key or itself says two things at once. The claim is dropped and the column keeps whatever its type and key membership already settle."
+   );
 }

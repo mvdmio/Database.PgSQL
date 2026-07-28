@@ -745,12 +745,57 @@ fake, for instance — they throw `NotSupportedException` rather than quietly lo
 | `[Table("…")]`  | Marks the class and names the table. Takes `schema.table`, or `table` for the `public` schema           |
 | `[PrimaryKey]`  | Marks a property as part of the key used by `UpdateAsync`, `GetByPrimaryKeyAsync` and `DeleteByPrimaryKeyAsync`. At least one property must carry it; two or more makes the key composite, in declaration order |
 | `[Unique]`      | Adds a `GetBy…`/`DeleteBy…` pair for that property                                                     |
-| `[Column("…")]` | Overrides the column name. Without it, the property name is converted to `snake_case`                    |
+| `[Column("…")]` | States facts about the column: its name, and — through `Null` and `NotNull` — whether it can hold null. Without a name, the property name is converted to `snake_case` |
 | `[Generated]`   | The database produces the value (identity, computed, or defaulted): it is read back but never written   |
 | `[Relation("…")]` | Marks the property as a relation to another table definition rather than a column, naming one foreign-key property per member of the target's primary key |
 
 The `snake_case` conversion inserts an underscore before every uppercase letter, so `UserId` becomes `user_id` but
 `UserID` becomes `user_i_d` — name the column explicitly with `[Column]` when the property contains an acronym.
+
+### Column Nullability
+
+A column is nullable unless the definition says otherwise, and for almost every property the type already says it:
+
+| Property                                     | Column      |
+|----------------------------------------------|-------------|
+| `long`, `DateOnly`, any non-nullable value type | not null |
+| `long?`, any `Nullable<T>`                   | nullable    |
+| `string` in a file with nullable reference types on | not null |
+| `string?`                                    | nullable    |
+| `string` in a nullable-oblivious file        | nullable    |
+| Any `[PrimaryKey]` property                  | not null    |
+| `[Column(Null = true)]`                      | nullable    |
+| `[Column(NotNull = true)]`                   | not null    |
+
+This is worth stating correctly rather than leaving to the default. `Query()` compares like C# does — an inequality
+matches the rows where the column is null, per the OData specification too — so on a nullable column it renders an
+`OR column IS NULL` alternative. On a column that cannot hold null that alternative can never match, and it costs the
+predicate its index: measured on a two-column join over 50k-row tables, 232x runtime on a nested loop.
+
+`[Column]`'s two properties are for the cases the type cannot express:
+
+```csharp
+// The column permits null, but the property type cannot say so.
+[Column(Null = true)]
+public string Nickname { get; set; } = string.Empty;
+
+// A nullable-oblivious file, where the annotation that would say this cannot be written.
+[Column("first_name", NotNull = true)]
+public string FirstName { get; set; }
+```
+
+Neither `[Unique]` nor `[Generated]` implies anything about nullability: PostgreSQL permits any number of nulls in a
+unique index, and a database-supplied value can be null — a stored generated column over a polymorphic discriminator is
+null for every kind but its own.
+
+A claim that contradicts itself is a build error, `PGSQL0021` — `NotNull` on a `string?`, `Null` on a `long`, both at
+once, or `Null` on a `[PrimaryKey]` property. It does not stop the table generating: the claim is dropped and the column
+keeps whatever its type and key membership already settle.
+
+Nothing verifies a claim against the real table, the same way nothing verifies a column name. A column claimed not-null
+that does hold null is not caught when the row is read — the null arrives in a property typed non-nullable. What it costs
+is rows: an inequality over that column omits the ones where it is null. Claim not-null because the table says
+`NOT NULL`, not because the value is usually present.
 
 ### Requirements
 
@@ -1020,13 +1065,15 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0018` | Error    | A property carries both `[Relation]` and `[Column]`                                  |
 | `PGSQL0019` | Error    | A `[Relation]` names a different number of foreign keys than the target's primary key has members |
 | `PGSQL0020` | Error    | A `[PrimaryKey]` property is nullable                                                |
+| `PGSQL0021` | Error    | A `[Column]` states a nullability that contradicts the property's type, its key membership, or itself |
 
 `PGSQL0001` is a warning rather than an error because you can implement `Identifier` and `Name` yourself instead of
 following the naming convention. If you do neither, a misnamed migration class throws the moment those properties are
 read. `PGSQL0011` is a warning because the rest of the repository still works — only `Query()` cannot handle that
 column until a conversion is registered. `PGSQL0012` through `PGSQL0019` drop only the relation they describe and let
 the rest of the table generate, so the message you read is the mistake you made rather than a wall of
-type-not-found errors from everything that names the missing data type. Everything else — including `PGSQL0020` —
+type-not-found errors from everything that names the missing data type. `PGSQL0021` abandons nothing at all: dropping a
+contradictory nullability claim leaves every generated signature well-defined. Everything else — including `PGSQL0020` —
 abandons the table, because a malformed key leaves every generated signature undefined rather than one relation.
 
 ## CLI Tool

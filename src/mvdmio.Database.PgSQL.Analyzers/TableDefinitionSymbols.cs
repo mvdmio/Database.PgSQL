@@ -84,21 +84,60 @@ internal static class TableDefinitionSymbols
 
    public static PropertyDefinitionModel CreatePropertyModel(IPropertySymbol property)
    {
-      var columnName = property.GetAttributes()
-         .FirstOrDefault(x => x.AttributeClass?.ToDisplayString() == COLUMN_ATTRIBUTE_FULL_NAME)?
-         .ConstructorArguments.FirstOrDefault().Value as string;
+      var columnAttribute = property.GetAttributes()
+         .FirstOrDefault(x => x.AttributeClass?.ToDisplayString() == COLUMN_ATTRIBUTE_FULL_NAME);
+
+      var columnName = columnAttribute?.ConstructorArguments.FirstOrDefault().Value as string;
+      var isPrimaryKey = HasAttribute(property, PRIMARY_KEY_ATTRIBUTE_FULL_NAME);
+      var nullability = NullabilityClaim.Read(property, columnAttribute, isPrimaryKey);
 
       return new PropertyDefinitionModel(
          propertyName: property.Name,
          parameterName: ToCamelCase(property.Name),
          typeName: property.Type.ToDisplayString(_typeDisplayFormat),
          columnName: string.IsNullOrWhiteSpace(columnName) ? ToSnakeCase(property.Name) : columnName!,
-         isPrimaryKey: HasAttribute(property, PRIMARY_KEY_ATTRIBUTE_FULL_NAME),
+         isPrimaryKey: isPrimaryKey,
          isUnique: HasAttribute(property, UNIQUE_ATTRIBUTE_FULL_NAME),
          isGenerated: HasAttribute(property, GENERATED_ATTRIBUTE_FULL_NAME),
-         isNullable: IsNullable(property.Type),
+         isNullable: TypeCanHoldNull(property.Type),
+         isDeclaredNotNull: nullability.IsNotNull,
+         nullabilityContradiction: nullability.Contradiction,
          requiresNullForgivingInitializer: property.Type.IsReferenceType && property.NullableAnnotation != NullableAnnotation.Annotated
       );
+   }
+
+   /// <summary>
+   ///    Whether the property's type can hold null, which a primary key member's may not.
+   /// </summary>
+   /// <remarks>
+   ///    Both forms are checked because they are separate facts: a nullable value type is a constructed
+   ///    <see cref="Nullable{T}" />, while a nullable reference type is only an annotation — and in a nullable-oblivious
+   ///    file that annotation is absent, which is read here as not nullable because nothing else can be read from it.
+   /// </remarks>
+   public static bool TypeCanHoldNull(ITypeSymbol type)
+   {
+      return type.NullableAnnotation == NullableAnnotation.Annotated
+             || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
+   }
+
+   /// <summary>
+   ///    Whether the property's type states that its column cannot hold null. Not the negation of
+   ///    <see cref="TypeCanHoldNull" />: this is the stricter question of whether the type says anything at all, and an
+   ///    unannotated reference type in a nullable-oblivious file says nothing, so both answer false for it.
+   /// </summary>
+   /// <remarks>
+   ///    A value type states it unless it is a <see cref="Nullable{T}" />. A reference type states it only through its
+   ///    annotation, which is why the absence of one is read as saying nothing rather than as saying not-null.
+   /// </remarks>
+   public static bool TypeStatesNotNull(IPropertySymbol property)
+   {
+      if (property.Type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+         return false;
+
+      if (property.Type.IsValueType)
+         return true;
+
+      return property.NullableAnnotation == NullableAnnotation.NotAnnotated;
    }
 
    /// <summary>
@@ -221,17 +260,6 @@ internal static class TableDefinitionSymbols
    {
       return type is IArrayTypeSymbol
              || type.AllInterfaces.Any(x => x.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T);
-   }
-
-   /// <remarks>
-   ///    Both forms are checked because they are separate facts: a nullable value type is a constructed
-   ///    <see cref="Nullable{T}" />, while a nullable reference type is only an annotation — and in a nullable-oblivious
-   ///    file that annotation is absent, which is read here as not nullable because nothing else can be read from it.
-   /// </remarks>
-   private static bool IsNullable(ITypeSymbol type)
-   {
-      return type.NullableAnnotation == NullableAnnotation.Annotated
-             || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
    }
 
    private static bool HasRelevantAttribute(IPropertySymbol property)

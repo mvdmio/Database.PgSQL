@@ -37,7 +37,7 @@ The order of a **Table definition**'s primary-key properties, taken from their s
 _Avoid_: Key ordinal, column order, index order.
 
 **Nullability claim**:
-What a **Table definition** states about whether one of its columns can hold null. Where it states nothing the column is taken to be nullable, matching PostgreSQL's own column default; a primary-key member is never nullable, because the database will not permit it. Never verified against the real table, and load-bearing rather than descriptive — the **Query surface** narrows a predicate on the strength of it, so a column holding a null it was claimed not to fails when the row is read rather than quietly returning wrong rows.
+What a **Table definition** states about whether one of its columns can hold null. Where it states nothing the column is taken to be nullable, matching PostgreSQL's own column default; a primary-key member is never nullable, because the database will not permit it. Never verified against the real table, and load-bearing rather than descriptive — the **Query surface** narrows a predicate on the strength of it, so a column holding a null it was claimed not to returns fewer rows than it should rather than failing.
 _Avoid_: Nullability, NOT NULL constraint (that is the database's, which this never creates and never checks), required, optional.
 
 **Entity name**:

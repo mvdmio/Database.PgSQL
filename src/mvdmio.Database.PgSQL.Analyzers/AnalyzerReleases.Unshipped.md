@@ -21,3 +21,4 @@ PGSQL0017 | Generation | Error | Unsupported relation property shape
 PGSQL0018 | Generation | Error | Relation property cannot also be a column
 PGSQL0019 | Generation | Error | Relation foreign key does not match the target's primary key arity
 PGSQL0020 | Generation | Error | Primary key property cannot be nullable
+PGSQL0021 | Generation | Error | Contradictory column nullability

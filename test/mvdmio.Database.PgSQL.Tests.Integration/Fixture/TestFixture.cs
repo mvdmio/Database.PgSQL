@@ -79,6 +79,18 @@ public sealed class TestFixture : IAsyncLifetime
          """
       );
 
+      // Both text columns permit null while the definition over them claims otherwise, which is what makes the failure
+      // mode of an unverified nullability claim observable.
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_unverified_claims (
+            claim_id BIGINT PRIMARY KEY,
+            label    TEXT NULL,
+            note     TEXT NULL
+         )
+         """
+      );
+
       // The composite-key table set, separate from the author-and-book one so that set keeps pinning the single-column
       // key path. Real composite foreign keys, and a matching index on each side of the relation the join tests read —
       // except for primary_task_id, which carries none because tasks already reference projects and a constraint the

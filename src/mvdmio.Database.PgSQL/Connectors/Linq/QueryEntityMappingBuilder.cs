@@ -27,8 +27,24 @@ public sealed class QueryEntityMappingBuilder<TEntity>
    /// <param name="property">An expression selecting the property to map.</param>
    /// <param name="columnName">The name of the database column the property maps to.</param>
    /// <param name="isPrimaryKey">Whether the column is part of the table's primary key. Every member of a composite key sets it.</param>
+   /// <param name="isNotNull">
+   ///    Whether the column cannot hold null. A key member is not-null whichever way this is left, and nullable is what
+   ///    the query surface assumes, so this is only ever set to state that a non-key column cannot hold null.
+   /// </param>
    /// <returns>The same builder, so calls can be chained.</returns>
-   public QueryEntityMappingBuilder<TEntity> Column<TProperty>(Expression<Func<TEntity, TProperty>> property, string columnName, bool isPrimaryKey = false)
+   /// <remarks>
+   ///    Stating that a column cannot hold null is what keeps a predicate over it, and a join condition on it, free of
+   ///    the "or the column is null" alternative the query surface's null-comparison mode otherwise adds — an
+   ///    alternative that can never match on such a column and that costs the predicate its index. The claim is never
+   ///    verified against the real table, and a column that does hold null is not caught when the row is read. What a
+   ///    wrong claim costs is rows: the alternative it removed is what would have matched the null ones.
+   /// </remarks>
+   public QueryEntityMappingBuilder<TEntity> Column<TProperty>(
+      Expression<Func<TEntity, TProperty>> property,
+      string columnName,
+      bool isPrimaryKey = false,
+      bool isNotNull = false
+   )
    {
       ArgumentNullException.ThrowIfNull(property);
       ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
@@ -37,6 +53,11 @@ public sealed class QueryEntityMappingBuilder<TEntity>
 
       if (isPrimaryKey)
          propertyBuilder.IsPrimaryKey();
+
+      // The key rule lives here rather than in the generator, because this builder is public surface a consumer calls
+      // by hand: a key member cannot hold null, so every caller gets that without having to say it.
+      if (isPrimaryKey || isNotNull)
+         propertyBuilder.IsNotNull();
 
       return this;
    }

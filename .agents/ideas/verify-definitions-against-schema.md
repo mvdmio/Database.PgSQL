@@ -11,8 +11,9 @@ library acts on without checking. Nothing emits DDL and migrations stay hand-wri
 describes can drift apart silently.
 
 Most of those claims fail loudly and immediately: a wrong column name is an error on the first query. The **nullability
-claim** is the one worth thinking about, because it fails only when a row containing the offending null is read — which
-may be long after deploy, and in production rather than in a test.
+claim** is the one worth thinking about, because it does not fail at all. Measured against linq2db 6.3.0, a null read
+into a property claiming not-null arrives as null and the read completes; what the wrong claim costs is rows, because an
+inequality over that column silently omits the ones where it is null. Nothing about the response says so.
 
 The database already knows all of it, and this repo already reads it: `SchemaCatalogReader` pulls columns with their
 nullability for schema export.

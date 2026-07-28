@@ -51,10 +51,10 @@ public class MisconfigurationRegressionTests : SampleConformanceTestBase
    [Fact]
    public void Filter_WithAStringFunction_RendersANonSargableNullGuardWhenNullPropagationIsLeftAtItsDefault()
    {
-      const string QUERY_STRING = "$filter=length(Name) eq 5";
+      const string QUERY_STRING = "$filter=length(Nickname) eq 3";
 
       // A CASE over "column IS NULL" wrapped around the predicate: correct rows, but PostgreSQL cannot use an index
-      // for it. On a column the model already declares non-nullable, the guard can never even fire.
+      // for it.
       Misconfigured(QUERY_STRING).RenderSql().Should().ContainAll("CASE", "IS NULL");
 
       var configured = Apply(QUERY_STRING).RenderSql();
@@ -64,17 +64,26 @@ public class MisconfigurationRegressionTests : SampleConformanceTestBase
    }
 
    [Fact]
+   public void Filter_WithAStringFunctionOverANonNullableColumn_RendersNoGuardEitherWay()
+   {
+      // The guard cannot fire on a column the mapping declares non-nullable, so the query surface drops it before it
+      // reaches PostgreSQL. That is this misconfiguration's cost disappearing for every such column — which is most of
+      // them — and it is why the symptom above has to be observed on a nullable one.
+      Misconfigured("$filter=length(Name) eq 5").RenderSql().Should().NotContain("CASE");
+   }
+
+   [Fact]
    public async Task Filter_WithAStringFunction_ReturnsTheSameRowsEitherWay()
    {
       // The reason the misconfiguration is dangerous rather than merely slow: the rows are right, so nothing about the
       // response tells a consumer that anything is wrong.
-      const string QUERY_STRING = "$filter=length(Name) eq 5";
+      const string QUERY_STRING = "$filter=length(Nickname) eq 3";
 
       var misconfigured = await NamesAsync(Misconfigured(QUERY_STRING));
       var configured = await NamesAsync(Apply(QUERY_STRING));
 
       misconfigured.Should().BeEquivalentTo(configured);
-      configured.Should().BeEquivalentTo("alice", "carol");
+      configured.Should().BeEquivalentTo("carol");
    }
 
    private AppliedQuery Misconfigured(string queryString)

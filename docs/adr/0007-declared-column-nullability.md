@@ -74,11 +74,24 @@ nullable; and that the mapping builder states the not-null case to the provider 
   property's *type*, so a key member typed non-nullable `string` passes it and is still widened, because the provider
   reads `string` as nullable. `TenantLinkTable.Kind` in the integration suite is that shape. The guarantee holds only
   once the claim is stated in the mapping.
-- **A false claim fails loudly when the row is read.** Setting a column non-nullable also omits the `IsDBNull` guard
-  from the provider's generated reader, so a column claimed not-null that actually holds null throws rather than
-  quietly returning wrong rows. That is a better failure than the alternative and it is the reason no verification is
-  built: the claim joins column names, composite keys and generated columns as something the library takes the
-  definition's word for. Verifying definitions against a pulled schema is a separate, deliberately deferred idea.
+- **A false claim costs rows, and it is not caught when they are read.** This was expected to fail loudly, on the
+  reasoning that declaring a column non-nullable also omits the `IsDBNull` guard from the provider's generated reader.
+  Measured against linq2db 6.3.0 it does not: a null read into a property typed non-nullable `string` arrives as null and
+  the read completes. What a false claim actually costs is the rows the null alternative would have matched — an
+  inequality over a column wrongly claimed not-null silently omits the rows where it is null. Both halves are pinned by
+  integration tests, because both are provider behaviour an upgrade could change, and the second is why the claim is a
+  statement about the table rather than a hint about the values usually in it. It is still taken on trust: the claim joins
+  column names, composite keys and generated columns as something the library takes the definition's word for, and
+  verifying definitions against a pulled schema is a separate, deliberately deferred idea.
+- **An outer join collapses to an inner one wherever a filter makes it moot.** A `WHERE` equality on a related table's
+  non-nullable column cannot be satisfied by a null-extended row, so the provider now rewrites the `LEFT JOIN` as an
+  `INNER JOIN`. Row counts are identical and the relation is still an outer join wherever nothing filters it, so ADR
+  0005's contract is intact; this is a plan improvement that follows from the claim rather than a change of meaning.
+- **The OData front-end's null-propagation misconfiguration stops costing anything on a non-nullable column.** The
+  `CASE ... IS NULL` guard OData wraps around a filter when its provider allowlist does not recognise this one — the
+  symptom pinned so that `ODataConfiguration.QuerySettings` is not simplified away — cannot fire on a column declared
+  non-nullable, and the provider drops it. Regression cover for the symptom now runs on a nullable column, with the
+  non-nullable case pinned separately as the improvement it is.
 - **A nullable-oblivious consumer is unaffected.** A reference type whose nullability annotation is absent makes no
   claim, so a project with nullable reference types switched off keeps exactly today's SQL and today's plans. This is
   read from the annotation state alone; no compilation-level nullable setting is consulted.

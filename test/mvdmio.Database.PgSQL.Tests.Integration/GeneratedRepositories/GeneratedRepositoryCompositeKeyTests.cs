@@ -296,10 +296,45 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
          ? RenderSql(_tasks.Query().Where(x => x.Project!.Name == "Apollo"))
          : RenderSql(_links.Query().Where(x => x.Project!.Name == "Apollo"));
 
-      sql.Should().Contain("LEFT JOIN");
+      // An inner join, even though the relation is an outer one by contract: the filter is an equality on a column that
+      // cannot hold null, so no null-extended row could satisfy it and the provider collapses the join. That is a plan
+      // improvement rather than a change of meaning — the outer-join behaviour itself is pinned by
+      // Query_AcrossACompositeRelationOnAStoredGeneratedColumn_ReachesTheRelatedRow, which filters nothing.
+      sql.Should().Contain("INNER JOIN");
       sql.Should().MatchRegex(CrossTableEquality("account_id", "account_id"));
       sql.Should().MatchRegex(CrossTableEquality(foreignKeyColumn, keyColumn));
       sql.Should().NotContain("IS NULL", "a widened join condition is what costs the second key column its index");
+   }
+
+   /// <remarks>
+   ///    The join a relation renders when nothing filters the far side, which is what the test above collapses to an
+   ///    inner join and therefore stops pinning. A relation is an outer join by contract — a foreign key pointing at a
+   ///    missing row yields nothing rather than dropping the row that holds it.
+   /// </remarks>
+   [Fact]
+   public void Query_ReachingACompositeRelationWithoutFilteringIt_RendersAnOuterJoin()
+   {
+      var sql = RenderSql(_links.Query().Where(x => x.AccountId == FIRST_ACCOUNT).Select(x => x.Project!.Name));
+
+      sql.Should().Contain("LEFT JOIN");
+      sql.Should().MatchRegex(CrossTableEquality("account_id", "account_id"));
+      sql.Should().MatchRegex(CrossTableEquality("project_ref", "project_id"));
+   }
+
+   /// <remarks>
+   ///    The same guarantee for a key member typed non-nullable <c>string</c>, which is the shape a pure CLR-type test
+   ///    reads as nullable — <c>string</c> and <c>string?</c> are one type to it. Inequality is what shows the
+   ///    difference, because equality excludes nulls on its own and so is never widened. The predicate is on the driving
+   ///    table's own column deliberately: one reaching across the relation stays widened whatever the column says,
+   ///    because the relation is an outer join and its whole table is the nullable side.
+   /// </remarks>
+   [Fact]
+   public void Query_WithInequalityOnAStringKeyMember_RendersNoNullAlternative()
+   {
+      var sql = RenderSql(_links.Query().Where(x => x.Kind != "user" && x.Project!.Name == "Apollo"));
+
+      sql.Should().MatchRegex($"{QualifiedColumn("kind")}\\s*<>");
+      sql.Should().NotContain("IS NULL", "the null alternative can never match a column that cannot hold null");
    }
 
    [Fact]
