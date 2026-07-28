@@ -8,7 +8,7 @@ namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 public abstract class SampleConformanceTestBase : ODataTestBase
 {
    /// <summary>The identifier of the row named <c>alice</c>, so a Guid filter has something stable to match.</summary>
-   protected static readonly Guid AlicePublicId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+   protected static readonly Guid alicePublicId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
    /// <summary>
    ///    Chosen so that every assertion in the suite discriminates: no two names share a length, each tier holds two
@@ -24,7 +24,7 @@ public abstract class SampleConformanceTestBase : ODataTestBase
          CreatedAt = new DateTimeOffset(2024, 3, 4, 5, 6, 7, TimeSpan.Zero),
          IsActive = true,
          Category = SampleCategory.Premium,
-         PublicId = AlicePublicId,
+         PublicId = alicePublicId,
          Tier = "gold"
       },
       new() {

@@ -32,16 +32,16 @@ public class RelationMisconfigurationRegressionTests : RelationConformanceTestBa
    [Fact]
    public void Expand_ToManyRows_ComesBackEmptyWhenNullPropagationIsLeftAtItsDefault()
    {
-      const string queryString = "$expand=Books&$orderby=Name";
+      const string QUERY_STRING = "$expand=Books&$orderby=Name";
 
-      var misconfigured = MisconfiguredAuthors(queryString).ProjectedRows();
+      var misconfigured = MisconfiguredAuthors(QUERY_STRING).ProjectedRows();
 
       // Every author, in the right order, with the right scalar values — and not one book. Nothing in the response says
       // the endpoint is misconfigured: an empty collection is exactly what an author with no books looks like.
       misconfigured.Select(x => x["Name"]).Should().Equal("gaiman", "lewis", "pratchett", "tolkien");
       misconfigured.Should().AllSatisfy(row => row.ExpandedMany(nameof(AuthorData.Books)).Should().BeEmpty());
 
-      var configured = ApplyToAuthors(queryString).ProjectedRows();
+      var configured = ApplyToAuthors(QUERY_STRING).ProjectedRows();
 
       configured[3].ExpandedMany(nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("hobbit", "silmarillion");
    }
@@ -49,12 +49,12 @@ public class RelationMisconfigurationRegressionTests : RelationConformanceTestBa
    [Fact]
    public void Expand_ToManyRows_SendsTheSameStatementEitherWay()
    {
-      const string queryString = "$expand=Books&$orderby=Name";
+      const string QUERY_STRING = "$expand=Books&$orderby=Name";
 
       // The reason it is undetectable from the outside as well as from the inside: the query surface composed exactly the
       // same statement, so there is no failure to catch and no diagnostic to read. The rewriting happens above it, in the
       // projection OData binds the expansion as.
-      MisconfiguredAuthors(queryString).RenderSql().Should().Be(ApplyToAuthors(queryString).RenderSql());
+      MisconfiguredAuthors(QUERY_STRING).RenderSql().Should().Be(ApplyToAuthors(QUERY_STRING).RenderSql());
    }
 
    [Fact]
@@ -62,22 +62,22 @@ public class RelationMisconfigurationRegressionTests : RelationConformanceTestBa
    {
       // Worth knowing before auditing an endpoint: only the to-many direction loses its rows. A to-one expansion folds
       // into the main statement as a join and survives the rewriting intact.
-      const string queryString = "$expand=Author&$orderby=Title";
+      const string QUERY_STRING = "$expand=Author&$orderby=Title";
 
-      var misconfigured = MisconfiguredBooks(queryString).ProjectedRows();
+      var misconfigured = MisconfiguredBooks(QUERY_STRING).ProjectedRows();
 
       misconfigured[0].Expanded(nameof(BookData.Author))!["Name"].Should().Be("tolkien");
       misconfigured[2].Expanded(nameof(BookData.Author)).Should().BeNull();
 
-      misconfigured.Select(x => x.Values).Should().BeEquivalentTo(ApplyToBooks(queryString).ProjectedRows().Select(x => x.Values));
+      misconfigured.Select(x => x.Values).Should().BeEquivalentTo(ApplyToBooks(QUERY_STRING).ProjectedRows().Select(x => x.Values));
    }
 
    [Fact]
    public async Task Filter_WithAnAllQuantifier_ReturnsTheWrongRowsWhenNullPropagationIsLeftAtItsDefault()
    {
-      const string queryString = "$filter=Books/all(book: book/Title eq 'hobbit')&$orderby=Name";
+      const string QUERY_STRING = "$filter=Books/all(book: book/Title eq 'hobbit')&$orderby=Name";
 
-      var misconfigured = MisconfiguredAuthors(queryString);
+      var misconfigured = MisconfiguredAuthors(QUERY_STRING);
 
       // The guard is what breaks it: OData adds an EXISTS on top of its own NOT EXISTS, so a parent with an empty
       // collection no longer qualifies — and an empty collection satisfying "all" vacuously is the specified behaviour.
@@ -86,7 +86,7 @@ public class RelationMisconfigurationRegressionTests : RelationConformanceTestBa
       (await NamesAsync(misconfigured)).Should().BeEmpty();
 
       // Not a translation failure and not an error: a different, wrong row set.
-      (await NamesAsync(ApplyToAuthors(queryString))).Should().Equal("gaiman", "pratchett");
+      (await NamesAsync(ApplyToAuthors(QUERY_STRING))).Should().Equal("gaiman", "pratchett");
    }
 
    private AppliedQuery MisconfiguredAuthors(string queryString)

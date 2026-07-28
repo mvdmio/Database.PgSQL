@@ -255,7 +255,7 @@ public class TableRepositoryGeneratorTests
       result.GeneratedSources.Should().BeEmpty();
    }
 
-   private const string _VALID_RELATIONS = """
+   private const string VALID_RELATIONS = """
       using mvdmio.Database.PgSQL.Attributes;
       using System.Collections.Generic;
 
@@ -296,7 +296,7 @@ public class TableRepositoryGeneratorTests
    [Fact]
    public void ValidRelations_ProduceNoDiagnostics_AndMirrorTheRelationsOntoTheDataTypes()
    {
-      var result = GeneratorHarness.RunGenerator(_VALID_RELATIONS);
+      var result = GeneratorHarness.RunGenerator(VALID_RELATIONS);
 
       result.Diagnostics.Should().BeEmpty();
 
@@ -318,7 +318,7 @@ public class TableRepositoryGeneratorTests
    [Fact]
    public void ValidRelations_ProduceCodeThatCompiles()
    {
-      GeneratorHarness.AssertGeneratedSourcesCompile(_VALID_RELATIONS);
+      GeneratorHarness.AssertGeneratedSourcesCompile(VALID_RELATIONS);
    }
 
    /// <remarks>
@@ -329,7 +329,7 @@ public class TableRepositoryGeneratorTests
    public void AHandWrittenRelationCall_ResolvesWithoutTypeArguments()
    {
       var source = $$"""
-         {{_VALID_RELATIONS}}
+         {{VALID_RELATIONS}}
 
          public static class HandWritten
          {

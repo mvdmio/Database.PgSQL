@@ -3,21 +3,29 @@ name: Publish NuGet packages
 on:
   push:
     branches: [ "main" ]
-    paths: [ "src/**" ]
+    paths:
+      - "src/**"
+      - "Directory.Build.props"
   workflow_dispatch:
+
+# Nothing here writes to the repository; the push authenticates with NUGET_API_KEY.
+permissions:
+  contents: read
+
+# Serialize runs: a publish must never be interleaved with another publish, and an in-flight
+# upload must never be cancelled halfway through by a newer push.
+concurrency:
+  group: publish-nuget
+  cancel-in-progress: false
 
 jobs:
   build:
-    runs-on: ubuntu-22.04 #ubuntu-latest doesnt work at the moment, see: https://github.com/NuGet/setup-nuget/issues/168
+    name: Format & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup NuGet.exe for use with actions
-        uses: nuget/setup-nuget@v2
-        with:
-          nuget-api-key: ${{secrets.NUGET_API_KEY}}
-          nuget-version: 'latest'
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -27,18 +35,114 @@ jobs:
             9
             10
 
+      - name: Verify formatting
+        run: dotnet format --verify-no-changes
+
       - name: Restore dependencies
-        run: |
-          dotnet restore src/mvdmio.Database.PgSQL
-          dotnet restore src/mvdmio.Database.PgSQL.Tool
+        run: dotnet restore
 
       - name: Build
-        run: |
-          dotnet build src/mvdmio.Database.PgSQL --no-restore -c Release
-          dotnet build src/mvdmio.Database.PgSQL.Tool --no-restore -c Release
+        run: dotnet build --no-restore -c Release
 
       - name: Pack tool
         run: dotnet pack src/mvdmio.Database.PgSQL.Tool --no-build -c Release
 
+      # obj/ as well as bin/: --no-build still evaluates every project, and that evaluation reads
+      # the generated files under obj/.
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            **/bin/Release/**
+            **/obj/**
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+      # Flattened into one directory so the publish job can push by simple glob, and so each
+      # .snupkg sits next to the .nupkg whose upload carries it.
+      - name: Collect packages
+        run: |
+          mkdir -p artifacts
+          find . -path ./artifacts -prune -o -type f \( -name '*.nupkg' -o -name '*.snupkg' \) -exec cp {} artifacts/ \;
+          ls -l artifacts
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: artifacts/
+          # A pack that produced nothing must fail here, not as a bad glob in publish.
+          if-no-files-found: error
+          retention-days: 1
+
+  test:
+    name: Test
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8
+            9
+            10
+
+      - name: Download build output
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+
+      # The artifact saves the compile, not the restore: the test SDK packages contribute
+      # .props/.targets that are imported from the NuGet cache, so evaluation needs it populated.
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Unit & analyzer tests
+        run: |
+          dotnet test test/mvdmio.Database.PgSQL.Tests.Unit --no-build -c Release
+          dotnet test test/mvdmio.Database.PgSQL.Analyzers.Tests --no-build -c Release
+
+      - name: Integration tests
+        run: |
+          dotnet test test/mvdmio.Database.PgSQL.Tests.Integration --no-build -c Release
+          dotnet test test/mvdmio.Database.PgSQL.Tests.Integration.OData --no-build -c Release
+
+  publish:
+    name: Publish
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8
+            9
+            10
+
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: packages
+
+      # --skip-duplicate keeps a re-run against an unchanged PgSqlVersion a harmless no-op.
+      # Pushing a .nupkg uploads its sibling .snupkg along with it.
       - name: Push packages
-        run: nuget push **/*.nupkg -Source 'https://api.nuget.org/v3/index.json' -NonInteractive -SkipDuplicate -Verbosity normal
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          for package in *.nupkg; do
+            dotnet nuget push "$package" \
+              --source 'https://api.nuget.org/v3/index.json' \
+              --api-key "$NUGET_API_KEY" \
+              --skip-duplicate
+          done

@@ -1,6 +1,7 @@
 using mvdmio.Database.PgSQL.Models;
 using Npgsql;
 using NpgsqlTypes;
+using System.Diagnostics.CodeAnalysis;
 
 namespace mvdmio.Database.PgSQL.Connectors.Bulk;
 
@@ -107,6 +108,7 @@ public sealed class CopySession<T> : IAsyncDisposable
       return DisposeAsyncCore();
    }
 
+   [SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "DisposeAsyncCore is the name the IAsyncDisposable pattern prescribes; an Async suffix would fight the framework idiom.")]
    internal async ValueTask DisposeAsyncCore(CancellationToken ct = default)
    {
       if (_disposed)

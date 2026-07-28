@@ -16,8 +16,8 @@ namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 /// </remarks>
 public class GeneratedRepositoryCompositeKeyTests : TestBase
 {
-   private const long _FIRST_ACCOUNT = 1;
-   private const long _SECOND_ACCOUNT = 2;
+   private const long FIRST_ACCOUNT = 1;
+   private const long SECOND_ACCOUNT = 2;
 
    private readonly TestFixture _fixture;
 
@@ -44,31 +44,31 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
       _links = new TenantLinkRepository(Db);
 
       // Both projects with a primary task point at task 10, so only the account column decides which row that is.
-      _apolloId = await CreateProjectAsync(_FIRST_ACCOUNT, "apollo", "Apollo", primaryTaskId: 10);
-      _borealisId = await CreateProjectAsync(_FIRST_ACCOUNT, "borealis", "Borealis");
-      _otherAccountsProjectId = await CreateProjectAsync(_SECOND_ACCOUNT, "aurora", "Aurora", primaryTaskId: 10);
+      _apolloId = await CreateProjectAsync(FIRST_ACCOUNT, "apollo", "Apollo", primaryTaskId: 10);
+      _borealisId = await CreateProjectAsync(FIRST_ACCOUNT, "borealis", "Borealis");
+      _otherAccountsProjectId = await CreateProjectAsync(SECOND_ACCOUNT, "aurora", "Aurora", primaryTaskId: 10);
 
-      await CreateTaskAsync(_FIRST_ACCOUNT, taskId: 10, _apolloId, "assemble");
-      await CreateTaskAsync(_FIRST_ACCOUNT, taskId: 11, _apolloId, "launch");
-      await CreateTaskAsync(_FIRST_ACCOUNT, taskId: 12, _borealisId, "survey");
+      await CreateTaskAsync(FIRST_ACCOUNT, taskId: 10, _apolloId, "assemble");
+      await CreateTaskAsync(FIRST_ACCOUNT, taskId: 11, _apolloId, "launch");
+      await CreateTaskAsync(FIRST_ACCOUNT, taskId: 12, _borealisId, "survey");
 
       // The same task identifier under another account, which is the whole reason the key is composite.
-      await CreateTaskAsync(_SECOND_ACCOUNT, taskId: 10, _otherAccountsProjectId, "observe");
+      await CreateTaskAsync(SECOND_ACCOUNT, taskId: 10, _otherAccountsProjectId, "observe");
 
-      await CreateLinkAsync(_FIRST_ACCOUNT, linkId: 100, kind: "project", targetId: _apolloId);
-      await CreateLinkAsync(_FIRST_ACCOUNT, linkId: 101, kind: "user", targetId: 9999);
+      await CreateLinkAsync(FIRST_ACCOUNT, linkId: 100, kind: "project", targetId: _apolloId);
+      await CreateLinkAsync(FIRST_ACCOUNT, linkId: 101, kind: "user", targetId: 9999);
    }
 
    [Fact]
    public async Task CrudOperations_OverACompositeKey_WorkEndToEnd()
    {
       var created = await _projects.CreateAsync(
-         new CreateTenantProjectCommand { AccountId = _FIRST_ACCOUNT, Code = "cygnus", Name = "Cygnus" },
+         new CreateTenantProjectCommand { AccountId = FIRST_ACCOUNT, Code = "cygnus", Name = "Cygnus" },
          CancellationToken
       );
 
       // The second key member is database-generated, so it comes back rather than being supplied.
-      created.AccountId.Should().Be(_FIRST_ACCOUNT);
+      created.AccountId.Should().Be(FIRST_ACCOUNT);
       created.ProjectId.Should().BeGreaterThan(0);
 
       var found = await _projects.GetByPrimaryKeyAsync(created.AccountId, created.ProjectId, CancellationToken);
@@ -100,9 +100,9 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
    public async Task GetByPrimaryKeyAsync_WithOneKeyMemberFromAnotherRow_FindsNothing()
    {
       // Both parameters are needed to address a row, which is the structural guarantee a composite key buys.
-      (await _tasks.GetByPrimaryKeyAsync(_FIRST_ACCOUNT, 10, CancellationToken))!.Title.Should().Be("assemble");
-      (await _tasks.GetByPrimaryKeyAsync(_SECOND_ACCOUNT, 10, CancellationToken))!.Title.Should().Be("observe");
-      (await _tasks.GetByPrimaryKeyAsync(_SECOND_ACCOUNT, 11, CancellationToken)).Should().BeNull();
+      (await _tasks.GetByPrimaryKeyAsync(FIRST_ACCOUNT, 10, CancellationToken))!.Title.Should().Be("assemble");
+      (await _tasks.GetByPrimaryKeyAsync(SECOND_ACCOUNT, 10, CancellationToken))!.Title.Should().Be("observe");
+      (await _tasks.GetByPrimaryKeyAsync(SECOND_ACCOUNT, 11, CancellationToken)).Should().BeNull();
    }
 
    [Fact]
@@ -111,7 +111,7 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
       await _tasks.UpdateAsync(
          new UpdateTenantTaskCommand
          {
-            AccountId = _FIRST_ACCOUNT,
+            AccountId = FIRST_ACCOUNT,
             TaskId = 10,
             ProjectId = _apolloId,
             Title = "assemble again"
@@ -119,32 +119,32 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
          CancellationToken
       );
 
-      (await _tasks.GetByPrimaryKeyAsync(_FIRST_ACCOUNT, 10, CancellationToken))!.Title.Should().Be("assemble again");
+      (await _tasks.GetByPrimaryKeyAsync(FIRST_ACCOUNT, 10, CancellationToken))!.Title.Should().Be("assemble again");
 
       // The row sharing the task identifier under the other account is untouched.
-      (await _tasks.GetByPrimaryKeyAsync(_SECOND_ACCOUNT, 10, CancellationToken))!.Title.Should().Be("observe");
+      (await _tasks.GetByPrimaryKeyAsync(SECOND_ACCOUNT, 10, CancellationToken))!.Title.Should().Be("observe");
    }
 
    [Fact]
    public async Task DeleteByPrimaryKeyAsync_OverACompositeKey_RemovesExactlyOneRow()
    {
-      (await _tasks.DeleteByPrimaryKeyAsync(_FIRST_ACCOUNT, 10, CancellationToken)).Should().BeTrue();
+      (await _tasks.DeleteByPrimaryKeyAsync(FIRST_ACCOUNT, 10, CancellationToken)).Should().BeTrue();
 
-      (await _tasks.GetByPrimaryKeyAsync(_FIRST_ACCOUNT, 10, CancellationToken)).Should().BeNull();
-      (await _tasks.GetByPrimaryKeyAsync(_SECOND_ACCOUNT, 10, CancellationToken)).Should().NotBeNull();
-      (await _tasks.DeleteByPrimaryKeyAsync(_FIRST_ACCOUNT, 10, CancellationToken)).Should().BeFalse();
+      (await _tasks.GetByPrimaryKeyAsync(FIRST_ACCOUNT, 10, CancellationToken)).Should().BeNull();
+      (await _tasks.GetByPrimaryKeyAsync(SECOND_ACCOUNT, 10, CancellationToken)).Should().NotBeNull();
+      (await _tasks.DeleteByPrimaryKeyAsync(FIRST_ACCOUNT, 10, CancellationToken)).Should().BeFalse();
    }
 
    [Fact]
    public async Task CreateAsync_OverAFourColumnKeyWithAGeneratedMember_ReadsTheComputedValueBack()
    {
-      var link = await _links.GetByPrimaryKeyAsync(_FIRST_ACCOUNT, 100, "project", 1, CancellationToken);
+      var link = await _links.GetByPrimaryKeyAsync(FIRST_ACCOUNT, 100, "project", 1, CancellationToken);
 
       link.Should().NotBeNull();
       link!.ProjectRef.Should().Be(_apolloId);
 
       // The per-kind column is null for every other kind, which is what makes the junction polymorphic.
-      (await _links.GetByPrimaryKeyAsync(_FIRST_ACCOUNT, 101, "user", 1, CancellationToken))!.ProjectRef.Should().BeNull();
+      (await _links.GetByPrimaryKeyAsync(FIRST_ACCOUNT, 101, "user", 1, CancellationToken))!.ProjectRef.Should().BeNull();
    }
 
    [Fact]
@@ -158,7 +158,7 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
       apollosTasks.Select(x => x.Title).Should().Equal("assemble", "launch");
 
       var byProjectName = await _tasks.Query()
-         .Where(x => x.AccountId == _FIRST_ACCOUNT)
+         .Where(x => x.AccountId == FIRST_ACCOUNT)
          .OrderByDescending(x => x.Project!.Name)
          .ThenBy(x => x.Title)
          .ToListAsync(CancellationToken);
@@ -212,7 +212,7 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
    {
       var tasks = await _tasks.Query()
          .Include(x => x.Project)
-         .Where(x => x.AccountId == _FIRST_ACCOUNT)
+         .Where(x => x.AccountId == FIRST_ACCOUNT)
          .OrderBy(x => x.TaskId)
          .ToListAsync(CancellationToken);
 
@@ -262,7 +262,7 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
       // A generated column is an ordinary mapped column from the query surface's side, so a relation over it is ordinary.
       var projectLinks = await _links.Query()
          .Include(x => x.Project)
-         .Where(x => x.AccountId == _FIRST_ACCOUNT)
+         .Where(x => x.AccountId == FIRST_ACCOUNT)
          .OrderBy(x => x.LinkId)
          .ToListAsync(CancellationToken);
 

@@ -6,7 +6,7 @@ namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
 public class TableDefinitionClassNameAnalyzerTests
 {
-   private const string _TABLE_ATTRIBUTE_STUB = """
+   private const string TABLE_ATTRIBUTE_STUB = """
       namespace mvdmio.Database.PgSQL.Attributes
       {
          [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
@@ -57,7 +57,7 @@ public class TableDefinitionClassNameAnalyzerTests
       {
          TestState =
          {
-            Sources = { source, _TABLE_ATTRIBUTE_STUB },
+            Sources = { source, TABLE_ATTRIBUTE_STUB },
             ReferenceAssemblies = ReferenceAssemblies.Net.Net90,
          }
       };

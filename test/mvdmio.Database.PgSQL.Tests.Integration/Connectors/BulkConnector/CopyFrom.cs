@@ -45,7 +45,7 @@ public class CopyFromTests : IAsyncLifetime
       await using var source = new DatabaseConnection(_sourceConnectionString);
       await using var dest = new DatabaseConnection(_destConnectionString);
 
-      const string createTable = """
+      const string CREATE_TABLE = """
          CREATE TABLE public.widgets (
             id           bigint NOT NULL PRIMARY KEY,
             name         text   NOT NULL,
@@ -55,8 +55,8 @@ public class CopyFromTests : IAsyncLifetime
          );
          """;
 
-      await source.Dapper.ExecuteAsync(createTable, ct: CancellationToken);
-      await dest.Dapper.ExecuteAsync(createTable, ct: CancellationToken);
+      await source.Dapper.ExecuteAsync(CREATE_TABLE, ct: CancellationToken);
+      await dest.Dapper.ExecuteAsync(CREATE_TABLE, ct: CancellationToken);
 
       await source.Dapper.ExecuteAsync(
          """
@@ -95,9 +95,9 @@ public class CopyFromTests : IAsyncLifetime
       await using var source = new DatabaseConnection(_sourceConnectionString);
       await using var dest = new DatabaseConnection(_destConnectionString);
 
-      const string createTable = "CREATE TABLE public.empty_table (id integer NOT NULL PRIMARY KEY);";
-      await source.Dapper.ExecuteAsync(createTable, ct: CancellationToken);
-      await dest.Dapper.ExecuteAsync(createTable, ct: CancellationToken);
+      const string CREATE_TABLE = "CREATE TABLE public.empty_table (id integer NOT NULL PRIMARY KEY);";
+      await source.Dapper.ExecuteAsync(CREATE_TABLE, ct: CancellationToken);
+      await dest.Dapper.ExecuteAsync(CREATE_TABLE, ct: CancellationToken);
 
       await dest.Bulk.CopyFromAsync(source, "public", "empty_table", ["id"], CancellationToken);
 

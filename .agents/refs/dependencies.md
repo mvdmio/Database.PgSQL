@@ -45,7 +45,13 @@ No mocking framework is used — testability comes from interface seams (e.g. `I
 
 ## CI/CD
 
-- **Pipeline:** `.github/workflows/publish-nuget.yml`, runs on `ubuntu-22.04`.
-- **Triggers:** push to `main` touching `src/**`, or manual `workflow_dispatch`.
-- **Actions:** restore → build (Release) the library and tool → `dotnet pack` the tool → `nuget push` to NuGet.org.
-- **Note:** the publish pipeline does **not** run tests. Run `dotnet test` locally before merging to `main`.
+- **Pipeline:** `.github/workflows/publish-nuget.yml`, every job on `ubuntu-latest` with a `timeout-minutes`. The pipeline exists to **publish**; the format check and the tests are the gate on that act, which is why it is not widened to every change.
+- **Triggers:** push to `main` touching `src/**` or `Directory.Build.props` (`PgSqlVersion` lives there, so a version bump alone can trigger a re-release), or manual `workflow_dispatch`. A change touching only test projects triggers nothing — it is covered by the next run that publishes.
+- **Concurrency:** one `publish-nuget` group with `cancel-in-progress: false`, so runs serialize and an in-flight upload is never cancelled by a newer push.
+- **Three jobs, each gating the next:**
+  - `build` — `dotnet format --verify-no-changes` first (cheapest failure), then restore and build the solution in Release, then `dotnet pack` the tool with `--no-build`. This is the only compile. Uploads two artifacts: the build output (`bin` **and** `obj` — `--no-build` still evaluates each project, and evaluation reads the generated files under `obj`) and the packages.
+  - `test` — downloads the build output, runs `dotnet restore` (needed even with nothing to compile: the test SDK packages contribute `.props`/`.targets` imported from the NuGet cache), then the unit and analyzer suites, then the two container-backed integration suites. Cheap suites first so a logic-level break reports before any container image is pulled. GitHub-hosted `ubuntu` runners ship Docker; macOS and Windows runners do not, which is one reason the pipeline stays on Linux.
+  - `publish` — downloads the packages artifact (no checkout) and pushes with `dotnet nuget push --skip-duplicate`, so a re-run against an unchanged `PgSqlVersion` is a harmless no-op. Pushing a `.nupkg` uploads its sibling `.snupkg`.
+- **No `nuget.exe`:** the upload uses `dotnet nuget push`. The old workflow pinned `ubuntu-22.04` only because `nuget.exe` runs under Mono, which is absent on Ubuntu 24.04 ([NuGet/setup-nuget#168](https://github.com/NuGet/setup-nuget/issues/168)); dropping the Mono dependency is what lets every job run on `ubuntu-latest`.
+- **No pull-request build** and **no dependency caching** — work lands by direct push to `main`, and there are no `packages.lock.json` files for `setup-dotnet`'s cache to key on.
+- **Escape hatch:** put `[skip ci]` in the commit message to bypass the pipeline on a push that touches a triggering path but ships nothing. GitHub also honours `[ci skip]`, `[no ci]`, `[skip actions]`, `[actions skip]` and a `skip-checks: true` trailer — no other spelling works.

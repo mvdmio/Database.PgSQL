@@ -11,7 +11,7 @@ public class MigrationClassNameAnalyzerTests
 {
    // Minimal stub of IDbMigration so the analyzer can resolve the interface
    // without having to pull in the full Npgsql/Dapper dependency graph.
-   private const string _IDBMIGRATION_STUB = """
+   private const string IDBMIGRATION_STUB = """
       using System.Threading.Tasks;
 
       namespace mvdmio.Database.PgSQL
@@ -197,7 +197,7 @@ public class MigrationClassNameAnalyzerTests
       {
          TestState =
          {
-            Sources = { source, _IDBMIGRATION_STUB },
+            Sources = { source, IDBMIGRATION_STUB },
             ReferenceAssemblies = ReferenceAssemblies.Net.Net90,
          }
       };

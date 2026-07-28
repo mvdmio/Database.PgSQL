@@ -294,11 +294,6 @@ dotnet_naming_rule.delegate_should_be_pascal_case.severity = warning
 dotnet_naming_rule.delegate_should_be_pascal_case.symbols = delegate
 dotnet_naming_rule.delegate_should_be_pascal_case.style = pascal_case
 
-# Code Style | Naming | Rules | Const field should be PascalCase
-dotnet_naming_rule.const_field_should_be_pascal_case.severity = warning
-dotnet_naming_rule.const_field_should_be_pascal_case.symbols = const_field
-dotnet_naming_rule.const_field_should_be_pascal_case.style = pascal_case
-
 # Code Style | Naming | Rules | Visible static field should be PascalCase
 dotnet_naming_rule.visible_static_field_should_be_pascal_case.severity = warning
 dotnet_naming_rule.visible_static_field_should_be_pascal_case.symbols = visible_static_field

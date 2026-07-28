@@ -632,14 +632,14 @@ public sealed class SchemaExtractor
    private static string InjectIfNotExistsIntoIndexDef(string indexDef)
    {
       // Handle "CREATE UNIQUE INDEX name" and "CREATE INDEX name"
-      const string createUniqueIndex = "CREATE UNIQUE INDEX ";
-      const string createIndex = "CREATE INDEX ";
+      const string CREATE_UNIQUE_INDEX = "CREATE UNIQUE INDEX ";
+      const string CREATE_INDEX = "CREATE INDEX ";
 
-      if (indexDef.StartsWith(createUniqueIndex, StringComparison.OrdinalIgnoreCase))
-         return $"CREATE UNIQUE INDEX IF NOT EXISTS {indexDef[createUniqueIndex.Length..]}";
+      if (indexDef.StartsWith(CREATE_UNIQUE_INDEX, StringComparison.OrdinalIgnoreCase))
+         return $"CREATE UNIQUE INDEX IF NOT EXISTS {indexDef[CREATE_UNIQUE_INDEX.Length..]}";
 
-      if (indexDef.StartsWith(createIndex, StringComparison.OrdinalIgnoreCase))
-         return $"CREATE INDEX IF NOT EXISTS {indexDef[createIndex.Length..]}";
+      if (indexDef.StartsWith(CREATE_INDEX, StringComparison.OrdinalIgnoreCase))
+         return $"CREATE INDEX IF NOT EXISTS {indexDef[CREATE_INDEX.Length..]}";
 
       return indexDef;
    }

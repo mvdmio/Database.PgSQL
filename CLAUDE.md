@@ -7,6 +7,7 @@ C# NuGet package wrapping Dapper for PostgreSQL — connections & query executio
 - **Build tool:** .NET SDK (`dotnet`). Package manager: NuGet.
 - **Build:** `dotnet build` • **Format:** `dotnet format` • **Test:** `dotnet test` — integration tests need **Docker running** (Testcontainers).
 - Before finishing any change, run in sequence: `dotnet format` → `dotnet build` → `dotnet test`. Run `dotnet` steps **sequentially, never in parallel** — overlapping runs cause file locks/deadlocks. If a build fails on a file lock, stop the locking process and retry. Fix all build errors and test failures before finishing.
+- **`dotnet format --verify-no-changes` must exit zero before a change is finished.** CI runs the same command as the first gate on publishing, and a red format check blocks the package from reaching NuGet.org — treat a format failure as a release blocker, not a style nit.
 - This is a published NuGet library: treat the public API as a contract. No backward-compat shims and no API changes unless intentional and called out (a major version bump).
 - **Always update `README.md`** to reflect changes, and **bump `<PgSqlVersion>` in `Directory.Build.props`** (semver: MAJOR = incompatible API; MINOR = backward-compatible feature; PATCH = fix) when the library or tool changes.
 - Tests cover all new/changed code — write them before or alongside the change (TDD).

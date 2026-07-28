@@ -25,15 +25,15 @@ public class CompositeKeyMisconfigurationRegressionTests : CompositeKeyConforman
    [Fact]
    public void Expand_ToManyRowsOverACompositeKey_ComesBackEmptyWhenNullPropagationIsLeftAtItsDefault()
    {
-      const string queryString = "$expand=Tasks&$orderby=Code";
+      const string QUERY_STRING = "$expand=Tasks&$orderby=Code";
 
-      var misconfigured = MisconfiguredProjects(queryString).ProjectedRows();
+      var misconfigured = MisconfiguredProjects(QUERY_STRING).ProjectedRows();
 
       // Every project, in the right order, with the right scalar values — and not one task.
       misconfigured.Select(x => x["Code"]).Should().Equal("apollo", "aurora", "borealis", "vega");
       misconfigured.Should().AllSatisfy(row => row.ExpandedMany(nameof(TenantProjectData.Tasks)).Should().BeEmpty());
 
-      ApplyToProjects(queryString).ProjectedRows()[0]
+      ApplyToProjects(QUERY_STRING).ProjectedRows()[0]
          .ExpandedMany(nameof(TenantProjectData.Tasks))
          .Select(x => x["Title"])
          .Should().BeEquivalentTo(new[] { "assemble", "launch" });
@@ -44,28 +44,28 @@ public class CompositeKeyMisconfigurationRegressionTests : CompositeKeyConforman
    {
       // Why it is undetectable from either side: the query surface composed exactly the same statement, so there is no
       // failure to catch. The rewriting happens above it, in the projection OData binds the expansion as.
-      const string queryString = "$expand=Tasks&$orderby=Code";
+      const string QUERY_STRING = "$expand=Tasks&$orderby=Code";
 
-      MisconfiguredProjects(queryString).RenderSql().Should().Be(ApplyToProjects(queryString).RenderSql());
+      MisconfiguredProjects(QUERY_STRING).RenderSql().Should().Be(ApplyToProjects(QUERY_STRING).RenderSql());
    }
 
    [Fact]
    public void Expand_ToOneRowOverACompositeKey_IsUnaffectedByTheNullPropagationDefault()
    {
-      const string queryString = "$expand=Project&$orderby=Title";
+      const string QUERY_STRING = "$expand=Project&$orderby=Title";
 
-      var misconfigured = MisconfiguredTasks(queryString).ProjectedRows();
+      var misconfigured = MisconfiguredTasks(QUERY_STRING).ProjectedRows();
 
       misconfigured[0].Expanded(nameof(TenantTaskData.Project))!["Code"].Should().Be("apollo");
-      misconfigured.Select(x => x.Values).Should().BeEquivalentTo(ApplyToTasks(queryString).ProjectedRows().Select(x => x.Values));
+      misconfigured.Select(x => x.Values).Should().BeEquivalentTo(ApplyToTasks(QUERY_STRING).ProjectedRows().Select(x => x.Values));
    }
 
    [Fact]
    public async Task Filter_WithAnAllQuantifierOverACompositeRelation_ReturnsTheWrongRowsWhenNullPropagationIsLeftAtItsDefault()
    {
-      const string queryString = "$filter=Tasks/all(task: task/Title eq 'survey')&$orderby=Code";
+      const string QUERY_STRING = "$filter=Tasks/all(task: task/Title eq 'survey')&$orderby=Code";
 
-      var misconfigured = MisconfiguredProjects(queryString);
+      var misconfigured = MisconfiguredProjects(QUERY_STRING);
 
       // OData adds an EXISTS on top of its own NOT EXISTS, so a project with no tasks no longer qualifies — and an empty
       // collection satisfying "all" vacuously is the specified behaviour.
@@ -74,7 +74,7 @@ public class CompositeKeyMisconfigurationRegressionTests : CompositeKeyConforman
       (await CodesAsync(misconfigured)).Should().Equal("borealis");
 
       // Not a translation failure and not an error: a different, wrong row set.
-      (await CodesAsync(ApplyToProjects(queryString))).Should().Equal("borealis", "vega");
+      (await CodesAsync(ApplyToProjects(QUERY_STRING))).Should().Equal("borealis", "vega");
    }
 
    private AppliedQuery MisconfiguredProjects(string queryString)

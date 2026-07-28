@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 
 namespace mvdmio.Database.PgSQL.Analyzers;
@@ -19,6 +20,7 @@ namespace mvdmio.Database.PgSQL.Analyzers;
 public sealed class MigrationClassNameAnalyzer : DiagnosticAnalyzer
 {
    /// <summary>Diagnostic ID for an invalid migration class name.</summary>
+   [SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "DiagnosticId is the name every Roslyn analyzer exposes its ID under; UPPER_SNAKE_CASE would fight that idiom, and the member is public, so renaming it would break surface for housekeeping.")]
    public const string DiagnosticId = "PGSQL0001";
 
    private const string CATEGORY = "Naming";

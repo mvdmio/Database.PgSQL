@@ -60,12 +60,12 @@ public sealed partial class BulkConnector
 
    private static async Task<long> CopyStreamAsync(Stream source, Stream destination, CancellationToken ct)
    {
-      const int bufferSize = 81920;
-      var buffer = new byte[bufferSize];
+      const int BUFFER_SIZE = 81920;
+      var buffer = new byte[BUFFER_SIZE];
       long total = 0;
       int read;
 
-      while ((read = await source.ReadAsync(buffer.AsMemory(0, bufferSize), ct).ConfigureAwait(false)) > 0)
+      while ((read = await source.ReadAsync(buffer.AsMemory(0, BUFFER_SIZE), ct).ConfigureAwait(false)) > 0)
       {
          await destination.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
          total += read;

@@ -56,7 +56,8 @@ public class BulkConnectorBeginCopyTests : TestBase
             integer integer NOT NULL PRIMARY KEY,
             text    text    NOT NULL
          );
-         """
+         """,
+         ct: CancellationToken
       );
 
       var validMapping = new Dictionary<string, Func<TestItem, DbValue>>

@@ -88,8 +88,8 @@ internal class SchemaExportService
 
    private static IEnumerable<(string Schema, string Name)> ExtractSchemaQualifiedTypeNames(string dataType)
    {
-      const string identifier = "[A-Za-z_][A-Za-z0-9_$]*";
-      var matches = System.Text.RegularExpressions.Regex.Matches(dataType, $@"(?<![A-Za-z0-9_""'])({identifier})\.({identifier})");
+      const string IDENTIFIER = "[A-Za-z_][A-Za-z0-9_$]*";
+      var matches = System.Text.RegularExpressions.Regex.Matches(dataType, $@"(?<![A-Za-z0-9_""'])({IDENTIFIER})\.({IDENTIFIER})");
 
       foreach (System.Text.RegularExpressions.Match match in matches)
       {

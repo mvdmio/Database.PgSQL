@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using System.Diagnostics.CodeAnalysis;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
@@ -29,6 +30,7 @@ public class GeneratedRepositoryInterfaceTests
          _profiles = profiles;
       }
 
+      [SuppressMessage("CodeQuality", "IDE0060:Remove unused parameter", Justification = "The parameter is part of the generated IProfileRepository.Query signature this fake implements, so it cannot be dropped.")]
       public IQueryable<ProfileData> Query(TimeSpan? commandTimeout = null)
       {
          return _profiles.AsQueryable();

@@ -14,7 +14,7 @@ public class TableRepositoryGeneratorCompositeKeyTests
    ///    overlaps the declaring table's own key is the ordinary case here rather than a special one. The project's second
    ///    key member is database-generated, which is what makes a part-supplied, part-generated key observable.
    /// </summary>
-   private const string _COMPOSITE_KEY_TABLES = """
+   private const string COMPOSITE_KEY_TABLES = """
       using mvdmio.Database.PgSQL.Attributes;
       using System.Collections.Generic;
 
@@ -57,7 +57,7 @@ public class TableRepositoryGeneratorCompositeKeyTests
    [Fact]
    public void CompositeKeyTable_GeneratesEveryTypeJustAsASingleColumnKeyDoes()
    {
-      var result = GeneratorHarness.RunGenerator(_COMPOSITE_KEY_TABLES);
+      var result = GeneratorHarness.RunGenerator(COMPOSITE_KEY_TABLES);
 
       result.Diagnostics.Should().BeEmpty();
 
@@ -76,7 +76,7 @@ public class TableRepositoryGeneratorCompositeKeyTests
    [Fact]
    public void CompositeKeyTable_TakesOneLookupParameterPerKeyMemberInDeclarationOrder()
    {
-      var result = GeneratorHarness.RunGenerator(_COMPOSITE_KEY_TABLES);
+      var result = GeneratorHarness.RunGenerator(COMPOSITE_KEY_TABLES);
       var project = GeneratorHarness.GeneratedSource(result, "Demo_ProjectTable.Repository.g.cs");
 
       project.Should().Contain("Task<ProjectData?> GetByPrimaryKeyAsync(long accountId, long projectId, CancellationToken ct = default);");
@@ -89,7 +89,7 @@ public class TableRepositoryGeneratorCompositeKeyTests
    [Fact]
    public void CompositeKeyTable_AddressesEveryKeyMemberInTheUpdateAndTheDelete()
    {
-      var result = GeneratorHarness.RunGenerator(_COMPOSITE_KEY_TABLES);
+      var result = GeneratorHarness.RunGenerator(COMPOSITE_KEY_TABLES);
       var task = GeneratorHarness.GeneratedSource(result, "Demo_TaskTable.Repository.g.cs");
 
       task.Should().Contain("""UPDATE "public"."tasks" """.TrimEnd());
@@ -104,7 +104,7 @@ public class TableRepositoryGeneratorCompositeKeyTests
    [Fact]
    public void CompositeKeyTable_ExcludesADatabaseComputedKeyMemberFromTheCreateCommand()
    {
-      var result = GeneratorHarness.RunGenerator(_COMPOSITE_KEY_TABLES);
+      var result = GeneratorHarness.RunGenerator(COMPOSITE_KEY_TABLES);
       var project = GeneratorHarness.GeneratedSource(result, "Demo_ProjectTable.Repository.g.cs");
 
       // A key that is part caller-supplied and part database-computed needs no special handling: the create command
@@ -116,7 +116,7 @@ public class TableRepositoryGeneratorCompositeKeyTests
    [Fact]
    public void CompositeKeyTable_RegistersEveryKeyMemberAsAPrimaryKeyColumn()
    {
-      var registration = GeneratorHarness.RegistrationSource(GeneratorHarness.RunGenerator(_COMPOSITE_KEY_TABLES));
+      var registration = GeneratorHarness.RegistrationSource(GeneratorHarness.RunGenerator(COMPOSITE_KEY_TABLES));
 
       registration.Should().ContainAll(
          """.Column(x => x.AccountId, "account_id", isPrimaryKey: true)""",
@@ -131,7 +131,7 @@ public class TableRepositoryGeneratorCompositeKeyTests
    [Fact]
    public void CompositeRelation_IsRegisteredThroughThePredicateOverload()
    {
-      var registration = GeneratorHarness.RegistrationSource(GeneratorHarness.RunGenerator(_COMPOSITE_KEY_TABLES));
+      var registration = GeneratorHarness.RegistrationSource(GeneratorHarness.RunGenerator(COMPOSITE_KEY_TABLES));
 
       registration.Should().Contain(
          ".Relation<global::Demo.TaskData>(x => x.Tasks, (x, y) => x.AccountId == y.AccountId && x.ProjectId == y.ProjectId)"
@@ -151,7 +151,7 @@ public class TableRepositoryGeneratorCompositeKeyTests
    [Fact]
    public void CompositeRelation_IsNeverRegisteredThroughAKeyExpression()
    {
-      var registration = GeneratorHarness.RegistrationSource(GeneratorHarness.RunGenerator(_COMPOSITE_KEY_TABLES));
+      var registration = GeneratorHarness.RegistrationSource(GeneratorHarness.RunGenerator(COMPOSITE_KEY_TABLES));
 
       registration.Should().NotContainAny("x => new", "y => new", "ValueTuple", "System.Tuple");
 
@@ -163,13 +163,13 @@ public class TableRepositoryGeneratorCompositeKeyTests
    [Fact]
    public void CompositeRelations_ProduceCodeThatCompiles()
    {
-      GeneratorHarness.AssertGeneratedSourcesCompile(_COMPOSITE_KEY_TABLES);
+      GeneratorHarness.AssertGeneratedSourcesCompile(COMPOSITE_KEY_TABLES);
    }
 
    [Fact]
    public void CompositeRelations_MirrorTheRelationPropertiesOntoTheDataTypes()
    {
-      var result = GeneratorHarness.RunGenerator(_COMPOSITE_KEY_TABLES);
+      var result = GeneratorHarness.RunGenerator(COMPOSITE_KEY_TABLES);
 
       GeneratorHarness.GeneratedSource(result, "Demo_ProjectTable.Relations.g.cs")
          .Should().Contain("public global::System.Collections.Generic.List<global::Demo.TaskData> Tasks { get; set; } = new();");

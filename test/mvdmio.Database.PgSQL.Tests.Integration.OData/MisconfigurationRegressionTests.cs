@@ -35,9 +35,9 @@ public class MisconfigurationRegressionTests : SampleConformanceTestBase
    [Fact]
    public void Filter_WithSubstring_FailsToTranslateWhenNullPropagationIsLeftAtItsDefault()
    {
-      const string queryString = "$filter=substring(Name, 1, 3) eq 'lic'";
+      const string QUERY_STRING = "$filter=substring(Name, 1, 3) eq 'lic'";
 
-      var failure = Record.Exception(() => Misconfigured(queryString).RenderSql());
+      var failure = Record.Exception(() => Misconfigured(QUERY_STRING).RenderSql());
 
       failure.Should().BeOfType<QueryTranslationException>();
 
@@ -45,19 +45,19 @@ public class MisconfigurationRegressionTests : SampleConformanceTestBase
       // translation. With the setting disabled the same filter is a plain Substring.
       failure!.Message.Should().Contain("ClrSafeFunctions");
 
-      Apply(queryString).RenderSql().Should().Contain("Substring(");
+      Apply(QUERY_STRING).RenderSql().Should().Contain("Substring(");
    }
 
    [Fact]
    public void Filter_WithAStringFunction_RendersANonSargableNullGuardWhenNullPropagationIsLeftAtItsDefault()
    {
-      const string queryString = "$filter=length(Name) eq 5";
+      const string QUERY_STRING = "$filter=length(Name) eq 5";
 
       // A CASE over "column IS NULL" wrapped around the predicate: correct rows, but PostgreSQL cannot use an index
       // for it. On a column the model already declares non-nullable, the guard can never even fire.
-      Misconfigured(queryString).RenderSql().Should().ContainAll("CASE", "IS NULL");
+      Misconfigured(QUERY_STRING).RenderSql().Should().ContainAll("CASE", "IS NULL");
 
-      var configured = Apply(queryString).RenderSql();
+      var configured = Apply(QUERY_STRING).RenderSql();
 
       configured.Should().NotContain("CASE");
       configured.Should().Contain("Length(");
@@ -68,10 +68,10 @@ public class MisconfigurationRegressionTests : SampleConformanceTestBase
    {
       // The reason the misconfiguration is dangerous rather than merely slow: the rows are right, so nothing about the
       // response tells a consumer that anything is wrong.
-      const string queryString = "$filter=length(Name) eq 5";
+      const string QUERY_STRING = "$filter=length(Name) eq 5";
 
-      var misconfigured = await NamesAsync(Misconfigured(queryString));
-      var configured = await NamesAsync(Apply(queryString));
+      var misconfigured = await NamesAsync(Misconfigured(QUERY_STRING));
+      var configured = await NamesAsync(Apply(QUERY_STRING));
 
       misconfigured.Should().BeEquivalentTo(configured);
       configured.Should().BeEquivalentTo("alice", "carol");
