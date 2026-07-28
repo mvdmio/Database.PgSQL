@@ -84,19 +84,24 @@ internal static class TableDefinitionSymbols
 
    public static PropertyDefinitionModel CreatePropertyModel(IPropertySymbol property)
    {
-      var columnName = property.GetAttributes()
-         .FirstOrDefault(x => x.AttributeClass?.ToDisplayString() == COLUMN_ATTRIBUTE_FULL_NAME)?
-         .ConstructorArguments.FirstOrDefault().Value as string;
+      var columnAttribute = property.GetAttributes()
+         .FirstOrDefault(x => x.AttributeClass?.ToDisplayString() == COLUMN_ATTRIBUTE_FULL_NAME);
+
+      var columnName = columnAttribute?.ConstructorArguments.FirstOrDefault().Value as string;
+      var isPrimaryKey = HasAttribute(property, PRIMARY_KEY_ATTRIBUTE_FULL_NAME);
+      var contradiction = NullabilityContradiction(property, columnAttribute, isPrimaryKey);
 
       return new PropertyDefinitionModel(
          propertyName: property.Name,
          parameterName: ToCamelCase(property.Name),
          typeName: property.Type.ToDisplayString(_typeDisplayFormat),
          columnName: string.IsNullOrWhiteSpace(columnName) ? ToSnakeCase(property.Name) : columnName!,
-         isPrimaryKey: HasAttribute(property, PRIMARY_KEY_ATTRIBUTE_FULL_NAME),
+         isPrimaryKey: isPrimaryKey,
          isUnique: HasAttribute(property, UNIQUE_ATTRIBUTE_FULL_NAME),
          isGenerated: HasAttribute(property, GENERATED_ATTRIBUTE_FULL_NAME),
          isNullable: IsNullable(property.Type),
+         isDeclaredNotNull: DeclaresNotNull(property, columnAttribute, isPrimaryKey, contradiction),
+         nullabilityContradiction: contradiction,
          requiresNullForgivingInitializer: property.Type.IsReferenceType && property.NullableAnnotation != NullableAnnotation.Annotated
       );
    }
@@ -232,6 +237,84 @@ internal static class TableDefinitionSymbols
    {
       return type.NullableAnnotation == NullableAnnotation.Annotated
              || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
+   }
+
+   /// <summary>
+   ///    Whether the column cannot hold null: nullable unless the property's type, its key membership or a
+   ///    <c>[Column]</c> argument says otherwise. A contradicted claim is already dropped by the time this is asked, so
+   ///    it falls back to the type and the key.
+   /// </summary>
+   private static bool DeclaresNotNull(IPropertySymbol property, AttributeData? columnAttribute, bool isPrimaryKey, string? contradiction)
+   {
+      if (isPrimaryKey)
+         return true;
+
+      if (contradiction is null)
+      {
+         if (HasFlagSet(columnAttribute, "NotNull"))
+            return true;
+
+         if (HasFlagSet(columnAttribute, "Null"))
+            return false;
+      }
+
+      return TypeCannotHoldNull(property);
+   }
+
+   /// <summary>
+   ///    Which of the four ways a declared nullability can say two things at once this property is, or
+   ///    <see langword="null" /> when it says one thing. The constants name the contradiction rather than the diagnostic:
+   ///    what it earns is <see cref="TableDefinitionParser" />'s decision.
+   /// </summary>
+   /// <remarks>
+   ///    Ordered most specific first, because more than one can apply to the same property — <c>Null</c> on a key member
+   ///    typed <c>long</c> is both a key contradiction and a value-type one, and the key is the more useful thing to
+   ///    name.
+   /// </remarks>
+   private static string? NullabilityContradiction(IPropertySymbol property, AttributeData? columnAttribute, bool isPrimaryKey)
+   {
+      var declaresNull = HasFlagSet(columnAttribute, "Null");
+      var declaresNotNull = HasFlagSet(columnAttribute, "NotNull");
+
+      if (declaresNull && declaresNotNull)
+         return TableRepositoryDiagnostics.NULLABILITY_REASON_BOTH_DIRECTIONS;
+
+      if (declaresNull && isPrimaryKey)
+         return TableRepositoryDiagnostics.NULLABILITY_REASON_NULL_ON_A_KEY_MEMBER;
+
+      // Not a contradiction in a nullable-oblivious file: the annotation that would carry the fact cannot be written
+      // there, so the attribute is the only thing said about the column, and that is the case it exists for.
+      if (declaresNotNull && IsNullable(property.Type))
+         return TableRepositoryDiagnostics.NULLABILITY_REASON_NOT_NULL_OVER_A_NULLABLE_TYPE;
+
+      if (declaresNull && property.Type.IsValueType && property.Type.OriginalDefinition.SpecialType != SpecialType.System_Nullable_T)
+         return TableRepositoryDiagnostics.NULLABILITY_REASON_NULL_OVER_A_NON_NULLABLE_VALUE_TYPE;
+
+      return null;
+   }
+
+   /// <remarks>
+   ///    A value type cannot hold null unless it is a <see cref="Nullable{T}" />. A reference type only says it through
+   ///    its annotation, and a nullable-oblivious file has none to read — which is why the absence of an annotation is
+   ///    read here as saying nothing rather than as saying not-null.
+   /// </remarks>
+   private static bool TypeCannotHoldNull(IPropertySymbol property)
+   {
+      if (property.Type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+         return false;
+
+      if (property.Type.IsValueType)
+         return true;
+
+      return property.NullableAnnotation == NullableAnnotation.NotAnnotated;
+   }
+
+   private static bool HasFlagSet(AttributeData? attribute, string propertyName)
+   {
+      if (attribute is null)
+         return false;
+
+      return attribute.NamedArguments.Any(x => string.Equals(x.Key, propertyName, StringComparison.Ordinal) && x.Value.Value is true);
    }
 
    private static bool HasRelevantAttribute(IPropertySymbol property)

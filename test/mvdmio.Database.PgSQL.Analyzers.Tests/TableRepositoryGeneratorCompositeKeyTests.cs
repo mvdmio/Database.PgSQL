@@ -124,8 +124,9 @@ public class TableRepositoryGeneratorCompositeKeyTests
          """.Column(x => x.TaskId, "task_id", isPrimaryKey: true)"""
       );
 
-      // A non-key column stays a plain column even when it is a relation's foreign key.
-      registration.Should().Contain(""".Column(x => x.ProjectId, "project_id")""");
+      // A non-key column stays a plain column even when it is a relation's foreign key — it only states that its type
+      // cannot hold null, which every key member states through the key argument instead.
+      registration.Should().Contain(""".Column(x => x.ProjectId, "project_id", isNotNull: true)""");
    }
 
    [Fact]

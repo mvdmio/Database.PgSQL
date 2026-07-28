@@ -105,6 +105,19 @@ internal static class TableDefinitionParser
          .Select(TableDefinitionSymbols.CreatePropertyModel)
          .ToImmutableArray();
 
+      // Abandons nothing: the claim has already been dropped, so every generated signature is still well-defined and
+      // the consumer reads this one error rather than type-not-found errors from everything naming a missing type.
+      foreach (var property in properties.Where(x => x.NullabilityContradiction is not null))
+      {
+         diagnostics.Add(Diagnostic.Create(
+            TableRepositoryDiagnostics.ContradictoryColumnNullability,
+            TableDefinitionSymbols.PropertyLocation(mappedProperties, property, classSyntax),
+            classSymbol.Name,
+            property.PropertyName,
+            property.NullabilityContradiction
+         ));
+      }
+
       // Declaration order, because GetMembers returns source order, and that order is the key order the generated
       // lookup, delete and update all count on.
       var primaryKeys = properties.Where(x => x.IsPrimaryKey).ToImmutableArray();

@@ -54,4 +54,20 @@ public class NullComparisonConformanceTests : SampleConformanceTestBase
    {
       (await NamesAsync(Apply("$filter=Nickname eq 'bobby'"))).Should().Equal("bob");
    }
+
+   /// <remarks>
+   ///    The counterpart to the nullable pins above, and the reason a generated mapping states nullability at all. Both
+   ///    columns are <c>TEXT</c> and both are compared the same way; the only difference is that the table definition
+   ///    types one of them non-nullable, which is enough for the widening to disappear. Nothing is lost by it: the null
+   ///    alternative could never match a column that cannot hold null.
+   /// </remarks>
+   [Fact]
+   public async Task Filter_WithInequalityOnANonNullableTextColumn_RendersNoNullAlternative()
+   {
+      var applied = Apply("$filter=Tier ne 'gold'");
+
+      applied.RenderSql().Should().NotContain("IS NULL");
+
+      (await NamesAsync(applied)).Should().BeEquivalentTo("bob", "dave");
+   }
 }

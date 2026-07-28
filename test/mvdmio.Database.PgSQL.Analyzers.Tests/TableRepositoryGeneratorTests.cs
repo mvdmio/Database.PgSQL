@@ -61,7 +61,7 @@ public class TableRepositoryGeneratorTests
       registrationSource.Should().Contain("[global::System.Runtime.CompilerServices.ModuleInitializer]");
       registrationSource.Should().Contain("QueryMappings.Register<global::Demo.UserData>(");
       registrationSource.Should().Contain(".Column(x => x.UserId, \"user_id\", isPrimaryKey: true)");
-      registrationSource.Should().Contain(".Column(x => x.FirstName, \"firstName\")");
+      registrationSource.Should().Contain(".Column(x => x.FirstName, \"firstName\", isNotNull: true)");
    }
 
    [Fact]

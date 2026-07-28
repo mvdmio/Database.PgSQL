@@ -84,7 +84,13 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
          foreach (var property in model.DataProperties)
          {
             var primaryKeyArgument = property.IsPrimaryKey ? ", isPrimaryKey: true" : string.Empty;
-            builder.AppendLine($"            .Column(x => x.{property.PropertyName}, {ToLiteral(property.ColumnName)}{primaryKeyArgument})");
+
+            // A key member is already not-null through the key argument, which the builder itself acts on, so saying it
+            // twice would only make the emitted call longer. Nullable needs no argument either: it is what the query
+            // surface assumes.
+            var notNullArgument = !property.IsPrimaryKey && property.IsDeclaredNotNull ? ", isNotNull: true" : string.Empty;
+
+            builder.AppendLine($"            .Column(x => x.{property.PropertyName}, {ToLiteral(property.ColumnName)}{primaryKeyArgument}{notNullArgument})");
          }
 
          foreach (var relation in table.Relations)

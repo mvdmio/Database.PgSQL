@@ -36,7 +36,11 @@ internal static class GeneratorHarness
          [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
          public sealed class ColumnAttribute : System.Attribute
          {
+            public ColumnAttribute() { }
             public ColumnAttribute(string name) { }
+
+            public bool Null { get; set; }
+            public bool NotNull { get; set; }
          }
 
          [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
@@ -99,7 +103,7 @@ internal static class GeneratorHarness
          public sealed class QueryEntityMappingBuilder<TEntity>
             where TEntity : class
          {
-            public QueryEntityMappingBuilder<TEntity> Column<TProperty>(System.Linq.Expressions.Expression<System.Func<TEntity, TProperty>> property, string columnName, bool isPrimaryKey = false) => throw null!;
+            public QueryEntityMappingBuilder<TEntity> Column<TProperty>(System.Linq.Expressions.Expression<System.Func<TEntity, TProperty>> property, string columnName, bool isPrimaryKey = false, bool isNotNull = false) => throw null!;
 
             public QueryEntityMappingBuilder<TEntity> Relation<TTarget, TThisKey, TTargetKey>(
                System.Linq.Expressions.Expression<System.Func<TEntity, TTarget?>> property,
@@ -132,9 +136,14 @@ internal static class GeneratorHarness
       """;
 
    /// <summary>Runs the generator and returns everything it reported and emitted.</summary>
-   public static GeneratorRunResult RunGenerator(string source)
+   /// <param name="source">The table definitions to run over.</param>
+   /// <param name="nullableContextOptions">
+   ///    How the compilation treats nullable reference types. Only a test about the nullable-oblivious case passes
+   ///    anything but the default, because that case is the one where a reference type's annotation cannot be read.
+   /// </param>
+   public static GeneratorRunResult RunGenerator(string source, NullableContextOptions nullableContextOptions = NullableContextOptions.Enable)
    {
-      return CreateDriver().RunGenerators(CreateCompilation(source)).GetRunResult().Results.Single();
+      return CreateDriver().RunGenerators(CreateCompilation(source, nullableContextOptions)).GetRunResult().Results.Single();
    }
 
    /// <summary>The source emitted under the given hint name.</summary>
@@ -161,7 +170,7 @@ internal static class GeneratorHarness
    /// </summary>
    public static void AssertGeneratedSourcesCompile(string source)
    {
-      CreateDriver().RunGeneratorsAndUpdateCompilation(CreateCompilation(source), out var updated, out _);
+      CreateDriver().RunGeneratorsAndUpdateCompilation(CreateCompilation(source, NullableContextOptions.Enable), out var updated, out _);
 
       var errors = updated.GetDiagnostics().Where(x => x.Severity == DiagnosticSeverity.Error).ToList();
 
@@ -182,7 +191,12 @@ internal static class GeneratorHarness
       );
    }
 
-   private static CSharpCompilation CreateCompilation(string source)
+   /// <remarks>
+   ///    Nullable reference types default to on, the way a consumer's project has them: a relation to one row states its
+   ///    cardinality partly through nullability, which cannot be read at all in a nullable-oblivious compilation. The
+   ///    stubs are parsed under whatever the test asks for too, which costs only warnings inside them.
+   /// </remarks>
+   private static CSharpCompilation CreateCompilation(string source, NullableContextOptions nullableContextOptions)
    {
       var syntaxTrees = new[]
       {
@@ -190,13 +204,11 @@ internal static class GeneratorHarness
          CSharpSyntaxTree.ParseText(SourceText.From(RUNTIME_STUBS), _parseOptions)
       };
 
-      // Nullable reference types are on, the way a consumer's project has them: a relation to one row states its
-      // cardinality partly through nullability, which cannot be read at all in a nullable-oblivious compilation.
       return CSharpCompilation.Create(
          assemblyName: "GeneratorTests",
          syntaxTrees: syntaxTrees,
          references: GetMetadataReferences(),
-         options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary).WithNullableContextOptions(NullableContextOptions.Enable)
+         options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary).WithNullableContextOptions(nullableContextOptions)
       );
    }
 

@@ -137,6 +137,8 @@ internal sealed class PropertyDefinitionModel
       bool isUnique,
       bool isGenerated,
       bool isNullable,
+      bool isDeclaredNotNull,
+      string? nullabilityContradiction,
       bool requiresNullForgivingInitializer
    )
    {
@@ -148,6 +150,8 @@ internal sealed class PropertyDefinitionModel
       IsUnique = isUnique;
       IsGenerated = isGenerated;
       IsNullable = isNullable;
+      IsDeclaredNotNull = isDeclaredNotNull;
+      NullabilityContradiction = nullabilityContradiction;
       RequiresNullForgivingInitializer = requiresNullForgivingInitializer;
    }
 
@@ -161,6 +165,20 @@ internal sealed class PropertyDefinitionModel
 
    /// <summary>Whether the property can hold null, which a primary key member may not.</summary>
    public bool IsNullable { get; }
+
+   /// <summary>
+   ///    Whether the definition claims the column cannot hold null — a separate notion from <see cref="IsNullable" />,
+   ///    which stays the type-level fact the primary-key rule is about. This one also answers for a non-nullable
+   ///    reference type in a nullable-oblivious file, and it is what a <c>[Column]</c> nullability argument overrides.
+   /// </summary>
+   public bool IsDeclaredNotNull { get; }
+
+   /// <summary>
+   ///    Why the declared nullability cannot be honoured, or <see langword="null" /> when nothing contradicts. A
+   ///    contradiction is reported and then dropped, leaving <see cref="IsDeclaredNotNull" /> at what the property's
+   ///    type and key membership settle on their own.
+   /// </summary>
+   public string? NullabilityContradiction { get; }
 
    public bool RequiresNullForgivingInitializer { get; }
 }

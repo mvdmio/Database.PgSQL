@@ -1,6 +1,6 @@
 # Carry column nullability into generated query mappings
 
-Status: ready-for-agent
+Status: done
 
 Promoted from `.agents/ideas/query-column-nullability.md` after a grilling session. Every open question that idea
 carried is answered below. The reasoning behind the two decisions that were genuine trade-offs is recorded in
@@ -148,3 +148,22 @@ Integration (`mvdmio.Database.PgSQL.Tests.Integration`):
 - Mapping `[Generated]` onto the provider's identity flag. It would imply not-null, but it also changes insert
   behaviour.
 - `Configuration.UseNullableTypesMetadata`. Rejected; see ADR 0007.
+
+## Comments
+
+Implemented. Three things the spec asserted turned out not to hold, and the implementation follows what was measured
+rather than what was assumed. ADR 0007, `CONTEXT.md` and the deferred-verification idea are corrected to match.
+
+- **The false-claim failure is quiet, not loud.** The risk paragraph above says a column claimed not-null that holds null
+  "fails when the row is read", because declaring it non-nullable omits the provider's `IsDBNull` guard. Against linq2db
+  6.3.0 the read completes and the null arrives in a property typed non-nullable `string`. What a false claim costs is
+  rows: an inequality over that column omits the ones where it is null. Both halves are pinned by
+  `GeneratedRepositoryNullabilityTests`, since both are provider behaviour an upgrade could change.
+- **`TenantLinkTable.Kind` is not on either side of a Relation's join condition.** It is the shape the motivation
+  describes — a `[PrimaryKey]` member typed non-nullable `string` — but the relations over that table join on
+  `AccountId` and `ProjectRef`. The integration assertion is therefore an inequality on `Kind` as the driving table's own
+  column while reaching the relation, which is the same guarantee at the only place the fixture can show it.
+- **Two things the claim improves that the spec did not anticipate**, both pinned: a `LEFT JOIN` collapses to an `INNER
+  JOIN` when a `WHERE` equality on the related table's non-nullable column makes the outer join moot, and OData's
+  `CASE ... IS NULL` null-propagation guard disappears on a non-nullable column. The latter forced an existing regression
+  test onto a nullable column to keep the misconfiguration symptom observable.
