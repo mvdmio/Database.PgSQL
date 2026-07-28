@@ -1,6 +1,6 @@
 # Run the tests in CI
 
-Status: needs-triage
+Status: ready-for-agent — specced in `.agents/specs/ci-test-job.md`, which resolves every open question below.
 
 ## Motivation
 
