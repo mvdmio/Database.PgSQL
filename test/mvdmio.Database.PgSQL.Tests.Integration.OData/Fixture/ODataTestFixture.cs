@@ -65,6 +65,28 @@ public sealed class ODataTestFixture : IAsyncLifetime
          )
          """
       );
+
+      // The relation-bearing pair the expansion tests query through. Real foreign-key constraints, even though a
+      // relation neither emits nor verifies one, so the fixture does not model something PostgreSQL would reject.
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.odata_authors (
+            author_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            name      TEXT NOT NULL UNIQUE,
+            mentor_id BIGINT NULL REFERENCES public.odata_authors (author_id)
+         )
+         """
+      );
+
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.odata_books (
+            book_id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            title     TEXT NOT NULL UNIQUE,
+            author_id BIGINT NULL REFERENCES public.odata_authors (author_id)
+         )
+         """
+      );
    }
 
    public async ValueTask DisposeAsync()

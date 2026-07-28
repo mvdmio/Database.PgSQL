@@ -30,8 +30,37 @@ public static class ODataConfiguration
       & ~AllowedFunctions.MatchesPattern
       & ~AllowedFunctions.IsOf;
 
+   /// <summary>
+   ///    The deepest expansion a client may ask for. Stated explicitly rather than left at OData's default, because the
+   ///    reason it matters here is invisible: ADR 0005 records that relations are one-directional and never paired, so a
+   ///    child-to-parent relation alongside a parent-to-children relation already forms a cycle — every consumer's EDM
+   ///    model contains cycles by construction, and expansion depth is the only thing that bounds a client walking one
+   ///    until the database gives up. It admits the deepest construct this suite covers, a two-level nested expansion,
+   ///    and rejects anything past it as a validation error rather than a translation failure.
+   /// </summary>
+   public const int MAX_EXPANSION_DEPTH = 2;
+
    /// <summary>The model the conformance entity is queried through.</summary>
    public static IEdmModel Model { get; } = BuildModel(builder => builder.EntitySet<SampleData>("Samples").EntityType.HasKey(x => x.SampleId));
+
+   /// <summary>
+   ///    The model the relation-bearing pair is queried through. Separate from <see cref="Model" /> so that a navigable
+   ///    member cannot change what the results already pinned against the conformance entity see: convention-based model
+   ///    building would discover a relation property, pull its target type in, and widen every <c>$select</c> and
+   ///    <c>$apply</c> result there.
+   /// </summary>
+   /// <remarks>
+   ///    Both keys are declared explicitly. Convention-based key discovery looks for <c>Id</c> or a name derived from the
+   ///    type's own name, and a table definition's key is neither. Both types get an entity set, because a consumer
+   ///    exposing an expandable type routes to it as well.
+   /// </remarks>
+   public static IEdmModel RelationModel { get; } = BuildModel(
+      builder =>
+      {
+         builder.EntitySet<AuthorData>("Authors").EntityType.HasKey(x => x.AuthorId);
+         builder.EntitySet<BookData>("Books").EntityType.HasKey(x => x.BookId);
+      }
+   );
 
    /// <summary>
    ///    The settings a consumer must use. Null-propagation handling is off, and that is not a tuning choice: OData
@@ -59,7 +88,11 @@ public static class ODataConfiguration
    ///    <c>[EnableQuery]</c> attribute does it for you, so copying the query settings without these gives a working
    ///    endpoint with a worse error contract.
    /// </summary>
-   public static ODataValidationSettings ValidationSettings => new() { AllowedFunctions = SUPPORTED_FUNCTIONS };
+   public static ODataValidationSettings ValidationSettings => new()
+   {
+      AllowedFunctions = SUPPORTED_FUNCTIONS,
+      MaxExpansionDepth = MAX_EXPANSION_DEPTH
+   };
 
    /// <summary>
    ///    Turns on the query options this suite covers. Every one of them is off by default, and <c>$top</c> is capped at
@@ -76,9 +109,9 @@ public static class ODataConfiguration
       configurations.EnableOrderBy = true;
       configurations.EnableCount = true;
       configurations.EnableSelect = true;
+      configurations.EnableExpand = true;
 
-      // Out of scope: $expand needs a relation model the library does not have, and $skiptoken is not covered.
-      configurations.EnableExpand = false;
+      // Out of scope: $skiptoken is not covered.
       configurations.EnableSkipToken = false;
 
       // Unbounded so the suite can page freely. A real endpoint should cap this — the query surface applies no limits

@@ -30,7 +30,7 @@ None. Two constraints, though:
 
 - Is a third shipped package worth it, against the alternative of documentation alone? The maintenance cost is real: the front-end's major versions break, and its release cadence is not ours.
 - Which framework versions would it target, given the front-end's stable line ships a single older assembly and its next major line drops it?
-- Does it ship only configuration, or also the eager-materialization behaviour that turns a translation failure into a proper error status instead of a truncated response?
+- Does it ship only configuration, or also the eager-materialization behaviour that turns a translation failure into a proper error status instead of a truncated response? The `$expand` conformance work narrowed this: OData binds `$expand` as a projection over a **Relation property** and never touches the library's own materialization operators, so a package would have nothing to intercept there — every `$expand` construct the suite covers already returns the right rows once the null-propagation setting is right. What is left for this question is the truncated-response problem alone, plus a depth cap, which is configuration.
 - How does it version — with the library, or independently on the front-end's cadence?
 - Would contributing the provider's namespace upstream make this package unnecessary, and is that worth attempting first? See the sibling idea.
 - If the upstream fix lands later, does this package become a liability that has to be deprecated?

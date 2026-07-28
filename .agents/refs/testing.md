@@ -36,8 +36,17 @@ TDD is the expectation: write tests before implementing, and always add/modify t
   recommended configuration; the project `README.md` is the consumer-facing walkthrough and the results table.
 - Tests assert rows *and* SQL shape, because column narrowing, `LIMIT`/`OFFSET`, an aggregate count and parameterization
   are otherwise indistinguishable from a correct row set. SQL is read through the internal `QueryDiagnostics` helper.
-- When adding a conformance case, put a query-option case in `QueryOptionConformanceTests` and a `$filter` function case
-  in `FilterFunctionConformanceTests`, whose theories are grouped by family.
+- Two fixtures, because a relation property in the conformance EDM model would change results already pinned against it:
+  `SampleConformanceTestBase` seeds the single-table conformance entity against `ODataConfiguration.Model`, and
+  `RelationConformanceTestBase` seeds the author-and-book pair against `ODataConfiguration.RelationModel`.
+- When adding a conformance case, put it with the fixture it needs: a query-option case in `QueryOptionConformanceTests`,
+  a `$filter` function case in `FilterFunctionConformanceTests` (theories grouped by family), a `$expand` case in
+  `ExpandConformanceTests`, and a navigation-path or collection-quantifier case in
+  `RelationNavigationConformanceTests`. The two misconfiguration-regression classes pair up the same way —
+  `MisconfigurationRegressionTests` for what a single table shows, `RelationMisconfigurationRegressionTests` for what
+  needs a relation.
+- Model-shape questions need no database and no fixture: `GeneratedTypeModelTests` for column-backed property types,
+  `RelationTypeModelTests` for relation properties.
 
 ## Conventions
 

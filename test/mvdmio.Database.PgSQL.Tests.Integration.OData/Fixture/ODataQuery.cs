@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.OData.Extensions;
 using Microsoft.AspNetCore.OData.Query;
+using Microsoft.OData.Edm;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
@@ -15,19 +16,26 @@ namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 public static class ODataQuery
 {
    /// <summary>Applies a query string to a queryable using the settings a consumer must use.</summary>
-   public static AppliedQuery Apply<TEntity>(IQueryable<TEntity> query, string queryString)
+   /// <param name="query">The queryable to compose the query options over.</param>
+   /// <param name="queryString">The query string a client would have sent.</param>
+   /// <param name="model">The EDM model to parse against. Defaults to the conformance model.</param>
+   public static AppliedQuery Apply<TEntity>(IQueryable<TEntity> query, string queryString, IEdmModel? model = null)
    {
-      return Apply(query, queryString, ODataConfiguration.QuerySettings);
+      return Apply(query, queryString, ODataConfiguration.QuerySettings, model);
    }
 
    /// <summary>Applies a query string to a queryable using the given settings.</summary>
-   public static AppliedQuery Apply<TEntity>(IQueryable<TEntity> query, string queryString, ODataQuerySettings settings)
+   /// <param name="query">The queryable to compose the query options over.</param>
+   /// <param name="queryString">The query string a client would have sent.</param>
+   /// <param name="settings">The apply-time settings.</param>
+   /// <param name="model">The EDM model to parse against. Defaults to the conformance model.</param>
+   public static AppliedQuery Apply<TEntity>(IQueryable<TEntity> query, string queryString, ODataQuerySettings settings, IEdmModel? model = null)
    {
       ArgumentNullException.ThrowIfNull(query);
       ArgumentNullException.ThrowIfNull(settings);
 
       var request = CreateRequest(queryString);
-      var options = Parse<TEntity>(request);
+      var options = Parse<TEntity>(request, model);
       var applied = options.ApplyTo(query, settings);
 
       return new AppliedQuery(applied, request.ODataFeature().TotalCount);
@@ -37,14 +45,16 @@ public static class ODataQuery
    ///    Runs the validation step a hosted endpoint performs automatically. Throws when the query string uses something
    ///    the configuration does not allow.
    /// </summary>
-   public static void Validate<TEntity>(string queryString)
+   /// <param name="queryString">The query string a client would have sent.</param>
+   /// <param name="model">The EDM model to parse against. Defaults to the conformance model.</param>
+   public static void Validate<TEntity>(string queryString, IEdmModel? model = null)
    {
-      Parse<TEntity>(CreateRequest(queryString)).Validate(ODataConfiguration.ValidationSettings);
+      Parse<TEntity>(CreateRequest(queryString), model).Validate(ODataConfiguration.ValidationSettings);
    }
 
-   private static ODataQueryOptions<TEntity> Parse<TEntity>(HttpRequest request)
+   private static ODataQueryOptions<TEntity> Parse<TEntity>(HttpRequest request, IEdmModel? model)
    {
-      var context = new ODataQueryContext(ODataConfiguration.Model, typeof(TEntity), path: null);
+      var context = new ODataQueryContext(model ?? ODataConfiguration.Model, typeof(TEntity), path: null);
 
       ODataConfiguration.EnableSupportedQueryOptions(context.DefaultQueryConfigurations);
 

@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.OData.Query.Wrapper;
 using mvdmio.Database.PgSQL.Connectors.Linq;
 using System.Collections;
 
@@ -48,25 +47,11 @@ public sealed class AppliedQuery
       return await typed.ToListAsync(ct);
    }
 
-   /// <summary>
-   ///    Materializes a projected query as the name-value pairs it produced. Needed because <c>$select</c> and
-   ///    <c>$apply</c> project into OData's own wrapper types, which are internal to its assembly and so cannot be
-   ///    named here.
-   /// </summary>
-   public IReadOnlyList<IDictionary<string, object?>> ProjectedRows()
+   /// <summary>Materializes a projected query as the rows it produced. See <see cref="ProjectedRow" /> for why.</summary>
+   public IReadOnlyList<ProjectedRow> ProjectedRows()
    {
       // Enumerable.Cast, not Queryable.Cast: the projection has already happened in SQL and the wrappers only need
       // boxing on the way out. Composing a Cast onto the queryable would push it at the provider instead.
-      return ((IEnumerable)Query).Cast<object>().Select(ToValues).ToList();
-   }
-
-   private static IDictionary<string, object?> ToValues(object row)
-   {
-      return row switch
-      {
-         ISelectExpandWrapper selected => selected.ToDictionary().ToDictionary(x => x.Key, x => (object?)x.Value, StringComparer.Ordinal),
-         DynamicTypeWrapper aggregated => aggregated.Values.ToDictionary(x => x.Key, x => (object?)x.Value, StringComparer.Ordinal),
-         _ => throw new InvalidOperationException($"'{row.GetType()}' is not one of OData's projection wrappers.")
-      };
+      return ((IEnumerable)Query).Cast<object>().Select(ProjectedRow.From).ToList();
    }
 }

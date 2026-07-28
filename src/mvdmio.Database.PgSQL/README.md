@@ -431,8 +431,8 @@ Values that come from local variables become SQL parameters, not inlined literal
 plan.
 
 Because it is the framework's own `IQueryable<T>`, you can hand it to anything that consumes one — including an
-ASP.NET Core OData endpoint, where `$filter`, `$orderby`, `$top`, `$skip`, `$count`, `$select` and `$apply` all reach
-the database:
+ASP.NET Core OData endpoint, where `$filter`, `$orderby`, `$top`, `$skip`, `$count`, `$select`, `$apply` and `$expand`
+all reach the database:
 
 ```csharp
 [HttpGet]
@@ -459,9 +459,13 @@ everything:
 
 ```csharp
 builder.Services.AddControllers().AddOData(
-   options => options.Select().Filter().OrderBy().Count().SetMaxTop(100).AddRouteComponents("odata", model)
+   options => options.Select().Filter().OrderBy().Count().Expand().SetMaxTop(100).AddRouteComponents("odata", model)
 );
 ```
+
+If you allow `$expand`, cap the expansion depth as well — relations are declared one direction at a time, so a model
+that declares both directions contains a cycle by construction, and the depth cap is the only thing stopping a client
+walking around one until the database gives up.
 
 The full walkthrough — the settings to copy, the functions to block, which query options and `$filter` functions are
 known to work, where the behaviour differs from an Entity Framework Core-backed endpoint, and which generated property
@@ -644,13 +648,20 @@ var authors = await authorRepository.Query()
    .ToListAsync(ct);
 ```
 
-> **If you are exposing this through an OData endpoint, read this before you ship.** With the ASP.NET Core OData
-> defaults left alone, an expanded collection comes back **empty and without any error**: the detail queries run, the
-> rows are fetched, and the result is then discarded by the null-propagation rewriting OData applies to query providers
-> it does not recognise — and it recognises providers by namespace, from a list this package's provider is not on. Set
-> `HandleNullPropagation = HandleNullPropagationOption.False` on the query settings and check an expansion actually
-> returns rows before you rely on it. Nothing inside this package can detect the situation: the query surface behaves
-> correctly and the statements run.
+> **If you are exposing a relation through an OData endpoint, read this before you ship.** A `$expand` does not go
+> through `Include` at all — the front-end composes the expansion itself — but it has a failure mode of its own, and it
+> is silent. With the ASP.NET Core OData defaults left alone, a `$expand` over a relation to
+> **many** rows comes back as an **empty collection and without any error** — for every parent, including the ones that
+> do have related rows. The cause is the null-propagation rewriting OData applies to query providers it does not
+> recognise, and it recognises them by namespace, from a list this package's provider is not on. Set
+> `HandleNullPropagation = HandleNullPropagationOption.False` on the query settings and an
+> expansion returns its rows. Nothing inside this package can detect the situation: the query surface composes and sends
+> exactly the same statement either way, so there is no failure to catch. Expanding a relation to **one** row is
+> unaffected — it folds into that statement as a join and survives the rewriting intact.
+>
+> Each symptom above — the empty collection, the identical statement, the to-one direction surviving — is pinned by a
+> test in the OData walkthrough linked earlier. How many statements the endpoint issues *beyond* that one is not
+> something those tests can count, so nothing here claims it.
 
 Operators may sit between `Include` and `ThenInclude`; the two only have to be named as one chain, which means naming
 the intermediate result as `IIncludedQueryable<TEntity, TProperty>` again:
