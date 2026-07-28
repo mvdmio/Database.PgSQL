@@ -29,19 +29,23 @@ A **Scope** an assembly may establish a schema-first baseline for: the scopes of
 _Avoid_: Trusted scope, verified scope.
 
 **Table definition**:
-A class that declares one database table's shape — its name, its columns, and which column is the primary key. The single source every generated type for that table derives from. Named with a `Table` suffix by convention.
+A class that declares one database table's shape — its name, its columns, and which of them form the primary key. The single source every generated type for that table derives from. Named with a `Table` suffix by convention.
 _Avoid_: Entity, model, POCO, mapping.
+
+**Key order**:
+The order of a **Table definition**'s primary-key properties, taken from their source declaration order. It fixes the parameter order of the generated primary-key lookup and the order a **Relation**'s foreign-key properties are matched in, so it is part of the generated API rather than a detail of the mapping.
+_Avoid_: Key ordinal, column order, index order.
 
 **Entity name**:
 A **Table definition**'s class name with the `Table` suffix removed. The stem every generated type name is built from, so it — not the table name — is what appears in consuming code.
 _Avoid_: Table name, class name, type name.
 
 **Relation**:
-A declared correspondence between two **Table definitions**, resolved through the foreign-key column one of the two holds. One-directional: each direction is declared on its own, and declaring one does not imply the other. A claim about columns that already exist — declaring a relation never creates a database foreign key and never verifies that one is there.
+A declared correspondence between two **Table definitions**, resolved through the foreign-key columns one of the two holds and matched in order against the other's primary key. One-directional: each direction is declared on its own, and declaring one does not imply the other. A claim about columns that already exist — declaring a relation never creates a database foreign key and never verifies that one is there.
 _Avoid_: Association (that is the LINQ provider's word), foreign key (that is the database constraint), relationship, join.
 
 **Relation property**:
-The member on a **Table definition** that declares a **Relation** — typed as the other Table definition, naming the foreign-key property that resolves it, and carrying the cardinality in its own type. Not a column: it is skipped by column mapping and mirrored onto the generated data type, where each end appears as that table's generated data type.
+The member on a **Table definition** that declares a **Relation** — typed as the other Table definition, naming the foreign-key properties that resolve it, and carrying the cardinality in its own type. Not a column: it is skipped by column mapping and mirrored onto the generated data type, where each end appears as that table's generated data type.
 _Avoid_: Navigation property (it implies lazy loading and change tracking, which this library does not have), reference, link.
 
 **Query surface**:
