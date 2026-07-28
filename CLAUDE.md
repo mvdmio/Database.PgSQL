@@ -22,22 +22,22 @@ C# NuGet package wrapping Dapper for PostgreSQL — connections & query executio
 
 Read the relevant file before working in that area:
 
-- [Architecture & layout](.agents/ref/architecture.md) — project structure, the two packages, entry point, migration framework, key files
-- [Coding conventions](.agents/ref/conventions.md) — formatting (3-space, CRLF), naming, visibility, docs, NuGet-contract rule
-- [Testing](.agents/ref/testing.md) — unit & integration patterns, `TestBase`, the `SecondarySchema` project, run commands
-- [Common tasks](.agents/ref/common-tasks.md) — adding a migration, using the `db` tool, changing the migration framework, bumping the version
-- [Dependencies & CI/CD](.agents/ref/dependencies.md) — package list, centralized version, publish pipeline
+- [Architecture & layout](.agents/refs/architecture.md) — project structure, the two packages, entry point, migration framework, key files
+- [Coding conventions](.agents/refs/conventions.md) — formatting (3-space, CRLF), naming, visibility, docs, NuGet-contract rule
+- [Testing](.agents/refs/testing.md) — unit & integration patterns, `TestBase`, the `SecondarySchema` project, run commands
+- [Common tasks](.agents/refs/common-tasks.md) — adding a migration, using the `db` tool, changing the migration framework, bumping the version
+- [Dependencies & CI/CD](.agents/refs/dependencies.md) — package list, centralized version, publish pipeline
 
 ## Agent skills
 
 ### Issue tracker
 
-Issues and PRDs live as markdown files under `.agents/<feature>/`. See `.agents/ref/issue-tracker.md`.
+Specs and ideas live as markdown files under `.agents/specs/` and `.agents/ideas/`. See `.agents/refs/issue-tracker.md`.
 
 ### Triage labels
 
-Default vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `.agents/ref/triage-labels.md`.
+Default vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `.agents/refs/triage-labels.md`.
 
 ### Domain docs
 
-Single-context (`CONTEXT.md` + `docs/adr/` at the repo root). See `.agents/ref/domain.md`.
+Single-context (`CONTEXT.md` + `docs/adr/` at the repo root). See `.agents/refs/domain.md`.

@@ -67,7 +67,7 @@ public class AwkwardTypeQueryTests : ODataTestBase
    ///    signed byte and all three unsigned integer widths, but the PostgreSQL driver has no mapping for their
    ///    <c>DbType</c>s, so a row carrying any of them can never be written through the generated repository. Reading
    ///    works, which is why the tests above can still cover the types. Tracked in
-   ///    <c>.agents/generator-driver-unsupported-numeric-types</c>.
+   ///    <c>.agents/ideas/generator-driver-unsupported-numeric-types.md</c>.
    /// </summary>
    [Fact]
    public async Task Create_OnATableCarryingASignedByteOrUnsignedInteger_IsRefusedByTheDriver()

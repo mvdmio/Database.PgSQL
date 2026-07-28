@@ -21,7 +21,7 @@ namespace mvdmio.Database.PgSQL.Tests.Integration.OData;
 ///       <c>$expand</c> silently returning empty collections, which is out of scope here because the library has no
 ///       relation model — so what remains provable is the two symptoms below. The upstream request to make the correct
 ///       behaviour automatic has been open since 2022 with no answer; it is tracked in
-///       <c>.agents/odata-provider-allowlist-upstream</c>, which is where to look before assuming this can be deleted.
+///       <c>.agents/ideas/odata-provider-allowlist-upstream.md</c>, which is where to look before assuming this can be deleted.
 ///    </para>
 /// </remarks>
 public class MisconfigurationRegressionTests : SampleConformanceTestBase
