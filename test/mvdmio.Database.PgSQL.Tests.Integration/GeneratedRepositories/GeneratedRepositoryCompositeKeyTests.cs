@@ -307,6 +307,21 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
    }
 
    /// <remarks>
+   ///    The join a relation renders when nothing filters the far side, which is what the test above collapses to an
+   ///    inner join and therefore stops pinning. A relation is an outer join by contract — a foreign key pointing at a
+   ///    missing row yields nothing rather than dropping the row that holds it.
+   /// </remarks>
+   [Fact]
+   public void Query_ReachingACompositeRelationWithoutFilteringIt_RendersAnOuterJoin()
+   {
+      var sql = RenderSql(_links.Query().Where(x => x.AccountId == _FIRST_ACCOUNT).Select(x => x.Project!.Name));
+
+      sql.Should().Contain("LEFT JOIN");
+      sql.Should().MatchRegex(CrossTableEquality("account_id", "account_id"));
+      sql.Should().MatchRegex(CrossTableEquality("project_ref", "project_id"));
+   }
+
+   /// <remarks>
    ///    The same guarantee for a key member typed non-nullable <c>string</c>, which is the shape a pure CLR-type test
    ///    reads as nullable — <c>string</c> and <c>string?</c> are one type to it. Inequality is what shows the
    ///    difference, because equality excludes nulls on its own and so is never widened. The predicate is on the driving

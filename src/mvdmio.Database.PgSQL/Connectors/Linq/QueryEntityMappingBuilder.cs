@@ -36,7 +36,8 @@ public sealed class QueryEntityMappingBuilder<TEntity>
    ///    Stating that a column cannot hold null is what keeps a predicate over it, and a join condition on it, free of
    ///    the "or the column is null" alternative the query surface's null-comparison mode otherwise adds — an
    ///    alternative that can never match on such a column and that costs the predicate its index. The claim is never
-   ///    verified against the real table: a null read into a column claimed not-null fails when the row is read.
+   ///    verified against the real table, and a column that does hold null is not caught when the row is read. What a
+   ///    wrong claim costs is rows: the alternative it removed is what would have matched the null ones.
    /// </remarks>
    public QueryEntityMappingBuilder<TEntity> Column<TProperty>(
       Expression<Func<TEntity, TProperty>> property,

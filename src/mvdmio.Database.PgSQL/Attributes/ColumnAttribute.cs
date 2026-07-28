@@ -53,8 +53,10 @@ public sealed class ColumnAttribute : Attribute
    /// </summary>
    /// <remarks>
    ///    The case this exists for is a nullable-oblivious file, where the annotation that would carry the fact cannot be
-   ///    written. A claim the column does not honour is not verified against the real table: a null read into a column
-   ///    claimed not-null fails loudly when the row is read.
+   ///    written. Nothing verifies the claim against the real table, and a column that does hold null is not caught when
+   ///    the row is read — the null arrives in the property regardless of its type. What a wrong claim costs is rows: an
+   ///    inequality over the column no longer matches the ones where it is null. Set this because the table says
+   ///    <c>NOT NULL</c>, not because a value is usually present.
    /// </remarks>
    public bool NotNull { get; set; }
 }
