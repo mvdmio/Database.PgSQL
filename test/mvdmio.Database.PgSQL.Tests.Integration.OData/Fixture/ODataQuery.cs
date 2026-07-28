@@ -16,6 +16,9 @@ namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 public static class ODataQuery
 {
    /// <summary>Applies a query string to a queryable using the settings a consumer must use.</summary>
+   /// <param name="query">The queryable to compose the query options over.</param>
+   /// <param name="queryString">The query string a client would have sent.</param>
+   /// <param name="model">The EDM model to parse against. Defaults to the conformance model.</param>
    public static AppliedQuery Apply<TEntity>(IQueryable<TEntity> query, string queryString, IEdmModel? model = null)
    {
       return Apply(query, queryString, ODataConfiguration.QuerySettings, model);

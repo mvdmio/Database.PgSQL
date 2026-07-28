@@ -649,8 +649,8 @@ var authors = await authorRepository.Query()
 ```
 
 > **If you are exposing a relation through an OData endpoint, read this before you ship.** A `$expand` does not go
-> through `Include` — the front-end binds it as a projection over the relation property instead — but it has a failure
-> mode of its own, and it is silent. With the ASP.NET Core OData defaults left alone, a `$expand` over a relation to
+> through `Include` at all — the front-end composes the expansion itself — but it has a failure mode of its own, and it
+> is silent. With the ASP.NET Core OData defaults left alone, a `$expand` over a relation to
 > **many** rows comes back as an **empty collection and without any error** — for every parent, including the ones that
 > do have related rows. The cause is the null-propagation rewriting OData applies to query providers it does not
 > recognise, and it recognises them by namespace, from a list this package's provider is not on. Set
@@ -659,8 +659,9 @@ var authors = await authorRepository.Query()
 > exactly the same statement either way, so there is no failure to catch. Expanding a relation to **one** row is
 > unaffected — it folds into that statement as a join and survives the rewriting intact.
 >
-> Every sentence above is pinned by a test in the OData walkthrough linked earlier. What the endpoint issues *beyond*
-> that one statement is not something those tests can count, so nothing here claims it.
+> Each symptom above — the empty collection, the identical statement, the to-one direction surviving — is pinned by a
+> test in the OData walkthrough linked earlier. How many statements the endpoint issues *beyond* that one is not
+> something those tests can count, so nothing here claims it.
 
 Operators may sit between `Include` and `ThenInclude`; the two only have to be named as one chain, which means naming
 the intermediate result as `IIncludedQueryable<TEntity, TProperty>` again:

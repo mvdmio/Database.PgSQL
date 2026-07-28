@@ -42,8 +42,8 @@ public class ExpandConformanceTests : RelationConformanceTestBase
       var rows = applied.ProjectedRows();
 
       rows.Select(x => x["Title"]).Should().Equal("hobbit", "narnia", "orphan", "silmarillion");
-      ExpandedRow(rows[0], nameof(BookData.Author))!["Name"].Should().Be("tolkien");
-      ExpandedRow(rows[1], nameof(BookData.Author))!["Name"].Should().Be("lewis");
+      rows[0].Expanded(nameof(BookData.Author))!["Name"].Should().Be("tolkien");
+      rows[1].Expanded(nameof(BookData.Author))!["Name"].Should().Be("lewis");
    }
 
    [Fact]
@@ -54,31 +54,37 @@ public class ExpandConformanceTests : RelationConformanceTestBase
       var rows = ApplyToBooks("$filter=Title eq 'orphan'&$expand=Author").ProjectedRows();
 
       rows.Should().ContainSingle();
-      ExpandedRow(rows[0], nameof(BookData.Author)).Should().BeNull();
+      rows[0].Expanded(nameof(BookData.Author)).Should().BeNull();
    }
 
    [Fact]
    public void Expand_ToManyRows_ReturnsTheRelatedRowsWithoutPuttingThemInTheQuerysOwnStatement()
    {
-      var applied = ApplyToBooks("$expand=Author&$orderby=Title");
+      var applied = ApplyToAuthors("$expand=Books&$orderby=Name");
 
-      // Established first, as the contrast: the to-one expansion above is in the statement the query renders to.
-      applied.RenderSql().Should().Contain("odata_authors");
+      // Unlike the to-one case above, the related table is nowhere in the statement the query renders to — so at least
+      // one further statement must run to fetch the books below.
+      applied.RenderSql().Should().NotContain("odata_books");
 
-      var toMany = ApplyToAuthors("$expand=Books&$orderby=Name");
-
-      // The to-many expansion is not, so at least one further statement must run to fetch the books below. How many is
-      // not observable here — the last statement sent is the main query, which means the detail statement ran before it
-      // and nothing collects the ones in between.
-      toMany.RenderSql().Should().NotContain("odata_books");
-
-      var rows = toMany.ProjectedRows();
+      var rows = applied.ProjectedRows();
 
       rows.Select(x => x["Name"]).Should().Equal("gaiman", "lewis", "pratchett", "tolkien");
-      ExpandedRows(rows[3], nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("hobbit", "silmarillion");
-      ExpandedRows(rows[1], nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("narnia");
+      rows[3].ExpandedMany(nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("hobbit", "silmarillion");
+      rows[1].ExpandedMany(nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("narnia");
+   }
 
-      toMany.LastSql().Should().NotContain("odata_books");
+   [Fact]
+   public void Expand_ToManyRows_LeavesTheDetailStatementUnobservable()
+   {
+      // Why no test in this suite asserts a statement count, and why the walkthrough does not state one. The provider
+      // runs a detail query ahead of the query that derives its parents, so after materializing an expansion the last
+      // statement sent is the main query — the detail statement has already been and gone, and nothing collects it.
+      // Making it visible would take a diagnostics facility, which is deliberately not being added.
+      var applied = ApplyToAuthors("$expand=Books&$orderby=Name");
+
+      applied.ProjectedRows()[3].ExpandedMany(nameof(AuthorData.Books)).Should().HaveCount(2);
+
+      applied.LastSql().Should().Be(applied.RenderSql());
    }
 
    [Fact]
@@ -89,7 +95,7 @@ public class ExpandConformanceTests : RelationConformanceTestBase
       var rows = ApplyToAuthors("$filter=Name eq 'pratchett'&$expand=Books").ProjectedRows();
 
       rows.Should().ContainSingle();
-      ExpandedRows(rows[0], nameof(AuthorData.Books)).Should().BeEmpty();
+      rows[0].ExpandedMany(nameof(AuthorData.Books)).Should().BeEmpty();
    }
 
    [Fact]
@@ -100,8 +106,8 @@ public class ExpandConformanceTests : RelationConformanceTestBase
       // The nested filter narrows the detail rows themselves rather than deciding which parents get them: every author
       // is still returned, and only tolkien's matching book comes back.
       rows.Select(x => x["Name"]).Should().Equal("gaiman", "lewis", "pratchett", "tolkien");
-      ExpandedRows(rows[3], nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("hobbit");
-      ExpandedRows(rows[1], nameof(AuthorData.Books)).Should().BeEmpty();
+      rows[3].ExpandedMany(nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("hobbit");
+      rows[1].ExpandedMany(nameof(AuthorData.Books)).Should().BeEmpty();
    }
 
    [Fact]
@@ -109,7 +115,7 @@ public class ExpandConformanceTests : RelationConformanceTestBase
    {
       var rows = ApplyToAuthors("$expand=Books($select=Title)&$orderby=Name").ProjectedRows();
 
-      var books = ExpandedRows(rows[3], nameof(AuthorData.Books));
+      var books = rows[3].ExpandedMany(nameof(AuthorData.Books));
 
       books.Select(x => x["Title"]).Should().Equal("hobbit", "silmarillion");
 
@@ -125,8 +131,8 @@ public class ExpandConformanceTests : RelationConformanceTestBase
 
       // Applied per parent rather than across the whole detail set: tolkien keeps his last book by title, and lewis
       // still gets his one.
-      ExpandedRows(rows[3], nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("silmarillion");
-      ExpandedRows(rows[1], nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("narnia");
+      rows[3].ExpandedMany(nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("silmarillion");
+      rows[1].ExpandedMany(nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("narnia");
    }
 
    [Fact]
@@ -141,8 +147,8 @@ public class ExpandConformanceTests : RelationConformanceTestBase
 
       var rows = applied.ProjectedRows();
 
-      ExpandedRows(rows[3], nameof(AuthorData.Books)).Should().HaveCount(2);
-      ExpandedRows(rows[0], nameof(AuthorData.Books)).Should().BeEmpty();
+      rows[3].ExpandedMany(nameof(AuthorData.Books)).Should().HaveCount(2);
+      rows[0].ExpandedMany(nameof(AuthorData.Books)).Should().BeEmpty();
    }
 
    [Fact]
@@ -150,29 +156,29 @@ public class ExpandConformanceTests : RelationConformanceTestBase
    {
       var rows = ApplyToAuthors("$expand=Books($expand=Author)&$orderby=Name").ProjectedRows();
 
-      var tolkiensBooks = ExpandedRows(rows[3], nameof(AuthorData.Books));
+      var tolkiensBooks = rows[3].ExpandedMany(nameof(AuthorData.Books));
 
       tolkiensBooks.Select(x => x["Title"]).Should().Equal("hobbit", "silmarillion");
-      ExpandedRow(tolkiensBooks[0], nameof(BookData.Author))!["Name"].Should().Be("tolkien");
+      tolkiensBooks[0].Expanded(nameof(BookData.Author))!["Name"].Should().Be("tolkien");
    }
 
    [Fact]
    public void Expand_WithLevelsOverASelfReference_WalksExactlyThatManyHops()
    {
       var applied = ApplyToAuthors("$expand=Mentor($levels=2)&$orderby=Name");
+      var joins = applied.RenderSql().Split("LEFT JOIN").Length - 1;
 
-      // Two hops of a to-one relation, so both fold into one statement as two joins against the same table.
-      applied.RenderSql().Split("LEFT JOIN").Should().HaveCount(3);
+      joins.Should().Be(2, "two hops of a to-one relation fold into one statement as two joins against the same table");
 
       var rows = applied.ProjectedRows();
-      var gaimansMentor = ExpandedRow(rows[0], nameof(AuthorData.Mentor))!;
+      var gaimansMentor = rows[0].Expanded(nameof(AuthorData.Mentor))!;
 
       gaimansMentor["Name"].Should().Be("pratchett");
-      ExpandedRow(gaimansMentor, nameof(AuthorData.Mentor))!["Name"].Should().Be("lewis");
+      gaimansMentor.Expanded(nameof(AuthorData.Mentor))!["Name"].Should().Be("lewis");
 
       // The chain continues to tolkien in the data, and $levels=2 stops before it — which is what tells a bounded walk
       // apart from an unbounded one.
-      ExpandedRow(gaimansMentor, nameof(AuthorData.Mentor))!.Should().NotContainKey(nameof(AuthorData.Mentor));
+      gaimansMentor.Expanded(nameof(AuthorData.Mentor))!.Keys.Should().NotContain(nameof(AuthorData.Mentor));
    }
 
    [Fact]
@@ -191,9 +197,9 @@ public class ExpandConformanceTests : RelationConformanceTestBase
          nameof(AuthorData.Books)
       );
 
-      ExpandedRow(rows[3], nameof(AuthorData.Mentor)).Should().BeNull();
-      ExpandedRows(rows[3], nameof(AuthorData.Mentees)).Select(x => x["Name"]).Should().Equal("lewis");
-      ExpandedRows(rows[3], nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("hobbit", "silmarillion");
+      rows[3].Expanded(nameof(AuthorData.Mentor)).Should().BeNull();
+      rows[3].ExpandedMany(nameof(AuthorData.Mentees)).Select(x => x["Name"]).Should().Equal("lewis");
+      rows[3].ExpandedMany(nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("hobbit", "silmarillion");
    }
 
    [Fact]

@@ -180,7 +180,6 @@ reach through it without expanding it:
 | `$filter=Author/Name eq 'tolkien'` | works | a `LEFT JOIN` and a parameterized `WHERE` on the joined table |
 | `$orderby=Author/Name desc` | works | a `LEFT JOIN` and an `ORDER BY` on the joined column |
 | `$filter=Books/any(b: b/Title eq 'narnia')` | works | a correlated `EXISTS` subquery |
-| `$filter=Books/any()` | works | a correlated `EXISTS` with no inner predicate |
 | `$filter=Books/all(b: b/Title eq 'hobbit')` | works | a correlated `NOT EXISTS` subquery |
 
 A relation is an outer join, so a row whose foreign key points nowhere is still returned by a query that only sorts by the
@@ -205,10 +204,10 @@ What it costs depends only on the cardinality:
 | To many rows | Nothing in the query's own statement — the related rows arrive, so at least one further statement runs |
 
 **How many further statements is not stated here, because this suite cannot count them.** It can see the SQL a composed
-query renders to and the last statement sent through the connection, and the detail statement is neither: the last
-statement after materializing a to-many expansion is the main query, so the detail statement ran before it and nothing
-collects the ones in between. Treat a to-many expansion as at least one extra round trip per level and measure if it
-matters.
+query renders to and the last statement sent through the connection, and the detail statement is neither: the provider
+runs it ahead of the query that derives its parents, so the last statement after materializing an expansion is the main
+query. That is pinned too, so the gap is recorded rather than assumed. Treat a to-many expansion as at least one extra
+round trip per level and measure if it matters.
 
 Every nested option is individually supported, so you can enable them one at a time:
 
@@ -380,8 +379,11 @@ dotnet test test/mvdmio.Database.PgSQL.Tests.Integration.OData/mvdmio.Database.P
 
 ## What is deliberately not covered
 
-- **How many statements a to-many expansion issues.** Nothing collects the statements a query sends, and no diagnostics
-  facility was added to make it observable. See [expansion](#expansion) for what is asserted instead.
+- **How many statements a to-many expansion issues** — not for want of trying. The provider runs the detail query ahead
+  of the query that derives its parents, so the last statement sent after materializing an expansion is the main query
+  and the detail statement has already been and gone. `Expand_ToManyRows_LeavesTheDetailStatementUnobservable` pins that,
+  so the gap is recorded rather than assumed. Making it visible would take a diagnostics facility, which is deliberately
+  not being added.
 - Nested `$compute` and `$search`, a raw `$count` on a navigation path, and selecting a navigation property without
   expanding it.
 - A many-to-many fixture shape. A join table would exercise a shape, but no query-string construct that two-level nested

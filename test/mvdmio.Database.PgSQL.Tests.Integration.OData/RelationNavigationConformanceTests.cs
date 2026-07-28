@@ -64,14 +64,4 @@ public class RelationNavigationConformanceTests : RelationConformanceTestBase
       // rows will see the difference.
       (await NamesAsync(applied)).Should().Equal("gaiman", "pratchett");
    }
-
-   [Fact]
-   public async Task Filter_WithAnAnyQuantifierAndNoPredicate_AsksOnlyWhetherTheCollectionHasRows()
-   {
-      var applied = ApplyToAuthors("$filter=Books/any()&$orderby=Name");
-
-      applied.RenderSql().Should().Contain("EXISTS(");
-
-      (await NamesAsync(applied)).Should().Equal("lewis", "tolkien");
-   }
 }

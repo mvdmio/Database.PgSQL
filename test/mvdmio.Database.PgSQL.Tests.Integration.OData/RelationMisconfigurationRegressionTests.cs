@@ -39,11 +39,11 @@ public class RelationMisconfigurationRegressionTests : RelationConformanceTestBa
       // Every author, in the right order, with the right scalar values — and not one book. Nothing in the response says
       // the endpoint is misconfigured: an empty collection is exactly what an author with no books looks like.
       misconfigured.Select(x => x["Name"]).Should().Equal("gaiman", "lewis", "pratchett", "tolkien");
-      misconfigured.Should().AllSatisfy(row => ExpandedRows(row, nameof(AuthorData.Books)).Should().BeEmpty());
+      misconfigured.Should().AllSatisfy(row => row.ExpandedMany(nameof(AuthorData.Books)).Should().BeEmpty());
 
       var configured = ApplyToAuthors(queryString).ProjectedRows();
 
-      ExpandedRows(configured[3], nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("hobbit", "silmarillion");
+      configured[3].ExpandedMany(nameof(AuthorData.Books)).Select(x => x["Title"]).Should().Equal("hobbit", "silmarillion");
    }
 
    [Fact]
@@ -66,10 +66,10 @@ public class RelationMisconfigurationRegressionTests : RelationConformanceTestBa
 
       var misconfigured = MisconfiguredBooks(queryString).ProjectedRows();
 
-      ExpandedRow(misconfigured[0], nameof(BookData.Author))!["Name"].Should().Be("tolkien");
-      ExpandedRow(misconfigured[2], nameof(BookData.Author)).Should().BeNull();
+      misconfigured[0].Expanded(nameof(BookData.Author))!["Name"].Should().Be("tolkien");
+      misconfigured[2].Expanded(nameof(BookData.Author)).Should().BeNull();
 
-      misconfigured.Should().BeEquivalentTo(ApplyToBooks(queryString).ProjectedRows());
+      misconfigured.Select(x => x.Values).Should().BeEquivalentTo(ApplyToBooks(queryString).ProjectedRows().Select(x => x.Values));
    }
 
    [Fact]

@@ -87,26 +87,4 @@ public abstract class RelationConformanceTestBase : ODataTestBase
 
       return rows.Select(x => x.Name).ToList();
    }
-
-   /// <summary>
-   ///    The row an expanded to-one navigation property produced, or null when the expansion found nothing.
-   /// </summary>
-   protected static IDictionary<string, object?>? ExpandedRow(IDictionary<string, object?> row, string propertyName)
-   {
-      return (IDictionary<string, object?>?)ValueOf(row, propertyName);
-   }
-
-   /// <summary>The rows an expanded to-many navigation property produced.</summary>
-   protected static IReadOnlyList<IDictionary<string, object?>> ExpandedRows(IDictionary<string, object?> row, string propertyName)
-   {
-      return (IReadOnlyList<IDictionary<string, object?>>?)ValueOf(row, propertyName) ?? [];
-   }
-
-   private static object? ValueOf(IDictionary<string, object?> row, string propertyName)
-   {
-      if (!row.TryGetValue(propertyName, out var value))
-         throw new InvalidOperationException($"'{propertyName}' is not one of the projected values: {string.Join(", ", row.Keys)}.");
-
-      return value;
-   }
 }
