@@ -12,7 +12,7 @@ A comprehensive `.editorconfig` governs formatting. Run `dotnet format` before b
 ## Formatting
 
 - **Indentation:** 3 spaces for C# files (not 4, not tabs).
-- **Line endings:** CRLF; final newline required.
+- **Line endings:** LF; final newline required. `.gitattributes` normalizes every tracked file to LF on checkout, so the working tree matches `.editorconfig` on any OS.
 - **Namespaces:** file-scoped (`namespace Foo;`), following folder structure.
 
 ## Naming

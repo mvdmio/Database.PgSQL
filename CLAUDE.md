@@ -24,7 +24,7 @@ C# NuGet package wrapping Dapper for PostgreSQL — connections & query executio
 Read the relevant file before working in that area:
 
 - [Architecture & layout](.agents/refs/architecture.md) — project structure, the two packages, entry point, migration framework, key files
-- [Coding conventions](.agents/refs/conventions.md) — formatting (3-space, CRLF), naming, visibility, docs, NuGet-contract rule
+- [Coding conventions](.agents/refs/conventions.md) — formatting (3-space, LF), naming, visibility, docs, NuGet-contract rule
 - [Testing](.agents/refs/testing.md) — unit & integration patterns, `TestBase`, the `SecondarySchema` project, run commands
 - [Common tasks](.agents/refs/common-tasks.md) — adding a migration, using the `db` tool, changing the migration framework, bumping the version
 - [Dependencies & CI/CD](.agents/refs/dependencies.md) — package list, centralized version, publish pipeline
