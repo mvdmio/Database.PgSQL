@@ -41,7 +41,6 @@
     <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL.Analyzers\mvdmio.Database.PgSQL.Analyzers.csproj"
                       ReferenceOutputAssembly="false"
                       OutputItemType="Analyzer"
-                      SetTargetFramework="TargetFramework=netstandard2.0"
                       PrivateAssets="contentfiles;analyzers" />
   </ItemGroup>
 

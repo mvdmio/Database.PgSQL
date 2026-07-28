@@ -32,7 +32,6 @@
        <ProjectReference Include="..\..\src\mvdmio.Database.PgSQL.Analyzers\mvdmio.Database.PgSQL.Analyzers.csproj"
                          ReferenceOutputAssembly="false"
                          OutputItemType="Analyzer"
-                         SetTargetFramework="TargetFramework=netstandard2.0"
                          PrivateAssets="contentfiles;analyzers" />
        <ProjectReference Include="..\mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema\mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema.csproj" />
     </ItemGroup>
