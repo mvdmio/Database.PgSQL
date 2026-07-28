@@ -99,6 +99,19 @@ jobs:
         with:
           name: build-output
 
+      # upload-artifact does not preserve the Unix executable bit, so every apphost arrives
+      # here as 644. xUnit v3 launches each test assembly's apphost as a child process, which
+      # fails with "Permission denied" unless the bit is put back. An apphost is the
+      # extensionless sibling of a managed .dll, which is what the loop below looks for.
+      - name: Restore the executable bit on apphosts
+        run: |
+          # `if` rather than `&&`: steps run under `bash -e`, and a trailing test that fails on
+          # a library .dll with no apphost would take the whole step down with it.
+          find . -path '*/bin/Release/*' -name '*.dll' -print0 | while IFS= read -r -d '' dll; do
+            apphost="${dll%.dll}"
+            if [ -f "$apphost" ]; then chmod +x "$apphost"; fi
+          done
+
       # The artifact saves the compile, not the restore: the test SDK packages contribute
       # .props/.targets that are imported from the NuGet cache, so evaluation needs it populated.
       - name: Restore dependencies
