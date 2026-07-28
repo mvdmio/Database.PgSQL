@@ -17,11 +17,12 @@ namespace mvdmio.Database.PgSQL.Tests.Integration.OData;
 ///       forcing it — so what they observe is what that namespace matching actually decides.
 ///    </para>
 ///    <para>
-///       This is a deliberately narrow guard, and weaker than the risk warrants. The setting's worst symptom is
-///       <c>$expand</c> silently returning empty collections, which is out of scope here because the library has no
-///       relation model — so what remains provable is the two symptoms below. The upstream request to make the correct
-///       behaviour automatic has been open since 2022 with no answer; it is tracked in
-///       <c>.agents/ideas/odata-provider-allowlist-upstream.md</c>, which is where to look before assuming this can be deleted.
+///       These are the symptoms visible on a single table. The two that need a relation to see — an expanded collection
+///       coming back empty, and a collection <c>all()</c> returning the wrong rows — are in
+///       <see cref="RelationMisconfigurationRegressionTests" />, which is bound to the relation fixture rather than this
+///       one. The upstream request to make the correct behaviour automatic has been open since 2022 with no answer; it is
+///       tracked in <c>.agents/ideas/odata-provider-allowlist-upstream.md</c>, which is where to look before assuming
+///       either class can be deleted.
 ///    </para>
 /// </remarks>
 public class MisconfigurationRegressionTests : SampleConformanceTestBase

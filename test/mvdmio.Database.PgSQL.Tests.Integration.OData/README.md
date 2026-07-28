@@ -7,7 +7,7 @@ generated repository's `Query()`.
 There is no integration package, no documentation page and no maintained sample for this combination of query provider
 and OData. Everything below was established by running it against a real PostgreSQL database rather than read out of
 documentation, and the results tables are pinned by tests here. Two things are documented but *not* tested, and both say
-so where they appear: the hosted failure mode, and the collection-quantifier symptom of the misconfiguration below.
+so where they appear: the hosted failure mode, and how many statements a to-many `$expand` issues.
 
 ## Read this first: two settings you must set
 
@@ -29,10 +29,12 @@ Left at its default, OData guards every property access with a null check. The c
 |---------|--------|
 | `substring` does not translate at all | the request fails |
 | every predicate is wrapped in `CASE WHEN col IS NULL` | correct rows, but PostgreSQL cannot use an index |
-| collection `all()` returns the wrong rows (not tested here — it needs a relation model) | silently wrong results |
+| collection `all()` returns the wrong rows | silently wrong results |
+| `$expand` over a relation to many rows returns an empty collection | silently missing results |
 
 The rows still come back right for most filters, which is exactly what makes it dangerous — nothing about the response
-tells you the endpoint is misconfigured.
+tells you the endpoint is misconfigured. The last two are the worst of them and are spelled out under
+[expansion](#the-two-symptoms-that-need-a-relation-to-see).
 
 **2. Enable the query options you want, and validate.** Every option is off by default and `$top` is capped at zero, so
 an unconfigured endpoint rejects every query string:
@@ -44,6 +46,7 @@ services.AddControllers().AddOData(
       .Filter()
       .OrderBy()
       .Count()
+      .Expand()
       .SetMaxTop(100)
       .AddRouteComponents("odata", GetEdmModel())
 );
@@ -59,9 +62,12 @@ private const AllowedFunctions SupportedFunctions =
    & ~AllowedFunctions.IsOf;
 
 private static readonly ODataValidationSettings ValidationSettings = new() {
-   AllowedFunctions = SupportedFunctions
+   AllowedFunctions = SupportedFunctions,
+   MaxExpansionDepth = 2
 };
 ```
+
+The expansion depth cap is not tuning either, and [expansion](#expansion) says why.
 
 ## Wiring it up
 
@@ -158,11 +164,116 @@ settings it passes and the behaviour of the query it composes are the tested par
 | `$count` | works | a separate `SELECT COUNT(*)` that selects no column |
 | `$select` | works | a narrowed column list, plus the key |
 | `$apply` | works | `GROUP BY` with SQL aggregates; `filter(…)/groupby(…)` becomes one statement |
-| `$expand` | untested | needs a relation model, which the library does not have yet |
+| `$expand` | works | to one row, an outer join in the same statement; to many rows, statements beyond it — see [expansion](#expansion) |
 | `$search`, `$compute`, `$skiptoken`, `$batch` | untested | — |
 
 `$select` deserves a note: it works and it genuinely narrows the columns queried, despite OData projecting into wrapper
 types of its own and despite bug reports to the contrary. `$apply` is the best-supported area of the whole surface.
+
+### Reaching through a relation
+
+A table definition that declares a relation gets a navigation property on its generated data type, and a query string can
+reach through it without expanding it:
+
+| Construct | Result | Reaches the database as |
+|-----------|--------|-------------------------|
+| `$filter=Author/Name eq 'tolkien'` | works | a `LEFT JOIN` and a parameterized `WHERE` on the joined table |
+| `$orderby=Author/Name desc` | works | a `LEFT JOIN` and an `ORDER BY` on the joined column |
+| `$filter=Books/any(b: b/Title eq 'narnia')` | works | a correlated `EXISTS` subquery |
+| `$filter=Books/any()` | works | a correlated `EXISTS` with no inner predicate |
+| `$filter=Books/all(b: b/Title eq 'hobbit')` | works | a correlated `NOT EXISTS` subquery |
+
+A relation is an outer join, so a row whose foreign key points nowhere is still returned by a query that only sorts by the
+far side. And `all()` over an **empty** collection is true, as OData Part 2 specifies — an author with no books satisfies
+every `all()` predicate. An endpoint replacing one backed by a provider that drops those rows will see the difference.
+
+`all()` is also the second symptom of the misconfiguration above, and the one worth knowing about: see
+[expansion](#expansion).
+
+### Expansion
+
+`$expand` works. It does **not** go through the library's `Include` and `ThenInclude` operators — OData binds an
+expansion as a projection into wrapper types of its own and selects the navigation property inside it, so none of that
+machinery is on this path. What makes the projected member translatable is the provider-level association the generator
+registers for each relation.
+
+What it costs depends only on the cardinality:
+
+| Relation | Reaches the database as |
+|----------|-------------------------|
+| To one row | An outer join in the query's own statement, related columns included. No extra round trip |
+| To many rows | Nothing in the query's own statement — the related rows arrive, so at least one further statement runs |
+
+**How many further statements is not stated here, because this suite cannot count them.** It can see the SQL a composed
+query renders to and the last statement sent through the connection, and the detail statement is neither: the last
+statement after materializing a to-many expansion is the main query, so the detail statement ran before it and nothing
+collects the ones in between. Treat a to-many expansion as at least one extra round trip per level and measure if it
+matters.
+
+Every nested option is individually supported, so you can enable them one at a time:
+
+| Nested option | Result | Notes |
+|---------------|--------|-------|
+| `$expand=Books($filter=…)` | works | narrows the related rows themselves; every parent is still returned |
+| `$expand=Books($select=…)` | works | narrows to exactly the named properties — unlike a top-level `$select`, the key is not added back |
+| `$expand=Books($orderby=…;$top=n)` | works | applied per parent, not across the whole detail set |
+| `$expand=Books($count=true)` | works | a correlated `COUNT(*)` in the query's own statement, so the count costs no round trip even though the rows do |
+| `$expand=Books($expand=Author)` | works | two levels; this is the deepest thing the suite covers |
+| `$expand=Mentor($levels=2)` | works | two joins against the same table, and it stops at two — the chain continues in the data |
+| `$expand=*` | works | every navigation property, one level deep |
+
+Ordinary data does not break it. An expansion across a foreign key that is null yields an **absent** navigation property
+rather than an error, and expanding a relation with no matching rows yields an **empty collection** — which is also what
+"not asked for" looks like, so a client tells the two apart by whether it sent `$expand`, not by what came back.
+
+Enable it and cap it:
+
+```csharp
+services.AddControllers().AddOData(options => options.Select().Filter().OrderBy().Count().Expand()…);
+
+private static readonly ODataValidationSettings ValidationSettings = new() {
+   AllowedFunctions = SupportedFunctions,
+
+   // Relations are declared one direction at a time and are never paired, so a model that declares both directions
+   // contains a cycle by construction — see ADR 0005. This is the only thing bounding a client walking around one.
+   MaxExpansionDepth = 2
+};
+```
+
+A request deeper than the cap comes back as an `ODataException` from **validation**, before anything reaches the
+database — the same error contract this suite draws for a blocked `$filter` function, and a client error rather than a
+server one. `$levels` counts against the same cap, which is what matters: a self-reference is the cheapest way to walk a
+cycle.
+
+Two things about the EDM model are worth knowing before you build one from generated data types:
+
+- **Declare the key explicitly.** Convention-based key discovery looks for `Id` or `<TypeName>Id`, and a table
+  definition's key — `AuthorId` on `AuthorData` — is neither, so leaving it to convention makes model building fail.
+- **The cycle is expected.** Two relations in opposite directions produce one, and a self-referencing relation produces
+  one on its own. There is nothing to remove; the depth cap is what bounds it.
+
+Giving an expandable type its own entity set is not required to expand it — the expansion is a projection — but a
+consumer that exposes such a type routes to it anyway, so the model and the routes match.
+
+#### The two symptoms that need a relation to see
+
+Both belong to the null-propagation misconfiguration at the top of this document, and both were asserted in prose long
+before anything tested them. They hold:
+
+| Symptom | With the setting disabled | Left at its default |
+|---------|---------------------------|---------------------|
+| `$expand` over a relation to many rows | the related rows | an **empty collection** for every parent, no error |
+| `$expand` over a relation to one row | the related row | the related row — unaffected |
+| `Books/all(b: …)` | the rows OData specifies, including parents with an empty collection | **different, wrong rows**: OData adds an `EXISTS` on top of its own `NOT EXISTS`, so a parent with an empty collection no longer qualifies |
+
+The expansion symptom is the worst thing on this page, and the reason is in the first column of the table rather than the
+second: **the query surface composes and sends exactly the same statement either way**. There is no failure to catch, no
+diagnostic to read, and an empty collection is what an author with no books legitimately looks like. If you are auditing
+an endpoint you already shipped, check the to-many expansions and nothing else — the to-one direction folds into the main
+statement as a join and survives the rewriting intact.
+
+Tell this apart from a genuine translation refusal by what you get: a refusal is a `QueryTranslationException` naming the
+construct that could not be translated, and this is a `200` with plausible-looking data in it.
 
 ### `$filter` functions
 
@@ -255,9 +366,13 @@ dotnet test test/mvdmio.Database.PgSQL.Tests.Integration.OData/mvdmio.Database.P
 - **Tests assert rows and SQL.** Column narrowing, `LIMIT`/`OFFSET`, an aggregate count and parameterization are
   indistinguishable from a correct row set otherwise. Assertions target the shape that matters — a `GROUP BY` is
   present, a column list is narrowed — rather than whole SQL strings.
-- **Two fixture entities.** `SampleTable` carries only EDM-friendly types, so its model must build cleanly.
-  `AwkwardTable` carries the awkward ones, kept separate so a model-building failure would break one test rather than
-  the suite.
+- **Four fixture entities, in three EDM models.** `SampleTable` carries only EDM-friendly types, so its model must build
+  cleanly. `AwkwardTable` carries the awkward ones, kept separate so a model-building failure would break one test rather
+  than the suite. `AuthorTable` and `BookTable` declare relations to each other and to themselves, and get a model of
+  their own: adding a relation to `SampleTable` would put a navigable member in the conformance model, where the
+  convention builder would discover it and change what every `$select` and `$apply` result already pinned there sees.
+  Their shape deliberately mirrors the main integration suite's relation tables, so the two suites can be read against
+  each other.
 - **Every test rolls back.** A transaction opens before each test and rolls back after, so the suite runs repeatedly and
   in any order.
 - **A second container.** This assembly is isolated from the main integration suite so the OData dependency stays out
@@ -265,11 +380,12 @@ dotnet test test/mvdmio.Database.PgSQL.Tests.Integration.OData/mvdmio.Database.P
 
 ## What is deliberately not covered
 
-- `$expand`. It needs a relation model, which is designed but not yet built. Expansion does work — it maps onto the
-  provider's eager-loading path — but it requires an association declared with an explicit foreign-key property, and
-  with null-propagation handling left on it returns empty collections silently, having issued the child queries and
-  thrown the rows away. Worth knowing before the relation model lands, because that last part is the same
-  misconfiguration as above wearing a much worse symptom.
+- **How many statements a to-many expansion issues.** Nothing collects the statements a query sends, and no diagnostics
+  facility was added to make it observable. See [expansion](#expansion) for what is asserted instead.
+- Nested `$compute` and `$search`, a raw `$count` on a navigation path, and selecting a navigation property without
+  expanding it.
+- A many-to-many fixture shape. A join table would exercise a shape, but no query-string construct that two-level nested
+  expansion does not already reach.
 - `$search`, `$compute`, `$skiptoken`, `$batch`.
 - Hosting. No controllers, no minimal-API endpoints, no `WebApplicationFactory`. The hosted failure mode above is
   documented, not tested — the in-process suite materializes the queryable itself and so sees a clean exception.
