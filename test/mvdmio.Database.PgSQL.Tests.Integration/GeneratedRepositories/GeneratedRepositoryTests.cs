@@ -48,7 +48,7 @@ public class GeneratedRepositoryTests : TestBase
       var allUsers = (await _repository.GetAllAsync(CancellationToken)).ToList();
       allUsers.Should().ContainSingle();
 
-      var byId = await _repository.GetByUserIdAsync(created.UserId, CancellationToken);
+      var byId = await _repository.GetByPrimaryKeyAsync(created.UserId, CancellationToken);
       byId.Should().NotBeNull();
       byId!.UserName.Should().Be("alice");
 
@@ -69,14 +69,14 @@ public class GeneratedRepositoryTests : TestBase
       var deletedByUnique = await _repository.DeleteByUserNameAsync("alice-updated", CancellationToken);
       deletedByUnique.Should().BeTrue();
 
-      var missingAfterDelete = await _repository.GetByUserIdAsync(created.UserId, CancellationToken);
+      var missingAfterDelete = await _repository.GetByPrimaryKeyAsync(created.UserId, CancellationToken);
       missingAfterDelete.Should().BeNull();
    }
 
    [Fact]
-   public async Task DeleteById_WhenMissing_ReturnsFalse()
+   public async Task DeleteByPrimaryKey_WhenMissing_ReturnsFalse()
    {
-      var deleted = await _repository.DeleteByUserIdAsync(999999, CancellationToken);
+      var deleted = await _repository.DeleteByPrimaryKeyAsync(999999, CancellationToken);
 
       deleted.Should().BeFalse();
    }

@@ -27,14 +27,14 @@ internal static class TableRepositoryDiagnostics
       description: "Classes annotated with [Table] must be partial so generated companion types can extend the model safely."
    );
 
-   public static readonly DiagnosticDescriptor TableClassMustHaveSinglePrimaryKey = new(
+   public static readonly DiagnosticDescriptor TableClassMustHaveAPrimaryKey = new(
       id: "PGSQL0004",
-      title: "Table definition must declare exactly one primary key",
-      messageFormat: "'{0}' must declare exactly one property with [PrimaryKey], but found {1}",
+      title: "Table definition must declare at least one primary key",
+      messageFormat: "'{0}' must declare at least one property with [PrimaryKey]",
       category: CATEGORY_GENERATION,
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
-      description: "Generated repositories require exactly one primary key property."
+      description: "Generated repositories address a row by its primary key, so a table definition without one has no way to look a row up, update it or delete it."
    );
 
    public static readonly DiagnosticDescriptor DuplicateMappedColumnName = new(
@@ -54,7 +54,7 @@ internal static class TableRepositoryDiagnostics
       category: CATEGORY_GENERATION,
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
-      description: "Primary key and unique properties must produce distinct repository method names."
+      description: "Unique properties must produce distinct repository method names. The primary key does not take part: its lookup is named after the key rather than after a property."
    );
 
    public static readonly DiagnosticDescriptor NoUpdatableColumns = new(
@@ -87,14 +87,23 @@ internal static class TableRepositoryDiagnostics
       description: "Generated repositories only support public instance properties with public getters and setters."
    );
 
-   public static readonly DiagnosticDescriptor GeneratedTypeNameCollision = new(
+   /// <summary>
+   ///    The reason a generated name cannot be used, as <see cref="GeneratedNameCollision" />'s third argument. Stated
+   ///    here rather than at the call site so both collisions read as one diagnostic with two causes.
+   /// </summary>
+   public const string COLLISION_REASON_NON_PARTIAL_TYPE = "that name is already used by a non-partial type in the same namespace";
+
+   /// <inheritdoc cref="COLLISION_REASON_NON_PARTIAL_TYPE" />
+   public const string COLLISION_REASON_PRIMARY_KEY_LOOKUP = "the primary key's own lookup and delete already take that name";
+
+   public static readonly DiagnosticDescriptor GeneratedNameCollision = new(
       id: "PGSQL0010",
-      title: "Generated type name collision",
-      messageFormat: "'{0}' cannot generate type '{1}' because that name is already used by a non-partial type in the same namespace",
+      title: "Generated name collision",
+      messageFormat: "'{0}' cannot generate '{1}' because {2}",
       category: CATEGORY_GENERATION,
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
-      description: "Generated repository companion types require unique names or an existing partial class with the same name."
+      description: "A generated companion type needs a free name or an existing partial class of the same name, and a [Unique] property's generated lookup cannot be named after the primary key's."
    );
 
    public static readonly DiagnosticDescriptor UnmappableQueryPropertyType = new(
@@ -124,11 +133,11 @@ internal static class TableRepositoryDiagnostics
    public static readonly DiagnosticDescriptor RelationForeignKeyTypeMismatch = new(
       id: "PGSQL0013",
       title: "Relation foreign key type cannot match the primary key",
-      messageFormat: "'{0}.{1}' joins foreign key '{2}' of type '{3}' to primary key '{4}' of type '{5}'",
+      messageFormat: "'{0}.{1}' joins foreign key '{2}' of type '{3}' to primary key '{4}' of type '{5}' at key position {6}",
       category: CATEGORY_GENERATION,
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
-      description: "A relation always joins its foreign key to the target's primary key, so the two must have the same type apart from nullability."
+      description: "A relation always joins its foreign key to the target's primary key, pairing them positionally, so the two must have the same type at every position apart from nullability."
    );
 
    public static readonly DiagnosticDescriptor RelationTargetIsNotATableDefinition = new(
@@ -179,5 +188,28 @@ internal static class TableRepositoryDiagnostics
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
       description: "A relation property is skipped by column mapping, so naming a column for it describes something that will never be read or written."
+   );
+
+   public static readonly DiagnosticDescriptor RelationForeignKeyArityMismatch = new(
+      id: "PGSQL0019",
+      title: "Relation foreign key does not match the target's primary key arity",
+      messageFormat: "'{0}.{1}' names a foreign key of arity {2} ({3}), but the primary key of '{4}' has arity {5}",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "A relation pairs its foreign-key properties positionally against the target's primary key, so it must name exactly one per key member."
+   );
+
+   // Abandons the table, unlike the relation diagnostics above: a malformed key leaves the lookup, the delete and the
+   // update undefined rather than one relation.
+
+   public static readonly DiagnosticDescriptor NullablePrimaryKeyProperty = new(
+      id: "PGSQL0020",
+      title: "Primary key property cannot be nullable",
+      messageFormat: "'{0}.{1}' is marked [PrimaryKey] but its type '{2}' is nullable",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "A nullable key member is a key the database would reject, and it is also what would let the query surface widen a relation's join with an 'or both are null' alternative, which costs the join its index. Refusing it here makes that shape unreachable."
    );
 }

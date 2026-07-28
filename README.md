@@ -66,8 +66,11 @@ var repository = new UserRepository(db);
 
 var created = await repository.CreateAsync(new CreateUserCommand { UserName = "alice" }, ct);
 var found = await repository.GetByUserNameAsync("alice", ct);
-var deleted = await repository.DeleteByUserIdAsync(created.UserId, ct);
+var deleted = await repository.DeleteByPrimaryKeyAsync(created.UserId, ct);
 ```
+
+The primary key may be composite — mark two or more properties `[PrimaryKey]` and the generated lookup, delete and update
+address the row by all of them, in the order you declared them.
 
 Need a query whose shape is only known at runtime? Every generated repository also hands you an `IQueryable<T>` that
 translates to SQL:

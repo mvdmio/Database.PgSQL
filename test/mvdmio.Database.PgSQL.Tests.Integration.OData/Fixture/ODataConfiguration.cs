@@ -63,6 +63,24 @@ public static class ODataConfiguration
    );
 
    /// <summary>
+   ///    The model the composite-key pair is queried through. Separate from <see cref="RelationModel" /> for the same
+   ///    reason that one is separate from <see cref="Model" />: a second entity pair in one model would widen what every
+   ///    <c>$select</c> and <c>$expand</c> result already pinned there sees.
+   /// </summary>
+   /// <remarks>
+   ///    Each key is declared one property at a time, which is the same style the single-key fixture uses and which
+   ///    extends to a composite key unchanged. The builder also accepts a single anonymous-type selector; nothing in the
+   ///    front-end distinguishes the two afterwards.
+   /// </remarks>
+   public static IEdmModel CompositeModel { get; } = BuildModel(
+      builder =>
+      {
+         builder.EntitySet<TenantProjectData>("TenantProjects").EntityType.HasKey(x => x.AccountId).HasKey(x => x.ProjectId);
+         builder.EntitySet<TenantTaskData>("TenantTasks").EntityType.HasKey(x => x.AccountId).HasKey(x => x.TaskId);
+      }
+   );
+
+   /// <summary>
    ///    The settings a consumer must use. Null-propagation handling is off, and that is not a tuning choice: OData
    ///    picks the default by matching the query provider's namespace against a hardcoded list of Microsoft providers,
    ///    which this library's provider is not on and cannot join from our side. Left on, OData guards every property
@@ -111,8 +129,9 @@ public static class ODataConfiguration
       configurations.EnableSelect = true;
       configurations.EnableExpand = true;
 
-      // Out of scope: $skiptoken is not covered.
-      configurations.EnableSkipToken = false;
+      // Server-driven paging. On because a stable page boundary over a composite key is a claim this suite makes, and it
+      // cannot be made without applying the token.
+      configurations.EnableSkipToken = true;
 
       // Unbounded so the suite can page freely. A real endpoint should cap this — the query surface applies no limits
       // of its own.

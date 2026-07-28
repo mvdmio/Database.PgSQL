@@ -165,10 +165,36 @@ settings it passes and the behaviour of the query it composes are the tested par
 | `$select` | works | a narrowed column list, plus the key |
 | `$apply` | works | `GROUP BY` with SQL aggregates; `filter(…)/groupby(…)` becomes one statement |
 | `$expand` | works | to one row, an outer join in the same statement; to many rows, statements beyond it — see [expansion](#expansion) |
-| `$search`, `$compute`, `$skiptoken`, `$batch` | untested | — |
+| `$skiptoken` | works | a lexicographic ladder over the ordering properties in the `WHERE` — see [composite keys](#composite-primary-keys) |
+| `$search`, `$compute`, `$batch` | untested | — |
 
 `$select` deserves a note: it works and it genuinely narrows the columns queried, despite OData projecting into wrapper
 types of its own and despite bug reports to the contrary. `$apply` is the best-supported area of the whole surface.
+
+### Composite primary keys
+
+A table definition may declare a composite primary key, so the front-end has to cope with one. `$filter`, `$orderby`,
+`$top`, `$skip`, `$count`, `$select`, `$skiptoken`, navigation-path filtering in both cardinalities and `$expand` — the
+options where key arity could plausibly matter — are each pinned over an entity whose key is **two** columns as well as
+over the single-column entities. `$apply` and the `$filter` function families are pinned over single-column keys only:
+neither touches a key.
+
+Nothing in OData's query-option application requires a single-property key, and the model builder takes a composite key
+either as chained per-property `HasKey` calls or as one anonymous-type selector — this suite uses the chained style, the
+same one the single-key fixtures use.
+
+Two things behave differently enough to state:
+
+| Construct | Over a composite key |
+|-----------|----------------------|
+| `$select` | Appends **every** key column, not one, so a narrowed projection is as many columns wider than you asked for as the key has members |
+| `$skiptoken` | The token names one value per ordering property, and becomes a lexicographic ladder: strictly greater on the first member, or equal on it and greater on the next |
+| `$filter` / `$orderby` through a navigation property | The join carries every key column, so the relation cannot reach a row outside the tenant the leading key member names |
+| `$expand`, both cardinalities and nested | Unchanged. The association the generator registers is a join predicate rather than a pair of key expressions, and the front-end never sees the difference |
+
+Declare the key explicitly here as well — convention-based discovery finds neither member. `$skiptoken` is off by default
+like every other option; turn it on with `options.SkipToken()` in `AddOData`, or by setting `EnableSkipToken` on the query
+configuration when you drive the options yourself.
 
 ### Reaching through a relation
 
@@ -365,13 +391,14 @@ dotnet test test/mvdmio.Database.PgSQL.Tests.Integration.OData/mvdmio.Database.P
 - **Tests assert rows and SQL.** Column narrowing, `LIMIT`/`OFFSET`, an aggregate count and parameterization are
   indistinguishable from a correct row set otherwise. Assertions target the shape that matters — a `GROUP BY` is
   present, a column list is narrowed — rather than whole SQL strings.
-- **Four fixture entities, in three EDM models.** `SampleTable` carries only EDM-friendly types, so its model must build
+- **Six fixture entities, in four EDM models.** `SampleTable` carries only EDM-friendly types, so its model must build
   cleanly. `AwkwardTable` carries the awkward ones, kept separate so a model-building failure would break one test rather
   than the suite. `AuthorTable` and `BookTable` declare relations to each other and to themselves, and get a model of
   their own: adding a relation to `SampleTable` would put a navigable member in the conformance model, where the
   convention builder would discover it and change what every `$select` and `$apply` result already pinned there sees.
-  Their shape deliberately mirrors the main integration suite's relation tables, so the two suites can be read against
-  each other.
+  `TenantProjectTable` and `TenantTaskTable` are the same shape again with two-column keys and a composite relation, in a
+  fourth model for the same reason — the single-key pair keeps pinning the single-key path. Their shapes deliberately
+  mirror the main integration suite's tables, so the two suites can be read against each other.
 - **Every test rolls back.** A transaction opens before each test and rolls back after, so the suite runs repeatedly and
   in any order.
 - **A second container.** This assembly is isolated from the main integration suite so the OData dependency stays out
@@ -388,7 +415,9 @@ dotnet test test/mvdmio.Database.PgSQL.Tests.Integration.OData/mvdmio.Database.P
   expanding it.
 - A many-to-many fixture shape. A join table would exercise a shape, but no query-string construct that two-level nested
   expansion does not already reach.
-- `$search`, `$compute`, `$skiptoken`, `$batch`.
+- `$search`, `$compute`, `$batch`.
+- **Generating** a `$skiptoken`. Applying one is covered, over a composite key as well as a single one; producing the
+  next-page link is the serializer's job and needs a host.
 - Hosting. No controllers, no minimal-API endpoints, no `WebApplicationFactory`. The hosted failure mode above is
   documented, not tested — the in-process suite materializes the queryable itself and so sees a clean exception.
 - Frameworks other than `net10.0`. The library's framework coverage is proven by its own build.

@@ -18,7 +18,7 @@ internal sealed class TableDefinitionModel
       string repositoryTypeName,
       string schemaName,
       string tableName,
-      PropertyDefinitionModel primaryKey,
+      ImmutableArray<PropertyDefinitionModel> primaryKeys,
       ImmutableArray<PropertyDefinitionModel> dataProperties,
       ImmutableArray<PropertyDefinitionModel> createProperties,
       ImmutableArray<PropertyDefinitionModel> updateProperties,
@@ -39,7 +39,7 @@ internal sealed class TableDefinitionModel
       RepositoryTypeName = repositoryTypeName;
       SchemaName = schemaName;
       TableName = tableName;
-      PrimaryKey = primaryKey;
+      PrimaryKeys = primaryKeys;
       DataProperties = dataProperties;
       CreateProperties = createProperties;
       UpdateProperties = updateProperties;
@@ -63,10 +63,20 @@ internal sealed class TableDefinitionModel
    public string RepositoryTypeName { get; }
    public string SchemaName { get; }
    public string TableName { get; }
-   public PropertyDefinitionModel PrimaryKey { get; }
+   /// <summary>
+   ///    The properties forming the primary key, in key order — which is the order they were declared in, and which
+   ///    fixes the parameter order of the generated lookup and delete.
+   /// </summary>
+   public ImmutableArray<PropertyDefinitionModel> PrimaryKeys { get; }
+
    public ImmutableArray<PropertyDefinitionModel> DataProperties { get; }
    public ImmutableArray<PropertyDefinitionModel> CreateProperties { get; }
    public ImmutableArray<PropertyDefinitionModel> UpdateProperties { get; }
+
+   /// <summary>
+   ///    The <c>[Unique]</c> properties, each of which gets a lookup and a delete named after itself. The primary key is
+   ///    not among them: its pair is named after the key, so that every repository names it the same way.
+   /// </summary>
    public ImmutableArray<PropertyDefinitionModel> LookupProperties { get; }
    public ImmutableArray<PropertyDefinitionModel> MutableUpdateProperties { get; }
 
@@ -86,7 +96,7 @@ internal sealed class RelationDeclarationModel
       string propertyName,
       string targetClassFullName,
       string targetTypeDisplayName,
-      string foreignKeyPropertyName,
+      ImmutableArray<string> foreignKeyPropertyNames,
       bool isToMany,
       Location? location
    )
@@ -94,7 +104,7 @@ internal sealed class RelationDeclarationModel
       PropertyName = propertyName;
       TargetClassFullName = targetClassFullName;
       TargetTypeDisplayName = targetTypeDisplayName;
-      ForeignKeyPropertyName = foreignKeyPropertyName;
+      ForeignKeyPropertyNames = foreignKeyPropertyNames;
       IsToMany = isToMany;
       Location = location;
    }
@@ -107,7 +117,11 @@ internal sealed class RelationDeclarationModel
    /// <summary>The target as the developer wrote it, for a diagnostic message to quote.</summary>
    public string TargetTypeDisplayName { get; }
 
-   public string ForeignKeyPropertyName { get; }
+   /// <summary>
+   ///    The foreign-key property names as declared, in the order they are paired against the target's primary key.
+   /// </summary>
+   public ImmutableArray<string> ForeignKeyPropertyNames { get; }
+
    public bool IsToMany { get; }
    public Location? Location { get; }
 }
@@ -122,6 +136,7 @@ internal sealed class PropertyDefinitionModel
       bool isPrimaryKey,
       bool isUnique,
       bool isGenerated,
+      bool isNullable,
       bool requiresNullForgivingInitializer
    )
    {
@@ -132,6 +147,7 @@ internal sealed class PropertyDefinitionModel
       IsPrimaryKey = isPrimaryKey;
       IsUnique = isUnique;
       IsGenerated = isGenerated;
+      IsNullable = isNullable;
       RequiresNullForgivingInitializer = requiresNullForgivingInitializer;
    }
 
@@ -142,5 +158,9 @@ internal sealed class PropertyDefinitionModel
    public bool IsPrimaryKey { get; }
    public bool IsUnique { get; }
    public bool IsGenerated { get; }
+
+   /// <summary>Whether the property can hold null, which a primary key member may not.</summary>
+   public bool IsNullable { get; }
+
    public bool RequiresNullForgivingInitializer { get; }
 }

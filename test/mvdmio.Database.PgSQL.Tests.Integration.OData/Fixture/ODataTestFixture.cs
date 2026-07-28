@@ -87,6 +87,33 @@ public sealed class ODataTestFixture : IAsyncLifetime
          )
          """
       );
+
+      // The composite-key pair, alongside the single-key one rather than replacing it. Real composite foreign keys, for
+      // the same reason as above.
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.odata_tenant_projects (
+            account_id BIGINT NOT NULL,
+            project_id BIGINT GENERATED ALWAYS AS IDENTITY,
+            code       TEXT NOT NULL UNIQUE,
+            name       TEXT NOT NULL,
+            PRIMARY KEY (account_id, project_id)
+         )
+         """
+      );
+
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.odata_tenant_tasks (
+            account_id BIGINT NOT NULL,
+            task_id    BIGINT NOT NULL,
+            project_id BIGINT NOT NULL,
+            title      TEXT NOT NULL UNIQUE,
+            PRIMARY KEY (account_id, task_id),
+            FOREIGN KEY (account_id, project_id) REFERENCES public.odata_tenant_projects (account_id, project_id)
+         )
+         """
+      );
    }
 
    public async ValueTask DisposeAsync()

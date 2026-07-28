@@ -78,56 +78,100 @@ internal static class RelationResolver
 
       // Cardinality decides one thing: which side holds the foreign key and which holds the primary key it joins. A
       // relation to one row is resolved through a foreign key on the declaring type, one to many through a foreign key
-      // on the target. The far end is always the other side's primary key, because exactly one non-composite primary
-      // key per table definition is already enforced.
+      // on the target. The far end is always the other side's primary key, which may have more than one member — and
+      // then the declaration names one foreign-key property per member, paired positionally against it.
       var (foreignKeyOwner, primaryKeyOwner) = relation.IsToMany ? (target, model) : (model, target);
-      var foreignKey = foreignKeyOwner.DataProperties.FirstOrDefault(x => string.Equals(x.PropertyName, relation.ForeignKeyPropertyName, StringComparison.Ordinal));
+      var primaryKeys = primaryKeyOwner.PrimaryKeys;
 
-      if (foreignKey is null)
+      if (relation.ForeignKeyPropertyNames.Length != primaryKeys.Length)
       {
          diagnostics.Add(
             Diagnostic.Create(
-               TableRepositoryDiagnostics.RelationForeignKeyNotFound,
+               TableRepositoryDiagnostics.RelationForeignKeyArityMismatch,
                relation.Location,
                model.TableClassName,
                relation.PropertyName,
-               relation.ForeignKeyPropertyName,
-               foreignKeyOwner.TableClassName
+               relation.ForeignKeyPropertyNames.Length,
+               DescribeNames(relation.ForeignKeyPropertyNames),
+               primaryKeyOwner.TableClassName,
+               primaryKeys.Length
             )
          );
 
          return false;
       }
 
-      var primaryKey = primaryKeyOwner.PrimaryKey;
+      // Each phase below reports every problem it finds rather than only the first, because each is a separate mistake.
+      // Whether the phase found any is read off the diagnostic count, so no phase carries a flag of its own.
+      var foreignKeys = ImmutableArray.CreateBuilder<PropertyDefinitionModel>(primaryKeys.Length);
+      var beforeResolving = diagnostics.Count;
 
-      if (!CanJoin(foreignKey.TypeName, primaryKey.TypeName))
+      foreach (var foreignKeyPropertyName in relation.ForeignKeyPropertyNames)
       {
+         var foreignKey = foreignKeyOwner.DataProperties.FirstOrDefault(x => string.Equals(x.PropertyName, foreignKeyPropertyName, StringComparison.Ordinal));
+
+         if (foreignKey is null)
+         {
+            diagnostics.Add(
+               Diagnostic.Create(
+                  TableRepositoryDiagnostics.RelationForeignKeyNotFound,
+                  relation.Location,
+                  model.TableClassName,
+                  relation.PropertyName,
+                  foreignKeyPropertyName,
+                  foreignKeyOwner.TableClassName
+               )
+            );
+
+            continue;
+         }
+
+         foreignKeys.Add(foreignKey);
+      }
+
+      // Nothing can be type-checked until every name resolves.
+      if (diagnostics.Count != beforeResolving)
+         return false;
+
+      var beforeTypeChecking = diagnostics.Count;
+
+      for (var position = 0; position < primaryKeys.Length; position++)
+      {
+         if (CanJoin(foreignKeys[position].TypeName, primaryKeys[position].TypeName))
+            continue;
+
          diagnostics.Add(
             Diagnostic.Create(
                TableRepositoryDiagnostics.RelationForeignKeyTypeMismatch,
                relation.Location,
                model.TableClassName,
                relation.PropertyName,
-               foreignKey.PropertyName,
-               foreignKey.TypeName,
-               primaryKey.PropertyName,
-               primaryKey.TypeName
+               foreignKeys[position].PropertyName,
+               foreignKeys[position].TypeName,
+               primaryKeys[position].PropertyName,
+               primaryKeys[position].TypeName,
+               position + 1
             )
          );
-
-         return false;
       }
 
+      if (diagnostics.Count != beforeTypeChecking)
+         return false;
+
       resolved = new ResolvedRelation(
-         relation.PropertyName,
-         relation.IsToMany,
-         QualifyTypeName(target.NamespaceName, target.DataTypeName),
-         foreignKey,
-         primaryKey
+         propertyName: relation.PropertyName,
+         isToMany: relation.IsToMany,
+         targetDataTypeName: QualifyTypeName(target.NamespaceName, target.DataTypeName),
+         foreignKeys: foreignKeys.ToImmutable(),
+         primaryKeys: primaryKeys
       );
 
       return true;
+   }
+
+   private static string DescribeNames(ImmutableArray<string> names)
+   {
+      return names.IsEmpty ? "none" : string.Join(", ", names);
    }
 
    /// <summary>
@@ -171,8 +215,8 @@ internal sealed class ResolvedRelation
       string propertyName,
       bool isToMany,
       string targetDataTypeName,
-      PropertyDefinitionModel foreignKey,
-      PropertyDefinitionModel primaryKey
+      ImmutableArray<PropertyDefinitionModel> foreignKeys,
+      ImmutableArray<PropertyDefinitionModel> primaryKeys
    )
    {
       PropertyName = propertyName;
@@ -180,9 +224,15 @@ internal sealed class ResolvedRelation
       TargetDataTypeName = targetDataTypeName;
 
       // A relation always joins its foreign key to a primary key. Which of the two is on the declaring side is the
-      // whole of what the cardinality decides, so it is decided here and nowhere else.
-      ThisKey = isToMany ? primaryKey : foreignKey;
-      TargetKey = isToMany ? foreignKey : primaryKey;
+      // whole of what the cardinality decides, so it is decided here and nowhere else — and the two sides are zipped
+      // here too, so nothing downstream can pair them by index and get it wrong.
+      JoinedKeys = primaryKeys
+         .Select(
+            (primaryKey, position) => isToMany
+               ? new JoinedKeyPair(primaryKey, foreignKeys[position])
+               : new JoinedKeyPair(foreignKeys[position], primaryKey)
+         )
+         .ToImmutableArray();
    }
 
    public string PropertyName { get; }
@@ -191,9 +241,32 @@ internal sealed class ResolvedRelation
    /// <summary>The globally qualified generated data type on the other side of the relation.</summary>
    public string TargetDataTypeName { get; }
 
-   /// <summary>The key on the declaring side of the relation.</summary>
-   public PropertyDefinitionModel ThisKey { get; }
+   /// <summary>The column pairs the relation joins on, in key order.</summary>
+   public ImmutableArray<JoinedKeyPair> JoinedKeys { get; }
 
-   /// <summary>The key on the target side of the relation.</summary>
+   /// <summary>
+   ///    Whether the relation joins on more than one pair of columns, which is what decides how it is registered with
+   ///    the provider.
+   /// </summary>
+   public bool IsComposite => JoinedKeys.Length > 1;
+}
+
+/// <summary>
+///    One column pair a relation joins on: the property on the declaring side and the property on the target side it is
+///    compared with.
+/// </summary>
+/// <remarks>
+///    Which of the two holds the foreign key and which holds the primary key depends on the cardinality and is not
+///    recorded, because nothing downstream needs to know — the join is symmetric once the pair exists.
+/// </remarks>
+internal sealed class JoinedKeyPair
+{
+   public JoinedKeyPair(PropertyDefinitionModel thisKey, PropertyDefinitionModel targetKey)
+   {
+      ThisKey = thisKey;
+      TargetKey = targetKey;
+   }
+
+   public PropertyDefinitionModel ThisKey { get; }
    public PropertyDefinitionModel TargetKey { get; }
 }

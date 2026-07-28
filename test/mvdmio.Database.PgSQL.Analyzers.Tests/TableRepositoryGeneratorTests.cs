@@ -1,117 +1,10 @@
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.Text;
 
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
 public class TableRepositoryGeneratorTests
 {
-   private static readonly CSharpParseOptions _parseOptions = CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview);
-
-   private const string _RUNTIME_STUBS = """
-      namespace mvdmio.Database.PgSQL.Attributes
-      {
-         [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-         public sealed class TableAttribute : System.Attribute
-         {
-            public TableAttribute(string name) { }
-         }
-
-         [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
-         public sealed class PrimaryKeyAttribute : System.Attribute { }
-
-         [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
-         public sealed class UniqueAttribute : System.Attribute { }
-
-         [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
-         public sealed class ColumnAttribute : System.Attribute
-         {
-            public ColumnAttribute(string name) { }
-         }
-
-         [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
-         public sealed class GeneratedAttribute : System.Attribute { }
-
-         [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
-         public sealed class RelationAttribute : System.Attribute
-         {
-            public RelationAttribute(string foreignKeyPropertyName) { }
-         }
-      }
-
-      namespace Microsoft.Extensions.DependencyInjection
-      {
-         public interface IServiceCollection { }
-      }
-
-      namespace Microsoft.Extensions.DependencyInjection.Extensions
-      {
-         public static class ServiceCollectionDescriptorExtensions
-         {
-            public static void TryAddScoped<TService, TImplementation>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services)
-               where TService : class
-               where TImplementation : class, TService { }
-         }
-      }
-
-      namespace mvdmio.Database.PgSQL
-      {
-         public class DatabaseConnection
-         {
-            public Connectors.DapperDatabaseConnector Dapper { get; } = new Connectors.DapperDatabaseConnector();
-            public Connectors.Linq.LinqDatabaseConnector Linq { get; } = new Connectors.Linq.LinqDatabaseConnector();
-         }
-
-         public static class ServiceCollectionExtensions
-         {
-            public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddDatabase(this Microsoft.Extensions.DependencyInjection.IServiceCollection services) => services;
-         }
-      }
-
-      namespace mvdmio.Database.PgSQL.Connectors
-      {
-         public sealed class DapperDatabaseConnector
-         {
-            public System.Threading.Tasks.Task<T> QuerySingleAsync<T>(string sql, System.Collections.Generic.IDictionary<string, object?>? parameters = null, System.TimeSpan? commandTimeout = null, System.Threading.CancellationToken ct = default) => throw null!;
-            public System.Threading.Tasks.Task<T?> QuerySingleOrDefaultAsync<T>(string sql, System.Collections.Generic.IDictionary<string, object?>? parameters = null, System.TimeSpan? commandTimeout = null, System.Threading.CancellationToken ct = default) => throw null!;
-            public System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<T>> QueryAsync<T>(string sql, System.Collections.Generic.IDictionary<string, object?>? parameters = null, System.TimeSpan? commandTimeout = null, System.Threading.CancellationToken ct = default) => throw null!;
-            public System.Threading.Tasks.Task<int> ExecuteAsync(string sql, System.Collections.Generic.IDictionary<string, object?>? parameters = null, System.TimeSpan? commandTimeout = null, System.Threading.CancellationToken ct = default) => throw null!;
-         }
-      }
-
-      namespace mvdmio.Database.PgSQL.Connectors.Linq
-      {
-         public sealed class LinqDatabaseConnector
-         {
-            public System.Linq.IQueryable<TEntity> Query<TEntity>(System.TimeSpan? commandTimeout = null) where TEntity : class => throw null!;
-         }
-
-         public sealed class QueryEntityMappingBuilder<TEntity>
-            where TEntity : class
-         {
-            public QueryEntityMappingBuilder<TEntity> Column<TProperty>(System.Linq.Expressions.Expression<System.Func<TEntity, TProperty>> property, string columnName, bool isPrimaryKey = false) => throw null!;
-
-            public QueryEntityMappingBuilder<TEntity> Relation<TTarget, TThisKey, TTargetKey>(
-               System.Linq.Expressions.Expression<System.Func<TEntity, TTarget?>> property,
-               System.Linq.Expressions.Expression<System.Func<TEntity, TThisKey>> thisKey,
-               System.Linq.Expressions.Expression<System.Func<TTarget, TTargetKey>> targetKey
-            ) where TTarget : class => throw null!;
-
-            public QueryEntityMappingBuilder<TEntity> Relation<TTarget, TThisKey, TTargetKey>(
-               System.Linq.Expressions.Expression<System.Func<TEntity, System.Collections.Generic.IEnumerable<TTarget>>> property,
-               System.Linq.Expressions.Expression<System.Func<TEntity, TThisKey>> thisKey,
-               System.Linq.Expressions.Expression<System.Func<TTarget, TTargetKey>> targetKey
-            ) where TTarget : class => throw null!;
-         }
-
-         public static class QueryMappings
-         {
-            public static void Register<TEntity>(string schemaName, string tableName, System.Action<QueryEntityMappingBuilder<TEntity>> configure) where TEntity : class { }
-         }
-      }
-      """;
-
    [Fact]
    public void ValidTable_GeneratesCrudTypes()
    {
@@ -135,13 +28,13 @@ public class TableRepositoryGeneratorTests
          }
          """;
 
-      var result = RunGenerator(source);
+      var result = GeneratorHarness.RunGenerator(source);
 
       result.Diagnostics.Should().BeEmpty();
       result.GeneratedSources.Should().HaveCount(2);
 
-      var generatedSource = result.GeneratedSources.Single(x => x.HintName.EndsWith("Repository.g.cs", StringComparison.Ordinal)).SourceText.ToString();
-      var registrationSource = result.GeneratedSources.Single(x => x.HintName == "GeneratedAssemblyRegistration.g.cs").SourceText.ToString();
+      var generatedSource = GeneratorHarness.RepositorySource(result);
+      var registrationSource = GeneratorHarness.RegistrationSource(result);
       generatedSource.Should().Contain("public partial class UserData");
       generatedSource.Should().Contain("public partial class CreateUserCommand");
       generatedSource.Should().Contain("public partial class UpdateUserCommand");
@@ -151,7 +44,14 @@ public class TableRepositoryGeneratorTests
       registrationSource.Should().Contain("namespace GeneratorTests;");
       registrationSource.Should().Contain("AddGeneratorTests(this IServiceCollection services)");
       registrationSource.Should().Contain("services.TryAddScoped<global::Demo.IUserRepository, global::Demo.UserRepository>();");
-      generatedSource.Should().Contain("GetByUserIdAsync");
+
+      // The primary key's lookup and delete are named after the key rather than after UserId, and a single-column key
+      // gets the same name a composite one does — see TableRepositoryGeneratorCompositeKeyTests.
+      generatedSource.Should().Contain("GetByPrimaryKeyAsync(long userId, CancellationToken ct = default)");
+      generatedSource.Should().Contain("DeleteByPrimaryKeyAsync(long userId, CancellationToken ct = default)");
+      generatedSource.Should().NotContain("GetByUserIdAsync");
+      generatedSource.Should().NotContain("DeleteByUserIdAsync");
+
       generatedSource.Should().Contain("GetByUserNameAsync");
       generatedSource.Should().Contain("DeleteByUserNameAsync");
       generatedSource.Should().Contain("INSERT INTO \"public\".\"users\" (\"user_name\", \"firstName\")");
@@ -162,6 +62,27 @@ public class TableRepositoryGeneratorTests
       registrationSource.Should().Contain("QueryMappings.Register<global::Demo.UserData>(");
       registrationSource.Should().Contain(".Column(x => x.UserId, \"user_id\", isPrimaryKey: true)");
       registrationSource.Should().Contain(".Column(x => x.FirstName, \"firstName\")");
+   }
+
+   [Fact]
+   public void ValidTable_ProducesCodeThatCompiles()
+   {
+      GeneratorHarness.AssertGeneratedSourcesCompile("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.users")]
+         public partial class UserTable
+         {
+            [PrimaryKey]
+            [Generated]
+            public long UserId { get; set; }
+
+            [Unique]
+            public string UserName { get; set; } = string.Empty;
+         }
+         """);
    }
 
    [Fact]
@@ -212,7 +133,7 @@ public class TableRepositoryGeneratorTests
          }
          """;
 
-      var result = RunGenerator(source);
+      var result = GeneratorHarness.RunGenerator(source);
 
       result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0011");
    }
@@ -244,7 +165,7 @@ public class TableRepositoryGeneratorTests
          }
          """;
 
-      var result = RunGenerator(source);
+      var result = GeneratorHarness.RunGenerator(source);
 
       var warnings = result.Diagnostics.Where(x => x.Id == "PGSQL0011").ToList();
 
@@ -272,7 +193,7 @@ public class TableRepositoryGeneratorTests
          }
          """;
 
-      var result = RunGenerator(source);
+      var result = GeneratorHarness.RunGenerator(source);
 
       result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0003");
       result.GeneratedSources.Should().BeEmpty();
@@ -298,7 +219,7 @@ public class TableRepositoryGeneratorTests
          }
          """;
 
-      var result = RunGenerator(source);
+      var result = GeneratorHarness.RunGenerator(source);
 
       result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0009");
       result.GeneratedSources.Should().BeEmpty();
@@ -326,9 +247,11 @@ public class TableRepositoryGeneratorTests
          }
          """;
 
-      var result = RunGenerator(source);
+      var result = GeneratorHarness.RunGenerator(source);
 
-      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0010");
+      var collision = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0010").Subject;
+
+      collision.GetMessage().Should().Contain("non-partial type");
       result.GeneratedSources.Should().BeEmpty();
    }
 
@@ -373,19 +296,20 @@ public class TableRepositoryGeneratorTests
    [Fact]
    public void ValidRelations_ProduceNoDiagnostics_AndMirrorTheRelationsOntoTheDataTypes()
    {
-      var result = RunGenerator(_VALID_RELATIONS);
+      var result = GeneratorHarness.RunGenerator(_VALID_RELATIONS);
 
       result.Diagnostics.Should().BeEmpty();
 
-      var bookRelations = GeneratedSource(result, "Demo_BookTable.Relations.g.cs");
-      var authorRelations = GeneratedSource(result, "Demo_AuthorTable.Relations.g.cs");
-      var registration = GeneratedSource(result, "GeneratedAssemblyRegistration.g.cs");
+      var bookRelations = GeneratorHarness.GeneratedSource(result, "Demo_BookTable.Relations.g.cs");
+      var authorRelations = GeneratorHarness.GeneratedSource(result, "Demo_AuthorTable.Relations.g.cs");
+      var registration = GeneratorHarness.RegistrationSource(result);
 
       bookRelations.Should().Contain("public partial class BookData");
       bookRelations.Should().Contain("public global::Demo.AuthorData? Author { get; set; }");
       bookRelations.Should().Contain("public global::Demo.AuthorData? Editor { get; set; }");
       authorRelations.Should().Contain("public global::System.Collections.Generic.List<global::Demo.BookData> Books { get; set; } = new();");
 
+      // A relation joining one pair of columns keeps the key-based registration it has always used, unchanged.
       registration.Should().Contain(".Relation<global::Demo.AuthorData, long?, long>(x => x.Author, x => x.AuthorId, x => x.AuthorId)");
       registration.Should().Contain(".Relation<global::Demo.AuthorData, long?, long>(x => x.Editor, x => x.EditorId, x => x.AuthorId)");
       registration.Should().Contain(".Relation<global::Demo.BookData, long, long?>(x => x.Books, x => x.AuthorId, x => x.AuthorId)");
@@ -394,7 +318,7 @@ public class TableRepositoryGeneratorTests
    [Fact]
    public void ValidRelations_ProduceCodeThatCompiles()
    {
-      AssertGeneratedSourcesCompile(_VALID_RELATIONS);
+      GeneratorHarness.AssertGeneratedSourcesCompile(_VALID_RELATIONS);
    }
 
    /// <remarks>
@@ -416,13 +340,13 @@ public class TableRepositoryGeneratorTests
          }
          """;
 
-      AssertGeneratedSourcesCompile(source);
+      GeneratorHarness.AssertGeneratedSourcesCompile(source);
    }
 
    [Fact]
    public void RelationWithAnUnknownForeignKey_ProducesDiagnostic()
    {
-      var result = RunGenerator(RelationSource("""
+      var result = GeneratorHarness.RunGenerator(RelationSource("""
          [Relation("NoSuchProperty")]
             public AuthorTable? Author { get; set; }
          """));
@@ -435,12 +359,15 @@ public class TableRepositoryGeneratorTests
    [Fact]
    public void RelationWithAForeignKeyThatCannotMatchThePrimaryKey_ProducesDiagnostic()
    {
-      var result = RunGenerator(RelationSource("""
+      var result = GeneratorHarness.RunGenerator(RelationSource("""
          [Relation(nameof(Title))]
             public AuthorTable? Author { get; set; }
          """));
 
-      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0013");
+      var mismatch = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0013").Subject;
+
+      // The position is named even on a single-column key, so one message shape covers both.
+      mismatch.GetMessage().Should().Contain("at key position 1");
       result.GeneratedSources.Should().NotBeEmpty();
    }
 
@@ -470,7 +397,7 @@ public class TableRepositoryGeneratorTests
          }
          """;
 
-      var result = RunGenerator(source);
+      var result = GeneratorHarness.RunGenerator(source);
 
       result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0014");
       result.GeneratedSources.Should().NotBeEmpty();
@@ -479,7 +406,7 @@ public class TableRepositoryGeneratorTests
    [Fact]
    public void RelationToOneRowThatIsNotNullable_ProducesDiagnostic()
    {
-      var result = RunGenerator(RelationSource("""
+      var result = GeneratorHarness.RunGenerator(RelationSource("""
          [Relation(nameof(AuthorId))]
             public AuthorTable Author { get; set; } = new();
          """));
@@ -491,7 +418,7 @@ public class TableRepositoryGeneratorTests
    [Fact]
    public void RelationOnAnUnsupportedPropertyType_ProducesDiagnostic()
    {
-      var result = RunGenerator(RelationSource("""
+      var result = GeneratorHarness.RunGenerator(RelationSource("""
          [Relation(nameof(AuthorId))]
             public System.Collections.Generic.HashSet<AuthorTable> Authors { get; set; } = new();
          """));
@@ -530,7 +457,7 @@ public class TableRepositoryGeneratorTests
          }
          """;
 
-      var result = RunGenerator(source);
+      var result = GeneratorHarness.RunGenerator(source);
 
       result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0017");
       result.GeneratedSources.Should().NotBeEmpty();
@@ -539,7 +466,7 @@ public class TableRepositoryGeneratorTests
    [Fact]
    public void RelationCombinedWithAColumnAttribute_ProducesDiagnostic()
    {
-      var result = RunGenerator(RelationSource("""
+      var result = GeneratorHarness.RunGenerator(RelationSource("""
          [Relation(nameof(AuthorId))]
             [Column("author")]
             public AuthorTable? Author { get; set; }
@@ -580,66 +507,5 @@ public class TableRepositoryGeneratorTests
             public string Name { get; set; } = string.Empty;
          }
          """;
-   }
-
-   private static string GeneratedSource(GeneratorRunResult result, string hintName)
-   {
-      return result.GeneratedSources.Single(x => x.HintName == hintName).SourceText.ToString();
-   }
-
-   /// <summary>
-   ///    Compiles the generator's output alongside the source that produced it, which is the only thing that proves the
-   ///    emitted mapping calls resolve against the overloads the library actually ships.
-   /// </summary>
-   private static void AssertGeneratedSourcesCompile(string source)
-   {
-      CreateDriver().RunGeneratorsAndUpdateCompilation(CreateCompilation(source), out var updated, out _);
-
-      var errors = updated.GetDiagnostics().Where(x => x.Severity == DiagnosticSeverity.Error).ToList();
-
-      errors.Should().BeEmpty(string.Join(Environment.NewLine, errors.Select(x => x.ToString())));
-   }
-
-   private static GeneratorRunResult RunGenerator(string source)
-   {
-      return CreateDriver().RunGenerators(CreateCompilation(source)).GetRunResult().Results.Single();
-   }
-
-   /// <remarks>
-   ///    The driver parses the sources it adds itself, and refuses to add them to a compilation parsed at another
-   ///    language version, so it is handed the same options.
-   /// </remarks>
-   private static GeneratorDriver CreateDriver()
-   {
-      return CSharpGeneratorDriver.Create(
-         generators: [new TableRepositoryGenerator().AsSourceGenerator()],
-         additionalTexts: null,
-         parseOptions: _parseOptions,
-         optionsProvider: null
-      );
-   }
-
-   private static CSharpCompilation CreateCompilation(string source)
-   {
-      var syntaxTrees = new[]
-      {
-         CSharpSyntaxTree.ParseText(SourceText.From(source), _parseOptions),
-         CSharpSyntaxTree.ParseText(SourceText.From(_RUNTIME_STUBS), _parseOptions)
-      };
-
-      // Nullable reference types are on, the way a consumer's project has them: a relation to one row states its
-      // cardinality partly through nullability, which cannot be read at all in a nullable-oblivious compilation.
-      return CSharpCompilation.Create(
-         assemblyName: "GeneratorTests",
-         syntaxTrees: syntaxTrees,
-         references: GetMetadataReferences(),
-         options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary).WithNullableContextOptions(NullableContextOptions.Enable)
-      );
-   }
-
-   private static IEnumerable<MetadataReference> GetMetadataReferences()
-   {
-      var trustedAssemblies = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator);
-      return trustedAssemblies.Select(path => MetadataReference.CreateFromFile(path));
    }
 }

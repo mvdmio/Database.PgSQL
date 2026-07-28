@@ -36,10 +36,10 @@ public class GeneratedRepositoryInterfaceTests
 
       public Task<ProfileData> CreateAsync(CreateProfileCommand data, CancellationToken ct = default) => throw new NotSupportedException();
       public Task<IEnumerable<ProfileData>> GetAllAsync(CancellationToken ct = default) => throw new NotSupportedException();
-      public Task<ProfileData?> GetByProfileIdAsync(long profileId, CancellationToken ct = default) => throw new NotSupportedException();
+      public Task<ProfileData?> GetByPrimaryKeyAsync(long profileId, CancellationToken ct = default) => throw new NotSupportedException();
       public Task<ProfileData?> GetByHandleAsync(string handle, CancellationToken ct = default) => throw new NotSupportedException();
       public Task<ProfileData> UpdateAsync(UpdateProfileCommand data, CancellationToken ct = default) => throw new NotSupportedException();
-      public Task<bool> DeleteByProfileIdAsync(long profileId, CancellationToken ct = default) => throw new NotSupportedException();
+      public Task<bool> DeleteByPrimaryKeyAsync(long profileId, CancellationToken ct = default) => throw new NotSupportedException();
       public Task<bool> DeleteByHandleAsync(string handle, CancellationToken ct = default) => throw new NotSupportedException();
    }
 }

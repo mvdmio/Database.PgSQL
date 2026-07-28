@@ -78,6 +78,60 @@ public sealed class TestFixture : IAsyncLifetime
          )
          """
       );
+
+      // The composite-key table set, separate from the author-and-book one so that set keeps pinning the single-column
+      // key path. Real composite foreign keys, and a matching index on each side of the relation the join tests read —
+      // except for primary_task_id, which carries none because tasks already reference projects and a constraint the
+      // other way could not be satisfied by either insertion order.
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_tenant_projects (
+            account_id      BIGINT NOT NULL,
+            project_id      BIGINT GENERATED ALWAYS AS IDENTITY,
+            code            TEXT NOT NULL UNIQUE,
+            name            TEXT NOT NULL,
+            primary_task_id BIGINT NULL,
+            PRIMARY KEY (account_id, project_id)
+         )
+         """
+      );
+
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_tenant_tasks (
+            account_id BIGINT NOT NULL,
+            task_id    BIGINT NOT NULL,
+            project_id BIGINT NOT NULL,
+            title      TEXT NOT NULL,
+            PRIMARY KEY (account_id, task_id),
+            FOREIGN KEY (account_id, project_id) REFERENCES public.generated_tenant_projects (account_id, project_id)
+         )
+         """
+      );
+
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE INDEX IF NOT EXISTS generated_tenant_tasks_project_idx
+         ON public.generated_tenant_tasks (account_id, project_id)
+         """
+      );
+
+      // project_ref is stored and generated, non-null only for its own kind. A composite foreign key over it is valid
+      // even so: under MATCH SIMPLE a row with a null in the key satisfies the constraint.
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_tenant_links (
+            account_id  BIGINT NOT NULL,
+            link_id     BIGINT NOT NULL,
+            kind        TEXT NOT NULL,
+            ordinal     INTEGER NOT NULL,
+            target_id   BIGINT NOT NULL,
+            project_ref BIGINT GENERATED ALWAYS AS (CASE WHEN kind = 'project' THEN target_id END) STORED,
+            PRIMARY KEY (account_id, link_id, kind, ordinal),
+            FOREIGN KEY (account_id, project_ref) REFERENCES public.generated_tenant_projects (account_id, project_id)
+         )
+         """
+      );
    }
 
    public async ValueTask DisposeAsync()

@@ -363,8 +363,8 @@ var created = await repository.CreateAsync(new CreateUserCommand
    FirstName = "Alice"
 }, ct);
 
-var all = await repository.GetAllAsync(ct);                             // IEnumerable<UserData>
-var byId = await repository.GetByUserIdAsync(created.UserId, ct);        // UserData?
+var all = await repository.GetAllAsync(ct);                              // IEnumerable<UserData>
+var byId = await repository.GetByPrimaryKeyAsync(created.UserId, ct);    // UserData?
 var byName = await repository.GetByUserNameAsync("alice", ct);           // UserData?
 
 var updated = await repository.UpdateAsync(new UpdateUserCommand
@@ -375,11 +375,43 @@ var updated = await repository.UpdateAsync(new UpdateUserCommand
    LastLoginAt = DateTimeOffset.UtcNow
 }, ct);
 
-var deleted = await repository.DeleteByUserIdAsync(created.UserId, ct);  // false when no row matched
+var deleted = await repository.DeleteByPrimaryKeyAsync(created.UserId, ct);  // false when no row matched
 ```
 
 A repository takes a `DatabaseConnection` and runs all of its SQL through it, so it joins whatever transaction that
 connection has open.
+
+### Composite Primary Keys
+
+Mark two or more properties `[PrimaryKey]` and the key is composite. The order you declare them in is the key order, and
+it is contract: it fixes the parameter order of the generated lookup and delete, and the order a relation's foreign keys
+are matched against the target's key.
+
+```csharp
+[Table("public.projects")]
+public partial class ProjectTable
+{
+   [PrimaryKey] public long AccountId { get; set; }
+   [PrimaryKey] [Generated] public long ProjectId { get; set; }
+
+   public string Name { get; set; } = string.Empty;
+}
+```
+
+```csharp
+var project = await repository.GetByPrimaryKeyAsync(accountId, projectId, ct);
+var deleted = await repository.DeleteByPrimaryKeyAsync(accountId, projectId, ct);
+```
+
+Everything else is the same as for a single-column key: a data type, a create command, an update command, a repository
+and its interface, all generated the same way, with the update addressing the row by every key member. A key member may
+be `[Generated]`, so a key that is part supplied by you and part computed by the database works without special
+handling. `[Unique]` columns keep their own `GetBy{Property}Async`/`DeleteBy{Property}Async` pair, because the property
+name is the only thing telling two unique lookups apart.
+
+A key member may not be nullable — that is a build error, `PGSQL0020`. A nullable key member is a key PostgreSQL would
+reject, and it is also what would make the query surface widen a relation's join with an "or both are null" alternative,
+which costs the join its index on the second column. Refusing it makes that shape impossible to reach.
 
 ### What Gets Generated
 
@@ -390,7 +422,7 @@ otherwise:
 |---------------------|---------------------------------------------------------------|
 | `UserData`          | Every mapped property, plus a mirrored property per relation — the type all reads and writes return |
 | `CreateUserCommand` | Every property except `[Generated]` ones                       |
-| `UpdateUserCommand` | The primary key, plus every other non-`[Generated]` property    |
+| `UpdateUserCommand` | Every primary key property, plus every other non-`[Generated]` property |
 | `IUserRepository`   | The repository interface                                       |
 | `UserRepository`    | The implementation                                             |
 
@@ -402,11 +434,13 @@ The repository exposes:
 
 - `CreateAsync(Create…Command, CancellationToken)` → the created row
 - `GetAllAsync(CancellationToken)` → every row
-- `GetBy{Property}Async(value, CancellationToken)` → the matching row or `null`; one method per primary key and
-  `[Unique]` property
-- `UpdateAsync(Update…Command, CancellationToken)` → the updated row, matched on the primary key
-- `DeleteBy{Property}Async(value, CancellationToken)` → `true` when a row was deleted; one method per primary key and
-  `[Unique]` property
+- `GetByPrimaryKeyAsync(…, CancellationToken)` → the matching row or `null`; one parameter per primary key property, in
+  declaration order. Always this name, whatever the key is called and however many columns it has
+- `GetBy{Property}Async(value, CancellationToken)` → the matching row or `null`; one method per `[Unique]` property
+- `UpdateAsync(Update…Command, CancellationToken)` → the updated row, matched on every primary key property
+- `DeleteByPrimaryKeyAsync(…, CancellationToken)` → `true` when a row was deleted; the same parameters as the lookup
+- `DeleteBy{Property}Async(value, CancellationToken)` → `true` when a row was deleted; one method per `[Unique]`
+  property
 - `Query(TimeSpan? commandTimeout = null)` → an `IQueryable<…Data>` you compose against — see
   [Composable Queries](#composable-queries)
 
@@ -588,6 +622,32 @@ parent does not oblige the parent to declare the collection back. Two relations 
 either direction, which is how a hierarchy works. Many-to-many needs no new concept: declare a relation to the join
 table, which is a table definition like any other, and a relation from there to the far side.
 
+When the target's primary key is composite, name one foreign-key property per key member, in the key's declaration order:
+
+```csharp
+[Table("public.tasks")]
+public partial class TaskTable
+{
+   [PrimaryKey] public long AccountId { get; set; }
+   [PrimaryKey] public long TaskId { get; set; }
+   public long ProjectId { get; set; }
+
+   // Paired positionally against ProjectTable's (AccountId, ProjectId).
+   [Relation(nameof(AccountId), nameof(ProjectId))]
+   public ProjectTable? Project { get; set; }
+}
+```
+
+Naming a different number of foreign keys than the target's key has members is a build error, `PGSQL0019`, and a pair
+whose types cannot match is `PGSQL0013`, which names the position as well as both properties. A foreign key does not have
+to be part of the declaring table's own key, and it is fine for it to overlap: a tenancy column appearing on both sides
+of the join is the ordinary case. A foreign key may be nullable against a non-nullable key member — that is what makes
+the relation an outer join, and it still renders as plain equality.
+
+Everything else costs nothing extra. Filtering, ordering, existence predicates and `Include` all read exactly as they do
+through a single-column relation, and the generated join constrains every key column so the database can use a composite
+index on it.
+
 A relation is not a column. It gets no column mapping, no `GetBy…`/`DeleteBy…` pair, and no place in the create and
 update commands, which stay as flat as the table they write to. It changes no SQL on `db.Dapper`, and it emits no DDL:
 the annotation is a claim about a foreign-key column that already exists, and nothing checks it against the real
@@ -683,11 +743,11 @@ fake, for instance — they throw `NotSupportedException` rather than quietly lo
 | Attribute       | Effect                                                                                                |
 |-----------------|-------------------------------------------------------------------------------------------------------|
 | `[Table("…")]`  | Marks the class and names the table. Takes `schema.table`, or `table` for the `public` schema           |
-| `[PrimaryKey]`  | Marks the key used by `UpdateAsync`, `GetBy…`, and `DeleteBy…`. Exactly one property must carry it      |
+| `[PrimaryKey]`  | Marks a property as part of the key used by `UpdateAsync`, `GetByPrimaryKeyAsync` and `DeleteByPrimaryKeyAsync`. At least one property must carry it; two or more makes the key composite, in declaration order |
 | `[Unique]`      | Adds a `GetBy…`/`DeleteBy…` pair for that property                                                     |
 | `[Column("…")]` | Overrides the column name. Without it, the property name is converted to `snake_case`                    |
 | `[Generated]`   | The database produces the value (identity, computed, or defaulted): it is read back but never written   |
-| `[Relation("…")]` | Marks the property as a relation to another table definition rather than a column, naming the foreign-key property that resolves it |
+| `[Relation("…")]` | Marks the property as a relation to another table definition rather than a column, naming one foreign-key property per member of the target's primary key |
 
 The `snake_case` conversion inserts an underscore before every uppercase letter, so `UserId` becomes `user_id` but
 `UserID` becomes `user_i_d` — name the column explicitly with `[Column]` when the property contains an acronym.
@@ -698,12 +758,14 @@ The generator reports a build error when a table definition does not satisfy the
 
 - The class is `partial`
 - `[Table]` names a valid `table` or `schema.table`
-- Exactly one property is marked `[PrimaryKey]`
-- At least one property is neither the primary key nor `[Generated]`, so there is something to update
+- At least one property is marked `[PrimaryKey]`, and no property carrying it is nullable
+- At least one property is neither part of the primary key nor `[Generated]`, so there is something to update
 - Mapped properties are public, non-static, not indexers, and have both a public getter and setter
-- No two properties map to the same column, and no two lookup properties yield the same method name
+- No two properties map to the same column, no two `[Unique]` properties yield the same method name, and no `[Unique]`
+  property is named so that its lookup would collide with `GetByPrimaryKeyAsync`
 - A `[Relation]` property is a table definition or a supported collection of one, is nullable when it points at one row,
-  carries no `[Column]`, and names a foreign-key property that exists and can join the target's primary key
+  carries no `[Column]`, and names as many foreign-key properties as the target's primary key has members, each of which
+  exists and can join the member it is paired with
 
 A separate analyzer warns — rather than errors — when the class name does not end with `Table`, since the suffix only
 determines the generated names. See [Build-Time Diagnostics](#build-time-diagnostics) for the codes.
@@ -941,28 +1003,31 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0001` | Warning  | `IDbMigration` class name does not match `_{YYYYMMDDHHmm}_{Name}`                  |
 | `PGSQL0002` | Warning  | `[Table]` class name does not end with `Table`                                     |
 | `PGSQL0003` | Error    | `[Table]` class is not `partial`                                                   |
-| `PGSQL0004` | Error    | `[Table]` class does not declare exactly one `[PrimaryKey]`                        |
+| `PGSQL0004` | Error    | `[Table]` class declares no `[PrimaryKey]` property                                |
 | `PGSQL0005` | Error    | Two properties map to the same column                                              |
-| `PGSQL0006` | Error    | Two lookup properties would generate the same method name                          |
+| `PGSQL0006` | Error    | Two `[Unique]` properties would generate the same method name                       |
 | `PGSQL0007` | Error    | No updatable columns, so no update command can be generated                        |
 | `PGSQL0008` | Error    | `[Table]` value is not `table` or `schema.table`                                   |
 | `PGSQL0009` | Error    | A property is not a public instance property with a public getter and setter        |
-| `PGSQL0010` | Error    | A generated type name is already taken by a non-partial type in the same namespace  |
+| `PGSQL0010` | Error    | A generated name is already taken — by a non-partial type in the same namespace, or by the primary key's own lookup |
 | `PGSQL0011` | Warning  | A property type cannot be mapped by the query surface — register a conversion       |
-| `PGSQL0012` | Error    | A `[Relation]` names a foreign-key property that does not exist                      |
-| `PGSQL0013` | Error    | A `[Relation]` foreign key cannot match the target's primary key type                |
+| `PGSQL0012` | Error    | A `[Relation]` names a foreign-key property that does not exist — once per name       |
+| `PGSQL0013` | Error    | A `[Relation]` foreign key cannot match the key member it is paired with, at a named position |
 | `PGSQL0014` | Error    | A `[Relation]` target is not a `[Table]` class in the same compilation               |
 | `PGSQL0015` | Error    | A `[Relation]` to one row is not nullable                                            |
 | `PGSQL0016` | Error    | A `[Relation]` property type is neither a table definition nor a supported collection of one |
 | `PGSQL0017` | Error    | A `[Relation]` property is not a public instance property with a public getter and setter |
 | `PGSQL0018` | Error    | A property carries both `[Relation]` and `[Column]`                                  |
+| `PGSQL0019` | Error    | A `[Relation]` names a different number of foreign keys than the target's primary key has members |
+| `PGSQL0020` | Error    | A `[PrimaryKey]` property is nullable                                                |
 
 `PGSQL0001` is a warning rather than an error because you can implement `Identifier` and `Name` yourself instead of
 following the naming convention. If you do neither, a misnamed migration class throws the moment those properties are
 read. `PGSQL0011` is a warning because the rest of the repository still works — only `Query()` cannot handle that
-column until a conversion is registered. `PGSQL0012` through `PGSQL0018` drop only the relation they describe and let
+column until a conversion is registered. `PGSQL0012` through `PGSQL0019` drop only the relation they describe and let
 the rest of the table generate, so the message you read is the mistake you made rather than a wall of
-type-not-found errors from everything that names the missing data type.
+type-not-found errors from everything that names the missing data type. Everything else — including `PGSQL0020` —
+abandons the table, because a malformed key leaves every generated signature undefined rather than one relation.
 
 ## CLI Tool
 
