@@ -36,6 +36,10 @@ _Avoid_: Entity, model, POCO, mapping.
 The order of a **Table definition**'s primary-key properties, taken from their source declaration order. It fixes the parameter order of the generated primary-key lookup and the order a **Relation**'s foreign-key properties are matched in, so it is part of the generated API rather than a detail of the mapping.
 _Avoid_: Key ordinal, column order, index order.
 
+**Nullability claim**:
+What a **Table definition** states about whether one of its columns can hold null. Where it states nothing the column is taken to be nullable, matching PostgreSQL's own column default; a primary-key member is never nullable, because the database will not permit it. Never verified against the real table, and load-bearing rather than descriptive — the **Query surface** narrows a predicate on the strength of it, so a column holding a null it was claimed not to fails when the row is read rather than quietly returning wrong rows.
+_Avoid_: Nullability, NOT NULL constraint (that is the database's, which this never creates and never checks), required, optional.
+
 **Entity name**:
 A **Table definition**'s class name with the `Table` suffix removed. The stem every generated type name is built from, so it — not the table name — is what appears in consuming code.
 _Avoid_: Table name, class name, type name.

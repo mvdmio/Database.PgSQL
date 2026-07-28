@@ -1,6 +1,6 @@
 # Carry column nullability into generated query mappings
 
-Status: needs-triage
+Status: specced — see [.agents/specs/query-column-nullability.md](../specs/query-column-nullability.md)
 
 ## Motivation
 
