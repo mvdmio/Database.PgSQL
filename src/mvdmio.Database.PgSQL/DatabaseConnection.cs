@@ -701,9 +701,16 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
    }
 
+   /// <remarks>
+   ///    Dynamic JSON is enabled here as well as in <see cref="DatabaseConnectionFactory" />, so which construction path
+   ///    a consumer took stops changing what a JSON column does. Aligned by enabling it in both rather than by removing
+   ///    it from one: enabling it only widens what a parameter may hold, whereas taking it away could break a caller
+   ///    already relying on it.
+   /// </remarks>
    private static NpgsqlDataSource BuildDataSource(string connectionString, Action<NpgsqlDataSourceBuilder> builderAction)
    {
       var builder = new NpgsqlDataSourceBuilder(connectionString);
+      builder.EnableDynamicJson();
       builderAction.Invoke(builder);
       return builder.Build();
    }

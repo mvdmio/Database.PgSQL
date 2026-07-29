@@ -6,10 +6,9 @@ namespace mvdmio.Database.PgSQL.Tests.Integration.OData;
 
 /// <summary>
 ///    What OData's convention model builder makes of the types the generator emits. The conformance entity is held to a
-///    standard — every one of its properties must be an EDM primitive — while the rest are characterization tests: the
-///    generator's mappable-type allowlist admits property types with no straightforward EDM equivalent, and these
-///    record what actually happens to each, so a consumer can plan around it and a version bump that changes it fails
-///    the build.
+///    standard — every one of its properties must be an EDM primitive — while the rest are characterization tests: a
+///    table definition admits property types with no straightforward EDM equivalent, and these record what actually
+///    happens to each, so a consumer can plan around it and a version bump that changes it fails the build.
 /// </summary>
 /// <remarks>
 ///    No database here: what is being asked is a question about the model, and the model is built from CLR types alone.
@@ -31,8 +30,8 @@ public class GeneratedTypeModelTests
    [Fact]
    public void ConventionModelBuilder_BuildsAModelForEveryMappableType()
    {
-      // The headline finding: nothing on the allowlist makes model building fail. A repository generated from a real
-      // table will start up, whatever its column types.
+      // The headline finding: none of these makes model building fail. A repository generated from a real table will
+      // start up, whatever its column types.
       AwkwardEntityType().DeclaredProperties.Select(x => x.Name).Should().BeEquivalentTo(
          nameof(AwkwardData.AwkwardId),
          nameof(AwkwardData.HomePage),
@@ -43,9 +42,6 @@ public class GeneratedTypeModelTests
          nameof(AwkwardData.Payload),
          nameof(AwkwardData.Initial),
          nameof(AwkwardData.SignedOffset),
-         nameof(AwkwardData.SmallCount),
-         nameof(AwkwardData.MediumCount),
-         nameof(AwkwardData.LargeCount),
          nameof(AwkwardData.OccurredAt)
       );
    }
@@ -63,20 +59,10 @@ public class GeneratedTypeModelTests
 
    [Theory]
    [InlineData(nameof(AwkwardData.Initial), "Edm.String", "EDM has no character type, so a char widens to a one-character string")]
-   [InlineData(nameof(AwkwardData.SmallCount), "Edm.Int32", "EDM has no unsigned integer, so a ushort widens")]
-   [InlineData(nameof(AwkwardData.MediumCount), "Edm.Int64", "EDM has no unsigned integer, so a uint widens")]
    [InlineData(nameof(AwkwardData.OccurredAt), "Edm.DateTimeOffset", "EDM offers only an offset-bearing instant, so a DateTime acquires one by convention")]
    public void ConventionModelBuilder_WidensTheTypeToTheNearestEdmPrimitive(string propertyName, string edmTypeName, string because)
    {
       TypeNameOf(propertyName).Should().Be(edmTypeName, because);
-   }
-
-   [Fact]
-   public void ConventionModelBuilder_MapsAnUnsignedLong_ToASignedLongAndSoLosesTheTopHalfOfItsRange()
-   {
-      // The only lossy mapping on the list. A column holding a value above long.MaxValue cannot be represented in the
-      // model at all, so it is not usable in an OData endpoint even though the generator accepts it.
-      TypeNameOf(nameof(AwkwardData.LargeCount)).Should().Be("Edm.Int64");
    }
 
    [Fact]

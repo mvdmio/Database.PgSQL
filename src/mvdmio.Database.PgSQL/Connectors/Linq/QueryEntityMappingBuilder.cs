@@ -1,5 +1,6 @@
 using JetBrains.Annotations;
 using LinqToDB.Mapping;
+using NpgsqlTypes;
 using System.Linq.Expressions;
 
 namespace mvdmio.Database.PgSQL.Connectors.Linq;
@@ -49,15 +50,82 @@ public sealed class QueryEntityMappingBuilder<TEntity>
       ArgumentNullException.ThrowIfNull(property);
       ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
 
-      var propertyBuilder = _builder.Property(property).HasColumnName(columnName);
+      Configure(_builder.Property(property).HasColumnName(columnName), isPrimaryKey, isNotNull);
 
-      if (isPrimaryKey)
-         propertyBuilder.IsPrimaryKey();
+      return this;
+   }
 
-      // The key rule lives here rather than in the generator, because this builder is public surface a consumer calls
-      // by hand: a key member cannot hold null, so every caller gets that without having to say it.
-      if (isPrimaryKey || isNotNull)
-         propertyBuilder.IsNotNull();
+   /// <summary>
+   ///    Maps a property of <typeparamref name="TEntity" /> to a database column whose storage the definition states,
+   ///    where the value needs no conversion to reach it.
+   /// </summary>
+   /// <typeparam name="TProperty">The property type.</typeparam>
+   /// <param name="property">An expression selecting the property to map.</param>
+   /// <param name="columnName">The name of the database column the property maps to.</param>
+   /// <param name="storedAs">The PostgreSQL type the value is stored as.</param>
+   /// <param name="isPrimaryKey">Whether the column is part of the table's primary key. Every member of a composite key sets it.</param>
+   /// <param name="isNotNull">Whether the column cannot hold null. See the overload without a storage claim.</param>
+   /// <returns>The same builder, so calls can be chained.</returns>
+   /// <remarks>
+   ///    This is the shape a <c>string</c> on a <c>jsonb</c> column takes: the value travels as it stands and only the
+   ///    type it is bound as differs from what the driver would infer. A claim the provider cannot represent is dropped
+   ///    here rather than refused — the Dapper surface still honours it, and the build warns that the two diverge.
+   /// </remarks>
+   public QueryEntityMappingBuilder<TEntity> Column<TProperty>(
+      Expression<Func<TEntity, TProperty>> property,
+      string columnName,
+      NpgsqlDbType storedAs,
+      bool isPrimaryKey = false,
+      bool isNotNull = false
+   )
+   {
+      ArgumentNullException.ThrowIfNull(property);
+      ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
+
+      Configure(MapColumn(property, columnName, storedAs), isPrimaryKey, isNotNull);
+
+      return this;
+   }
+
+   /// <summary>
+   ///    Maps a property of <typeparamref name="TEntity" /> to a database column whose storage the definition states,
+   ///    converting the value on its way to and from the column.
+   /// </summary>
+   /// <typeparam name="TProperty">The property type.</typeparam>
+   /// <typeparam name="TStored">The type the value is converted to before it reaches the column.</typeparam>
+   /// <param name="property">An expression selecting the property to map.</param>
+   /// <param name="columnName">The name of the database column the property maps to.</param>
+   /// <param name="storedAs">The PostgreSQL type the converted value is stored as.</param>
+   /// <param name="toStored">Converts a property value to what the column holds.</param>
+   /// <param name="fromStored">Converts what the column holds back to a property value.</param>
+   /// <param name="isPrimaryKey">Whether the column is part of the table's primary key. Every member of a composite key sets it.</param>
+   /// <param name="isNotNull">Whether the column cannot hold null. See the overload without a storage claim.</param>
+   /// <returns>The same builder, so calls can be chained.</returns>
+   /// <remarks>
+   ///    This is the shape an enum column takes, and the reason the claim is per column rather than per type: the same
+   ///    enum can be stored as text here and as a number on another table, and each column carries its own conversion.
+   ///    The conversion applies to a predicate's parameter as well as to a materialized row, which is what keeps
+   ///    <c>Where(x =&gt; x.State == Open)</c> comparing against what the column actually holds.
+   /// </remarks>
+   public QueryEntityMappingBuilder<TEntity> Column<TProperty, TStored>(
+      Expression<Func<TEntity, TProperty>> property,
+      string columnName,
+      NpgsqlDbType storedAs,
+      Expression<Func<TProperty, TStored>> toStored,
+      Expression<Func<TStored, TProperty>> fromStored,
+      bool isPrimaryKey = false,
+      bool isNotNull = false
+   )
+   {
+      ArgumentNullException.ThrowIfNull(property);
+      ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
+      ArgumentNullException.ThrowIfNull(toStored);
+      ArgumentNullException.ThrowIfNull(fromStored);
+
+      var propertyBuilder = MapColumn(property, columnName, storedAs);
+
+      propertyBuilder.HasConversion(toStored, fromStored);
+      Configure(propertyBuilder, isPrimaryKey, isNotNull);
 
       return this;
    }
@@ -181,5 +249,39 @@ public sealed class QueryEntityMappingBuilder<TEntity>
       _builder.Association(property, predicate, canBeNull: true);
 
       return this;
+   }
+
+   /// <summary>The column, its name, and its storage claim where the provider can represent one.</summary>
+   /// <remarks>
+   ///    A claim the provider has no equivalent for is left unstated rather than refused: the Dapper surface still honours
+   ///    it and the build warns that the two diverge, which beats a registration that throws at startup.
+   /// </remarks>
+   private PropertyMappingBuilder<TEntity, TProperty> MapColumn<TProperty>(
+      Expression<Func<TEntity, TProperty>> property,
+      string columnName,
+      NpgsqlDbType storedAs
+   )
+   {
+      var propertyBuilder = _builder.Property(property).HasColumnName(columnName);
+      var dataType = QueryStorageTypes.DataTypeFor(storedAs);
+
+      if (dataType is not null)
+         propertyBuilder.HasDataType(dataType.Value);
+
+      return propertyBuilder;
+   }
+
+   /// <summary>What every <c>Column</c> overload settles the same way, whatever it says about storage.</summary>
+   /// <remarks>
+   ///    The key rule lives here rather than in the generator, because this builder is public surface a consumer calls
+   ///    by hand: a key member cannot hold null, so every caller gets that without having to say it.
+   /// </remarks>
+   private static void Configure<TProperty>(PropertyMappingBuilder<TEntity, TProperty> propertyBuilder, bool isPrimaryKey, bool isNotNull)
+   {
+      if (isPrimaryKey)
+         propertyBuilder.IsPrimaryKey();
+
+      if (isPrimaryKey || isNotNull)
+         propertyBuilder.IsNotNull();
    }
 }

@@ -444,7 +444,7 @@ public class TableRepositoryGeneratorTests
             public long? AuthorId { get; set; }
 
             [Relation(nameof(AuthorId))]
-            public AuthorTable? Author { get; private set; }
+            public AuthorTable? Author => null;
          }
 
          [Table("public.authors")]

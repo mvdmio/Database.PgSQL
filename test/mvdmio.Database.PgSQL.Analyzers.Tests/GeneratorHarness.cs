@@ -41,6 +41,7 @@ internal static class GeneratorHarness
 
             public bool Null { get; set; }
             public bool NotNull { get; set; }
+            public NpgsqlTypes.NpgsqlDbType StoredAs { get; set; }
          }
 
          [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
@@ -50,6 +51,23 @@ internal static class GeneratorHarness
          public sealed class RelationAttribute : System.Attribute
          {
             public RelationAttribute(params string[] foreignKeyPropertyNames) { }
+         }
+      }
+
+      namespace NpgsqlTypes
+      {
+         // A subset, with the driver's own values, because the generator resolves a claimed member's name from the
+         // constant the attribute carries. Only members a test claims have to be here.
+         public enum NpgsqlDbType
+         {
+            Bigint = 1,
+            Integer = 9,
+            Smallint = 18,
+            Text = 19,
+            Json = 35,
+            Jsonb = 36,
+            Inet = 24,
+            Uuid = 27
          }
       }
 
@@ -93,6 +111,14 @@ internal static class GeneratorHarness
          }
       }
 
+      namespace mvdmio.Database.PgSQL.Dapper.QueryParameters
+      {
+         public sealed class TypedQueryParameter
+         {
+            public TypedQueryParameter(object? value, NpgsqlTypes.NpgsqlDbType dbType) { }
+         }
+      }
+
       namespace mvdmio.Database.PgSQL.Connectors.Linq
       {
          public sealed class LinqDatabaseConnector
@@ -104,6 +130,18 @@ internal static class GeneratorHarness
             where TEntity : class
          {
             public QueryEntityMappingBuilder<TEntity> Column<TProperty>(System.Linq.Expressions.Expression<System.Func<TEntity, TProperty>> property, string columnName, bool isPrimaryKey = false, bool isNotNull = false) => throw null!;
+
+            public QueryEntityMappingBuilder<TEntity> Column<TProperty>(System.Linq.Expressions.Expression<System.Func<TEntity, TProperty>> property, string columnName, NpgsqlTypes.NpgsqlDbType storedAs, bool isPrimaryKey = false, bool isNotNull = false) => throw null!;
+
+            public QueryEntityMappingBuilder<TEntity> Column<TProperty, TStored>(
+               System.Linq.Expressions.Expression<System.Func<TEntity, TProperty>> property,
+               string columnName,
+               NpgsqlTypes.NpgsqlDbType storedAs,
+               System.Linq.Expressions.Expression<System.Func<TProperty, TStored>> toStored,
+               System.Linq.Expressions.Expression<System.Func<TStored, TProperty>> fromStored,
+               bool isPrimaryKey = false,
+               bool isNotNull = false
+            ) => throw null!;
 
             public QueryEntityMappingBuilder<TEntity> Relation<TTarget, TThisKey, TTargetKey>(
                System.Linq.Expressions.Expression<System.Func<TEntity, TTarget?>> property,

@@ -1,6 +1,8 @@
 using AwesomeAssertions;
+using mvdmio.Database.PgSQL.Dapper.QueryParameters;
 using mvdmio.Database.PgSQL.Exceptions;
 using mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
+using NpgsqlTypes;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData;
 
@@ -28,9 +30,9 @@ public class AwkwardTypeQueryTests : ODataTestBase
    [Fact]
    public async Task Query_OverEveryAwkwardType_ReadsTheValuesBackThroughTheGeneratedMapping()
    {
-      var awkwardId = await InsertAwkwardRowAsync();
+      var created = await InsertAwkwardRowAsync();
 
-      var read = await _repository.Query().Where(x => x.AwkwardId == awkwardId).SingleAsync(CancellationToken);
+      var read = await _repository.Query().Where(x => x.AwkwardId == created.AwkwardId).SingleAsync(CancellationToken);
 
       read.HomePage.Should().Be(new Uri("https://example.com/awkward"));
       read.Metadata.Should().BeEquivalentTo(new Dictionary<string, string> { ["tier"] = "gold" });
@@ -40,13 +42,7 @@ public class AwkwardTypeQueryTests : ODataTestBase
       read.Payload.Should().Equal((byte)1, (byte)2, (byte)3);
       read.Initial.Should().Be('a');
       read.SignedOffset.Should().Be(-3);
-      read.SmallCount.Should().Be(42);
-      read.MediumCount.Should().Be(4_000_000_000);
       read.OccurredAt.Should().Be(new DateTime(2024, 5, 6, 7, 8, 9, DateTimeKind.Unspecified));
-
-      // Above long.MaxValue, so it reads back fine here but cannot be represented in an OData model at all — see
-      // GeneratedTypeModelTests.
-      read.LargeCount.Should().Be(9_000_000_000_000_000_000);
    }
 
    [Fact]
@@ -59,51 +55,76 @@ public class AwkwardTypeQueryTests : ODataTestBase
       var matches = await query.ToListAsync(CancellationToken);
 
       matches.Should().ContainSingle();
-      matches[0].SmallCount.Should().Be(42);
+      matches[0].SignedOffset.Should().Be(-3);
    }
 
    /// <summary>
-   ///    A characterization test, and a finding rather than a design: the generator's mappable-type allowlist admits the
-   ///    signed byte and all three unsigned integer widths, but the PostgreSQL driver has no mapping for their
-   ///    <c>DbType</c>s, so a row carrying any of them can never be written through the generated repository. Reading
-   ///    works, which is why the tests above can still cover the types. Tracked in
-   ///    <c>.agents/ideas/generator-driver-unsupported-numeric-types.md</c>.
+   ///    A signed byte is written through the generated repository, which it could not be before the storage claim
+   ///    existed. Nothing declares the claim: the widening is what an unclaimed <c>sbyte</c> gets, because widening is all
+   ///    it ever needed.
    /// </summary>
    [Fact]
-   public async Task Create_OnATableCarryingASignedByteOrUnsignedInteger_IsRefusedByTheDriver()
+   public async Task Create_OnATableCarryingASignedByte_WritesTheRow()
    {
-      var failure = await Record.ExceptionAsync(
-         () => _repository.CreateAsync(
-            new CreateAwkwardCommand
-            {
-               BirthDate = new DateOnly(1985, 6, 15),
-               WakeTime = new TimeOnly(8, 30),
-               Duration = TimeSpan.FromMinutes(30),
-               Initial = 'b',
-               SignedOffset = 1,
-               SmallCount = 1,
-               MediumCount = 1,
-               LargeCount = 1,
-               OccurredAt = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Unspecified)
-            },
-            CancellationToken
+      var created = await _repository.CreateAsync(
+         new CreateAwkwardCommand
+         {
+            BirthDate = new DateOnly(1985, 6, 15),
+            WakeTime = new TimeOnly(8, 30),
+            Duration = TimeSpan.FromMinutes(30),
+            Initial = 'b',
+            SignedOffset = -7,
+            OccurredAt = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Unspecified)
+         },
+         CancellationToken
+      );
+
+      created.SignedOffset.Should().Be(-7);
+
+      var read = await _repository.Query().Where(x => x.SignedOffset == (sbyte)-7).SingleAsync(CancellationToken);
+
+      read.AwkwardId.Should().Be(created.AwkwardId);
+   }
+
+   /// <summary>
+   ///    Why the claim is applied where the value is bound rather than left to inference. The driver has no mapping for
+   ///    the <c>DbType</c> Dapper infers from a signed byte, so a bare parameter is refused — and stating the PostgreSQL
+   ///    type on the same value is the whole of the fix a generated repository now applies for itself.
+   /// </summary>
+   [Fact]
+   public async Task Parameter_CarryingASignedByte_IsRefusedByInferenceAndAcceptedWithAStatedType()
+   {
+      var inferred = await Record.ExceptionAsync(
+         () => Db.Dapper.QuerySingleAsync<string>(
+            "SELECT :value::TEXT",
+            new Dictionary<string, object?> { ["value"] = (sbyte)-3 },
+            ct: CancellationToken
          )
       );
 
-      failure.Should().BeOfType<QueryException>();
-      failure!.InnerException.Should().BeOfType<NotSupportedException>();
-      failure.InnerException!.Message.Should().Contain("SByte", "the signed byte is the first of the four the driver reaches");
+      inferred.Should().BeOfType<QueryException>();
+      inferred!.InnerException.Should().BeOfType<NotSupportedException>();
+      inferred.InnerException!.Message.Should().Contain("SByte");
+
+      var stated = await Db.Dapper.QuerySingleAsync<string>(
+         "SELECT :value::TEXT",
+         new Dictionary<string, object?> { ["value"] = new TypedQueryParameter((sbyte)-3, NpgsqlDbType.Smallint) },
+         ct: CancellationToken
+      );
+
+      stated.Should().Be("-3");
    }
 
+   /// <summary>
+   ///    The evidence behind <c>PGSQL0023</c>. These three widths are refused as column types now, and this is why: the
+   ///    driver has no mapping for any of them, so no statement can carry one however the parameter is built.
+   /// </summary>
    [Theory]
-   [InlineData("SByte", (sbyte)-3)]
    [InlineData("UInt16", (ushort)42)]
    [InlineData("UInt32", 4_000_000_000U)]
    [InlineData("UInt64", 9_000_000_000_000_000_000UL)]
-   public async Task Parameter_OfAnAllowlistedTypeTheDriverRejects_ReportsTheUnsupportedDbType(string dbType, object value)
+   public async Task Parameter_OfAnUnsignedInteger_ReportsTheUnsupportedDbType(string dbType, object value)
    {
-      // Isolated per type, because the create above stops at the first one. Nothing OData-specific: the refusal is in
-      // the driver, below both the query surface and the front end.
       var failure = await Record.ExceptionAsync(
          () => Db.Dapper.QuerySingleAsync<string>(
             "SELECT :value::TEXT",
@@ -116,24 +137,22 @@ public class AwkwardTypeQueryTests : ODataTestBase
       failure!.InnerException!.Message.Should().Contain(dbType);
    }
 
-   /// <remarks>
-   ///    Written as literal SQL rather than through <c>CreateAsync</c> because of the signed-byte refusal pinned above.
-   /// </remarks>
-   private async Task<long> InsertAwkwardRowAsync()
+   private async Task<AwkwardData> InsertAwkwardRowAsync()
    {
-      return await Db.Dapper.QuerySingleAsync<long>(
-         """
-         INSERT INTO public.odata_awkward (
-            home_page, metadata, birth_date, wake_time, duration, payload,
-            initial, signed_offset, small_count, medium_count, large_count, occurred_at
-         )
-         VALUES (
-            'https://example.com/awkward', '{"tier":"gold"}'::JSONB, DATE '1990-02-03', TIME '07:15', INTERVAL '90 minutes', '\x010203'::BYTEA,
-            'a', -3, 42, 4000000000, 9000000000000000000, TIMESTAMP '2024-05-06 07:08:09'
-         )
-         RETURNING awkward_id
-         """,
-         ct: CancellationToken
+      return await _repository.CreateAsync(
+         new CreateAwkwardCommand
+         {
+            HomePage = new Uri("https://example.com/awkward"),
+            Metadata = new Dictionary<string, string> { ["tier"] = "gold" },
+            BirthDate = new DateOnly(1990, 2, 3),
+            WakeTime = new TimeOnly(7, 15),
+            Duration = TimeSpan.FromMinutes(90),
+            Payload = [1, 2, 3],
+            Initial = 'a',
+            SignedOffset = -3,
+            OccurredAt = new DateTime(2024, 5, 6, 7, 8, 9, DateTimeKind.Unspecified)
+         },
+         CancellationToken
       );
    }
 }

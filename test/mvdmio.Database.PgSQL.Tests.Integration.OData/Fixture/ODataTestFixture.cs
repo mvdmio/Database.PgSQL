@@ -58,9 +58,6 @@ public sealed class ODataTestFixture : IAsyncLifetime
             payload       BYTEA NULL,
             initial       TEXT NOT NULL,
             signed_offset SMALLINT NOT NULL,
-            small_count   INTEGER NOT NULL,
-            medium_count  BIGINT NOT NULL,
-            large_count   NUMERIC(20, 0) NOT NULL,
             occurred_at   TIMESTAMP NOT NULL
          )
          """

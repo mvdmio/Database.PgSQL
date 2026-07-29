@@ -1,9 +1,11 @@
 using JetBrains.Annotations;
+using NpgsqlTypes;
 
 namespace mvdmio.Database.PgSQL.Attributes;
 
 /// <summary>
-///    States facts about the database column a property maps to: its name, and whether it can hold null.
+///    States facts about the database column a property maps to: its name, whether it can hold null, and how the value
+///    is stored.
 /// </summary>
 /// <remarks>
 ///    Nullability is stated here rather than through separate attributes because a standalone <c>Null</c> or
@@ -59,4 +61,26 @@ public sealed class ColumnAttribute : Attribute
    ///    <c>NOT NULL</c>, not because a value is usually present.
    /// </remarks>
    public bool NotNull { get; set; }
+
+   /// <summary>
+   ///    Gets or sets how the column's value is stored, as the PostgreSQL type the value is bound as.
+   /// </summary>
+   /// <remarks>
+   ///    Only needed where the property's own type does not settle it. An enum is stored as the text of its member name
+   ///    without this; set it to <see cref="NpgsqlDbType.Smallint" />, <see cref="NpgsqlDbType.Integer" /> or
+   ///    <see cref="NpgsqlDbType.Bigint" /> to store the underlying number instead. A <c>string</c> holding JSON needs
+   ///    <see cref="NpgsqlDbType.Jsonb" /> or <see cref="NpgsqlDbType.Json" />, because PostgreSQL will not cast text to
+   ///    either one implicitly.
+   ///    <para>
+   ///       Stated per column rather than per type, so two columns of the same enum can be stored differently. The claim
+   ///       feeds the generated parameter binding and the query surface mapping both, so the two cannot disagree about
+   ///       the column. Nothing verifies it against the real table.
+   ///    </para>
+   ///    <para>
+   ///       Permitted rather than curated: a claim the library has no test for is still carried, and only a documented
+   ///       subset is known to round-trip. A claim the query surface cannot represent warns at build time and is honoured
+   ///       on the Dapper surface alone.
+   ///    </para>
+   /// </remarks>
+   public NpgsqlDbType StoredAs { get; set; }
 }

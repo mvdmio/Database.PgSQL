@@ -139,7 +139,8 @@ internal sealed class PropertyDefinitionModel
       bool isNullable,
       bool isDeclaredNotNull,
       string? nullabilityContradiction,
-      bool requiresNullForgivingInitializer
+      bool requiresNullForgivingInitializer,
+      ColumnStorage storage
    )
    {
       PropertyName = propertyName;
@@ -153,6 +154,7 @@ internal sealed class PropertyDefinitionModel
       IsDeclaredNotNull = isDeclaredNotNull;
       NullabilityContradiction = nullabilityContradiction;
       RequiresNullForgivingInitializer = requiresNullForgivingInitializer;
+      Storage = storage;
    }
 
    public string PropertyName { get; }
@@ -181,4 +183,10 @@ internal sealed class PropertyDefinitionModel
    public string? NullabilityContradiction { get; }
 
    public bool RequiresNullForgivingInitializer { get; }
+
+   /// <summary>
+   ///    What the definition says about how this column is stored, and what follows from that for each surface. The one
+   ///    place both the emitted parameter binding and the emitted query mapping read from, so the two cannot disagree.
+   /// </summary>
+   public ColumnStorage Storage { get; }
 }

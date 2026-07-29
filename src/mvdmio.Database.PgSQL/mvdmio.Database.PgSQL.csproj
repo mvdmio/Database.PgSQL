@@ -29,6 +29,26 @@
     <None Include="buildTransitive\**" Pack="true" PackagePath="buildTransitive\"/>
   </ItemGroup>
 
+  <!--
+    The generator ships here rather than as a package of its own: generated code calls into this library's API, so
+    the two must version-lock, and two packages would make skew expressible.
+
+    Added once, not per target framework. Pack collects Pack="true" None items in the outer build, so this project's
+    three frameworks contribute one copy between them; an item added per framework would land the same file three
+    times and warn. An analyzers/ folder flows to transitive consumers on its own, so build/ and buildTransitive/
+    need no change.
+
+    The path is spelled out because the outer build has no @(Analyzer) item to read it from — that is resolved per
+    framework, after this runs. Naming the file rather than globbing it means a missing analyzer build fails the
+    pack instead of quietly producing the package without the generator, which is the defect this exists to close.
+  -->
+  <ItemGroup>
+    <None Include="..\mvdmio.Database.PgSQL.Analyzers\bin\$(Configuration)\netstandard2.0\mvdmio.Database.PgSQL.Analyzers.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false"/>
+  </ItemGroup>
+
   <ItemGroup Label="Internals visible outside the assembly">
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>mvdmio.Database.PgSQL.Tests.Unit</_Parameter1>

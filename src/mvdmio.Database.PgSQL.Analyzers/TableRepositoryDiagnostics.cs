@@ -80,11 +80,11 @@ internal static class TableRepositoryDiagnostics
    public static readonly DiagnosticDescriptor UnsupportedPropertyShape = new(
       id: "PGSQL0009",
       title: "Unsupported table property shape",
-      messageFormat: "'{0}.{1}' must be a public instance property with a public getter and setter and cannot be an indexer",
+      messageFormat: "'{0}.{1}' must be a public instance property with a public getter and a setter of any accessibility, and cannot be an indexer",
       category: CATEGORY_GENERATION,
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
-      description: "Generated repositories only support public instance properties with public getters and setters."
+      description: "Generated repositories only support public instance properties with a public getter and a setter. The setter may be private, protected or init-only — a table definition is never instantiated, so what its members permit a caller to do describes nothing about the column. A setter has to be there, because a get-only or expression-bodied member is a computed value rather than a column."
    );
 
    /// <summary>
@@ -240,5 +240,47 @@ internal static class TableRepositoryDiagnostics
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
       description: "[Column]'s Null and NotNull override what a property's type says about the column it maps to, so a claim that contradicts the type, the key or itself says two things at once. The claim is dropped and the column keeps whatever its type and key membership already settle."
+   );
+
+   // The three storage diagnostics below abandon nothing either, for the same reason PGSQL0021 does not: a refused
+   // claim, an unwritable type and an unrepresentable claim all leave every generated signature well-defined.
+
+   public static readonly DiagnosticDescriptor RefusedStorageClaim = new(
+      id: "PGSQL0022",
+      title: "Storage claim cannot be honoured for the property's type",
+      messageFormat: "'{0}.{1}' claims StoredAs = {2}, which cannot be honoured for '{3}'; store the value in a property of a matching type, or claim {4}",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "A storage claim states how the column is represented; it does not ask for a conversion. A claim joins the refused set only once a test demonstrates it failing, so this refuses few combinations by design and names the legal ones instead of listing the illegal ones. The claim is dropped and the column is bound the way an unclaimed one would be."
+   );
+
+   /// <summary>
+   ///    What a refused claim's fifth argument offers instead. Stated here so the message names a way forward rather than
+   ///    only what is wrong.
+   /// </summary>
+   public const string STORAGE_ALTERNATIVES_FOR_A_STRING = "Text, Json or Jsonb";
+
+   public static readonly DiagnosticDescriptor UnwritablePropertyType = new(
+      id: "PGSQL0023",
+      title: "Property type cannot be written by a generated repository",
+      messageFormat: "'{0}.{1}' has type '{2}', which no PostgreSQL type accepts; use {3} instead",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "The driver registers no integer or numeric mapping for the unsigned integer types, by inference or with an explicit type, so a repository over one of them reads and filters and then throws on every insert and update. Refused here rather than at run time. Separate from PGSQL0011, whose advice — register a conversion — cannot help, because there is no PostgreSQL type to convert to."
+   );
+
+   /// <summary>The signed types that cover each refused unsigned one's range, as <see cref="UnwritablePropertyType" />'s fourth argument.</summary>
+   public const string WRITABLE_ALTERNATIVES_FOR_UNSIGNED_INTEGERS = "int, long or decimal";
+
+   public static readonly DiagnosticDescriptor UnrepresentableStorageClaim = new(
+      id: "PGSQL0024",
+      title: "Storage claim has no query surface representation",
+      messageFormat: "'{0}.{1}' claims StoredAs = {2}, which the query surface cannot represent; generated commands will use it and Query() will not",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Warning,
+      isEnabledByDefault: true,
+      description: "A storage claim feeds the parameter binding and the query surface mapping both, which is what stops the two disagreeing about a column. Where the query surface has no equivalent for the claim — the network address and geometry types among them — the claim is honoured on the Dapper surface and left unstated on the other, so the divergence is made visible here rather than left silent."
    );
 }

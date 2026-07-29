@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
@@ -18,6 +19,16 @@ public sealed class TestFixture : IAsyncLifetime
    public async ValueTask InitializeAsync()
    {
       await DbContainer.StartAsync();
+
+      // Every test in this assembly therefore runs with the enum type handlers registered. Deliberate rather than
+      // incidental: a Dapper type handler is a process-wide registration that cannot be undone, so registering it once
+      // here is the only way the suite can be sure which state it is in — and the state worth being sure of is the one
+      // where an opt-in convenience is present and must still change nothing a generated repository does.
+      //
+      // The blast radius is one enum. This assembly declares only WorkState, so nothing that was passing before is
+      // affected; the unregistered case is covered where it lands naturally, by the OData suite and by the packaging
+      // suite's scaffolded consumer, neither of which registers anything.
+      new ServiceCollection().AddEnumDapperTypeHandlers([typeof(TestFixture).Assembly]);
 
       await using var connection = new DatabaseConnection(DbContainer.GetConnectionString());
 
@@ -87,6 +98,35 @@ public sealed class TestFixture : IAsyncLifetime
             claim_id BIGINT PRIMARY KEY,
             label    TEXT NULL,
             note     TEXT NULL
+         )
+         """
+      );
+
+      // One column per cell of the documented storage matrix, so every promise it makes is a promise about a real
+      // column. Each column's PostgreSQL type is the one its claim says it is, so a claim reaching the wrong column
+      // shows up as a type error rather than as a wrong value — five of these are the same enum stored five ways.
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_storage_claims (
+            claim_id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            created_at       TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC'),
+            state            TEXT NOT NULL,
+            phase            TEXT NOT NULL,
+            priority         INTEGER NOT NULL,
+            severity         SMALLINT NOT NULL,
+            epoch            BIGINT NOT NULL,
+            review_state     TEXT NULL,
+            review_priority  INTEGER NULL,
+            document         JSONB NOT NULL,
+            draft            JSON NULL,
+            legacy_document  TEXT NOT NULL,
+            plain_note       TEXT NOT NULL,
+            offset_hours     SMALLINT NOT NULL,
+            offset_claimed   SMALLINT NOT NULL,
+            optional_offset  SMALLINT NULL,
+            metadata         JSONB NULL,
+            claimed_metadata JSONB NULL,
+            json_metadata    JSON NULL
          )
          """
       );

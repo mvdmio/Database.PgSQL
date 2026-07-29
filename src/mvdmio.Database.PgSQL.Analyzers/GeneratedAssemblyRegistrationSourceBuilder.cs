@@ -83,14 +83,7 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
 
          foreach (var property in model.DataProperties)
          {
-            var primaryKeyArgument = property.IsPrimaryKey ? ", isPrimaryKey: true" : string.Empty;
-
-            // A key member is already not-null through the key argument, which the builder itself acts on, so saying it
-            // twice would only make the emitted call longer. Nullable needs no argument either: it is what the query
-            // surface assumes.
-            var notNullArgument = !property.IsPrimaryKey && property.IsDeclaredNotNull ? ", isNotNull: true" : string.Empty;
-
-            builder.AppendLine($"            .Column(x => x.{property.PropertyName}, {ToLiteral(property.ColumnName)}{primaryKeyArgument}{notNullArgument})");
+            builder.AppendLine($"            {ColumnCall(property)}");
          }
 
          foreach (var relation in table.Relations)
@@ -104,6 +97,72 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
       }
 
       builder.AppendLine("   }");
+   }
+
+   /// <summary>
+   ///    How one column is registered with the query surface, storage claim and all.
+   /// </summary>
+   /// <remarks>
+   ///    The claim emitted here is read from the same <see cref="ColumnStorage" /> the parameter binding is emitted from,
+   ///    which is what stops the two surfaces disagreeing about the column. Three shapes, picked by what the claim needs:
+   ///    nothing stated at all, a claim alone, or a claim with the conversion that carries the value to it.
+   ///    <para>
+   ///       The type arguments on the converting shape are stated rather than inferred, for the same reason a relation's
+   ///       are: the stored type is only inferable from a lambda body, and stating it makes the emitted call say which
+   ///       conversion it means.
+   ///    </para>
+   /// </remarks>
+   private static string ColumnCall(PropertyDefinitionModel property)
+   {
+      var storage = property.Storage;
+
+      // A key member is already not-null through the key argument, which the builder itself acts on, so saying it twice
+      // would only make the emitted call longer. Nullable needs no argument either: it is what the query surface assumes.
+      var primaryKeyArgument = property.IsPrimaryKey ? ", isPrimaryKey: true" : string.Empty;
+      var notNullArgument = !property.IsPrimaryKey && property.IsDeclaredNotNull ? ", isNotNull: true" : string.Empty;
+      var trailingArguments = $"{primaryKeyArgument}{notNullArgument}";
+      var columnArguments = $"x => x.{property.PropertyName}, {ToLiteral(property.ColumnName)}";
+
+      if (storage.MappedAs is null)
+         return $".Column({columnArguments}{trailingArguments})";
+
+      var claim = $"{ColumnStorage.CLAIM_TYPE_FULL_NAME}.{storage.MappedAs}";
+
+      if (storage.Conversion is not { } conversion)
+         return $".Column({columnArguments}, {claim}{trailingArguments})";
+
+      var nullability = property.IsNullable ? "?" : string.Empty;
+      var (toStored, fromStored) = Conversions(conversion, storage.ValueTypeName, nullability);
+
+      return
+         $".Column<{property.TypeName}, {conversion.StoredTypeName}{nullability}>({columnArguments}, {claim}, {toStored}, {fromStored}{trailingArguments})";
+   }
+
+   /// <summary>The pair of lambdas carrying a value to what its column holds and back again.</summary>
+   /// <remarks>
+   ///    Both directions are decided in one place, off one reading of the conversion, because they are two halves of one
+   ///    answer and a mismatched pair is a column that writes one representation and reads another.
+   ///    <para>
+   ///       A cast is its own inverse in shape. Text is not: an enum is parsed case-insensitively coming back, matching what
+   ///       Dapper does natively for a text column with no handler registered, so a value differing in case from the member
+   ///       name behaves the same on both surfaces.
+   ///    </para>
+   ///    <para>
+   ///       Null is handled here as well as by the provider, which skips a conversion for a null by default. Written out
+   ///       anyway, because the emitted lambdas have to type-check on their own and a <see cref="Nullable{T}" />'s own
+   ///       <c>ToString</c> answers an empty string for a null rather than a null.
+   ///    </para>
+   /// </remarks>
+   private static (string ToStored, string FromStored) Conversions(StorageConversion conversion, string valueTypeName, string nullability)
+   {
+      if (!conversion.IsEnumMemberName)
+         return ($"static x => ({conversion.StoredTypeName}{nullability})x", $"static x => ({valueTypeName}{nullability})x");
+
+      var parse = $"global::System.Enum.Parse<{valueTypeName}>(x, true)";
+
+      return nullability.Length == 0
+         ? ("static x => x.ToString()", $"static x => {parse}")
+         : ("static x => x == null ? null : x.Value.ToString()", $"static x => x == null ? null : ({valueTypeName}?){parse}");
    }
 
    /// <summary>

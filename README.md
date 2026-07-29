@@ -11,6 +11,9 @@ PostgreSQL tooling for .NET, in two packages:
 Both target `net8.0`, `net9.0`, and `net10.0`. Use the library on its own, or add the tool when you also want a
 command-line migration workflow.
 
+The library carries a source generator, so building against it needs the **.NET 8.0.100 SDK or newer** — an older SDK
+warns and then skips the generator, leaving the generated repository types undefined.
+
 ## Install
 
 ```bash
@@ -75,6 +78,11 @@ address the row by all of them, in the order you declared them.
 A property's type also tells the query surface whether its column can hold null, so a predicate over a non-nullable
 column reaches PostgreSQL without an `OR column IS NULL` alternative that could never match — and can use an index.
 Where the type cannot say it, `[Column(Null = true)]` and `[Column(NotNull = true)]` do.
+
+A column can state how it is stored, too. Enums go in as the text of their member name with nothing to declare;
+`[Column(StoredAs = NpgsqlDbType.Integer)]` stores one as a number instead, and `StoredAs = NpgsqlDbType.Jsonb` puts a
+`string` into a `jsonb` column. The claim is per column, so two columns of the same enum can differ, and it feeds the
+generated commands and `Query()` from one declaration — the two can never disagree about a column.
 
 Need a query whose shape is only known at runtime? Every generated repository also hands you an `IQueryable<T>` that
 translates to SQL:

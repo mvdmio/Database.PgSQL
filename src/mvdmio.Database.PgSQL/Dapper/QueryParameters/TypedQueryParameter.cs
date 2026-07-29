@@ -27,11 +27,15 @@ public sealed class TypedQueryParameter : SqlMapper.ICustomQueryParameter
    }
 
    /// <inheritdoc />
+   /// <remarks>
+   ///   A null value becomes <see cref="DBNull" />, which is how ADO.NET spells a null parameter — a CLR null would leave
+   ///   the parameter unset. This is what lets a nullable column be bound through the claim like any other.
+   /// </remarks>
    public void AddParameter(IDbCommand command, string name)
    {
       var parameter = new NpgsqlParameter(name, _dbType)
       {
-         Value = _value
+         Value = _value ?? DBNull.Value
       };
 
       command.Parameters.Add(parameter);

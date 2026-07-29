@@ -44,11 +44,11 @@ internal static class TableRepositorySourceBuilder
       }
 
       builder.AppendLine();
-      AppendDto(builder, model.Accessibility, model.DataTypeName, model.DataProperties);
+      AppendDto(builder, model.Accessibility, model.DataTypeName, model.DataProperties, keepsGeneratedColumnsReadOnly: true);
       builder.AppendLine();
-      AppendDto(builder, model.Accessibility, model.CreateCommandTypeName, model.CreateProperties);
+      AppendDto(builder, model.Accessibility, model.CreateCommandTypeName, model.CreateProperties, keepsGeneratedColumnsReadOnly: false);
       builder.AppendLine();
-      AppendDto(builder, model.Accessibility, model.UpdateCommandTypeName, model.UpdateProperties);
+      AppendDto(builder, model.Accessibility, model.UpdateCommandTypeName, model.UpdateProperties, keepsGeneratedColumnsReadOnly: false);
       builder.AppendLine();
       AppendRepositoryInterface(builder, model);
       builder.AppendLine();
@@ -57,18 +57,41 @@ internal static class TableRepositorySourceBuilder
       return builder.ToString();
    }
 
-   private static void AppendDto(StringBuilder builder, string accessibility, string typeName, ImmutableArray<PropertyDefinitionModel> properties)
+   /// <remarks>
+   ///    <paramref name="keepsGeneratedColumnsReadOnly" /> is what tells the data type from the command types. The data
+   ///    type sets it, so the type replacing a hand-written row record does not let a caller assign a column the database
+   ///    populates. A command type does not: an update addresses its row by a primary key that may itself be generated, so
+   ///    a caller has to be able to supply it.
+   ///    <para>
+   ///       <c>required</c> and <c>init</c> are never mirrored, whatever the table definition declares — these types have
+   ///       no constructor that could satisfy <c>required</c>, and every column but a generated one has to stay assignable
+   ///       for a command to be built. A definition pairing <c>required … { get; init; }</c> with
+   ///       <c>{ get; private set; }</c> therefore keeps the half that guards a database-populated column and loses the
+   ///       other.
+   ///    </para>
+   /// </remarks>
+   private static void AppendDto(
+      StringBuilder builder,
+      string accessibility,
+      string typeName,
+      ImmutableArray<PropertyDefinitionModel> properties,
+      bool keepsGeneratedColumnsReadOnly
+   )
    {
       builder.AppendLine($"{accessibility} partial class {typeName}");
       builder.AppendLine("{");
 
       foreach (var property in properties)
       {
+         var setter = keepsGeneratedColumnsReadOnly && property.IsGenerated ? "private set;" : "set;";
+
          builder.Append("   public ")
             .Append(property.TypeName)
             .Append(' ')
             .Append(property.PropertyName)
-            .Append(" { get; set; }");
+            .Append(" { get; ")
+            .Append(setter)
+            .Append(" }");
 
          if (property.RequiresNullForgivingInitializer)
             builder.Append(" = default!;");
@@ -301,13 +324,41 @@ internal static class TableRepositorySourceBuilder
    /// <summary>Bindings for a statement whose values come off a command object, named by property.</summary>
    private static IEnumerable<(string Name, string Value)> CommandBindings(ImmutableArray<PropertyDefinitionModel> properties, string valueSource)
    {
-      return properties.Select(x => (x.PropertyName, $"{valueSource}.{x.PropertyName}"));
+      return properties.Select(x => (x.PropertyName, BindingExpression(x, $"{valueSource}.{x.PropertyName}")));
    }
 
    /// <summary>Bindings for a statement whose values come off method parameters, named by parameter.</summary>
    private static IEnumerable<(string Name, string Value)> ParameterBindings(IEnumerable<PropertyDefinitionModel> properties)
    {
-      return properties.Select(x => (x.ParameterName, x.ParameterName));
+      return properties.Select(x => (x.ParameterName, BindingExpression(x, x.ParameterName)));
+   }
+
+   /// <summary>
+   ///    What one column's value is bound from, with its storage claim applied.
+   /// </summary>
+   /// <remarks>
+   ///    The only place a claim reaches the wire on the Dapper surface, and it does so through two mechanisms rather than
+   ///    a registry: the value is converted where its CLR type has to change — an enum to the text of its member name, a
+   ///    narrow integer widened to one the driver can write — and the parameter type is stated where the value stands as
+   ///    it is and only the driver's inference is wrong, which is the <c>jsonb</c> case. Nothing is registered, so nothing
+   ///    can be registered twice or disagree with the mapping the same claim produces for the query surface.
+   /// </remarks>
+   private static string BindingExpression(PropertyDefinitionModel property, string valueExpression)
+   {
+      var storage = property.Storage;
+      var nullability = property.IsNullable ? "?" : string.Empty;
+
+      var value = storage.Conversion switch
+      {
+         { IsEnumMemberName: true } => $"{valueExpression}{nullability}.ToString()",
+         { } cast => $"({cast.StoredTypeName}{nullability}){valueExpression}",
+         null => valueExpression
+      };
+
+      if (storage.BoundAs is null)
+         return value;
+
+      return $"new global::mvdmio.Database.PgSQL.Dapper.QueryParameters.TypedQueryParameter({value}, {ColumnStorage.CLAIM_TYPE_FULL_NAME}.{storage.BoundAs})";
    }
 
    private static void AppendSqlLiteral(StringBuilder builder, int indentation, string sql)

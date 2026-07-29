@@ -22,7 +22,7 @@ The tool (`mvdmio.Database.PgSQL.Tool`, command `db`) handles: init config, scaf
 
 ## Bump the package version
 
-1. Edit `<PgSqlVersion>` in `Directory.Build.props` — this drives both the library and the tool.
+1. Edit `<PgSqlVersion>` in `Directory.Build.props` — this drives the library, the tool and the analyzer, which version-locks to the library because generated code calls into it.
 2. Choose the bump by semver: MAJOR for an incompatible API change, MINOR for a backward-compatible feature, PATCH for a fix.
 3. Update `README.md` to reflect the change.
 

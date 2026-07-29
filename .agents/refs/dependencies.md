@@ -12,7 +12,7 @@
 | `PolySharp` | Polyfills for newer language features on older TFMs (private) |
 | `JetBrains.Annotations` | Code annotations, incl. `[PublicAPI]` (private) |
 
-The library also references `mvdmio.Database.PgSQL.Analyzers` as an analyzer (netstandard2.0) and ships it inside the NuGet package.
+The library also references `mvdmio.Database.PgSQL.Analyzers` as an analyzer (netstandard2.0) and packs it into `analyzers/dotnet/cs` inside the NuGet package — added once from the outer build, not per target framework, or the same file would land three times. Its `Microsoft.CodeAnalysis.CSharp` version is a **floor**: an analyzer referencing a newer Roslyn than the host compiler is skipped with a warning (`CS9057`/`CS8032`) rather than failing, which is indistinguishable from the generator not shipping at all. 4.8.0 corresponds to SDK 8.0.1xx, the oldest SDK that can target the library's oldest framework, so raising it drops SDKs and lowering it buys nothing.
 
 ## CLI tool (`mvdmio.Database.PgSQL.Tool`)
 
@@ -50,7 +50,7 @@ No mocking framework is used — testability comes from interface seams (e.g. `I
 - **Concurrency:** one `publish-nuget` group with `cancel-in-progress: false`, so runs serialize and an in-flight upload is never cancelled by a newer push.
 - **Three jobs, each gating the next:**
   - `build` — `dotnet format --verify-no-changes` first (cheapest failure), then restore and build the solution in Release, then `dotnet pack` the tool with `--no-build`. This is the only compile. Uploads two artifacts: the build output (`bin` **and** `obj` — `--no-build` still evaluates each project, and evaluation reads the generated files under `obj`) and the packages.
-  - `test` — downloads the build output, runs `dotnet restore` (needed even with nothing to compile: the test SDK packages contribute `.props`/`.targets` imported from the NuGet cache), then the unit and analyzer suites, then the two container-backed integration suites. Cheap suites first so a logic-level break reports before any container image is pulled. GitHub-hosted `ubuntu` runners ship Docker; macOS and Windows runners do not, which is one reason the pipeline stays on Linux.
+  - `test` — downloads the build output, runs `dotnet restore` (needed even with nothing to compile: the test SDK packages contribute `.props`/`.targets` imported from the NuGet cache), then the unit and analyzer suites, then the two container-backed integration suites, then the packaging suite. Cheap suites first so a logic-level break reports before any container image is pulled. GitHub-hosted `ubuntu` runners ship Docker; macOS and Windows runners do not, which is one reason the pipeline stays on Linux.
   - `publish` — downloads the packages artifact (no checkout) and pushes with `dotnet nuget push --skip-duplicate`, so a re-run against an unchanged `PgSqlVersion` is a harmless no-op. Pushing a `.nupkg` uploads its sibling `.snupkg`.
 - **No `nuget.exe`:** the upload uses `dotnet nuget push`. The old workflow pinned `ubuntu-22.04` only because `nuget.exe` runs under Mono, which is absent on Ubuntu 24.04 ([NuGet/setup-nuget#168](https://github.com/NuGet/setup-nuget/issues/168)); dropping the Mono dependency is what lets every job run on `ubuntu-latest`.
 - **No pull-request build** and **no dependency caching** — work lands by direct push to `main`, and there are no `packages.lock.json` files for `setup-dotnet`'s cache to key on.

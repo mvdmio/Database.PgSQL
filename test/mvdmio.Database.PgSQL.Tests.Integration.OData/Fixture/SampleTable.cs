@@ -1,4 +1,5 @@
 using mvdmio.Database.PgSQL.Attributes;
+using NpgsqlTypes;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
@@ -33,6 +34,12 @@ public partial class SampleTable
 
    public bool IsActive { get; set; }
 
+   /// <summary>
+   ///    Stored as its underlying number, claimed explicitly. Text is the default an unclaimed enum takes, and this
+   ///    fixture's numbers are part of its data, so the claim is what keeps the column reading the way the suite's pinned
+   ///    expectations already say — and it exercises the integer claim end to end while it does.
+   /// </summary>
+   [Column(StoredAs = NpgsqlDbType.Integer)]
    public SampleCategory Category { get; set; }
 
    public Guid PublicId { get; set; }

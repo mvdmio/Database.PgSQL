@@ -30,6 +30,7 @@ mvdmio.Database.PgSQL/
 │   ├── mvdmio.Database.PgSQL.Tests.Integration/
 │   ├── mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema/  # 2nd assembly for multi-assembly / multi-schema tests
 │   ├── mvdmio.Database.PgSQL.Tests.Integration.OData/            # OData conformance suite over the query surface
+│   ├── mvdmio.Database.PgSQL.Tests.Packaging/                    # Installs the packed .nupkg into a scaffolded project and runs it
 │   └── mvdmio.Database.PgSQL.Analyzers.Tests/
 ├── docs/adr/                               # Architecture decision records
 ├── CONTEXT.md                              # Domain glossary
@@ -43,7 +44,7 @@ mvdmio.Database.PgSQL/
 1. **`mvdmio.Database.PgSQL`** — the library. Wraps Dapper for PostgreSQL: connections, transactions, queries, bulk ops, management tasks, and the migration framework.
 2. **`mvdmio.Database.PgSQL.Tool`** — a `dotnet tool` (command name `db`) for migration operations: init config, scaffold migrations, run migrations, pull schemas, clean up obsolete migration files, copy data.
 
-The analyzer project is referenced by the library as an analyzer and ships inside the package so its warnings run for consumers (e.g. migration class-name convention checks).
+The analyzer project is referenced by the library as an analyzer and is packed into `analyzers/dotnet/cs` inside `mvdmio.Database.PgSQL`, so both its warnings and its table-repository source generator run for consumers. It is never published on its own: generated code calls into the library's own API, so the two version-lock, and two packages would make skew expressible. Its `Microsoft.CodeAnalysis.CSharp` version is a floor rather than a preference — an analyzer referencing a newer Roslyn than the host compiler is skipped with a warning instead of failing, which looks exactly like the generator not existing.
 
 ## Entry point
 

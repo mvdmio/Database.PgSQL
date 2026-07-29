@@ -347,8 +347,6 @@ nothing warns you at startup — check this table before exposing a generated ty
 | `bool`, `int`, `long`, `decimal`, `string`, `Guid`, `DateTimeOffset`, an enum | the matching EDM primitive or enum | yes |
 | `DateOnly`, `TimeOnly`, `TimeSpan`, `byte[]`, `sbyte` | `Edm.Date`, `Edm.TimeOfDay`, `Edm.Duration`, `Edm.Binary`, `Edm.SByte` | yes |
 | `char` | `Edm.String` | yes, widened to a one-character string |
-| `ushort`, `uint` | `Edm.Int32`, `Edm.Int64` | in the model, yes, widened — but see the note below |
-| `ulong` | `Edm.Int64` | **lossy** — values above `long.MaxValue` cannot be represented |
 | `DateTime` | `Edm.DateTimeOffset` | by convention, not equivalence: the instant acquires an offset |
 | `Uri` | a complex type with one collection of path segments | no — not comparable or filterable as a value |
 | `Dictionary<string, string>` | a collection of a complex type with no properties | no — carries nothing |
@@ -356,10 +354,10 @@ nothing warns you at startup — check this table before exposing a generated ty
 Keep the `Uri` and `Dictionary<string, string>` properties out of your EDM model —
 `builder.EntityType<UserData>().Ignore(x => x.HomePage)` — or expose a `string` property of your own alongside them.
 
-Separately, and below OData rather than because of it: `sbyte`, `ushort`, `uint` and `ulong` properties cannot be
-**written** through a generated repository at all. The PostgreSQL driver has no mapping for their `DbType`s and refuses
-the parameter, so every insert and update on such a table throws. Reading and filtering work, which is why they appear as
-usable in the table above. Avoid these four in a table definition until that is fixed.
+`ushort`, `uint` and `ulong` are not on the list because they cannot be column types: `PGSQL0023` refuses them at build
+time, since the PostgreSQL driver has no mapping for any of them and a repository over one would throw on every insert.
+Use `int`, `long` or `decimal`. `sbyte` used to fail the same way and does not any more — a signed byte is widened to a
+small integer where the value is bound.
 
 ## The hosted failure mode
 

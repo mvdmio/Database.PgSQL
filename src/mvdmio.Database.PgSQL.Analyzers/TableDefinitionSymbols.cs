@@ -65,13 +65,20 @@ internal static class TableDefinitionSymbols
       return property.DeclaredAccessibility == Accessibility.Public || HasRelevantAttribute(property);
    }
 
+   /// <remarks>
+   ///    A setter has to exist, and its accessibility is not looked at. The requirement that one exist is what keeps a
+   ///    computed member out — a get-only or expression-bodied property describes no column, and admitting it would turn
+   ///    an expression into a column that is not there. How accessible it is says nothing about the column, because a
+   ///    table definition is purely declarative and is never instantiated: <c>{ get; private set; }</c>,
+   ///    <c>{ get; init; }</c> and <c>{ get; protected set; }</c> all describe the same column as <c>{ get; set; }</c>.
+   /// </remarks>
    public static bool IsSupportedProperty(IPropertySymbol property)
    {
       return !property.IsStatic
              && property.DeclaredAccessibility == Accessibility.Public
              && property.Parameters.Length == 0
              && property.GetMethod?.DeclaredAccessibility == Accessibility.Public
-             && property.SetMethod?.DeclaredAccessibility == Accessibility.Public;
+             && property.SetMethod is not null;
    }
 
    public static bool IsPartial(INamedTypeSymbol classSymbol)
@@ -102,8 +109,15 @@ internal static class TableDefinitionSymbols
          isNullable: TypeCanHoldNull(property.Type),
          isDeclaredNotNull: nullability.IsNotNull,
          nullabilityContradiction: nullability.Contradiction,
-         requiresNullForgivingInitializer: property.Type.IsReferenceType && property.NullableAnnotation != NullableAnnotation.Annotated
+         requiresNullForgivingInitializer: property.Type.IsReferenceType && property.NullableAnnotation != NullableAnnotation.Annotated,
+         storage: ColumnStorage.Read(property.Type, columnAttribute)
       );
+   }
+
+   /// <summary>How generated code names a type: fully qualified, keywords for the special types, nullability included.</summary>
+   public static string TypeDisplayName(ITypeSymbol type)
+   {
+      return type.ToDisplayString(_typeDisplayFormat);
    }
 
    /// <summary>

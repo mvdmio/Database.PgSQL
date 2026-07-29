@@ -127,6 +127,13 @@ jobs:
           dotnet test test/mvdmio.Database.PgSQL.Tests.Integration --no-build -c Release
           dotnet test test/mvdmio.Database.PgSQL.Tests.Integration.OData --no-build -c Release
 
+      # Last because it is the slowest, and separate because it is the only step that packs. --no-build applies to the
+      # test assembly only: the test itself runs `dotnet pack` on the library, under a run-unique prerelease version, and
+      # installs the result into a project it scaffolds — so the guarantee that the generator ships is checked here, on
+      # the machine that publishes, rather than only on a maintainer's. Needs the network for the consumer's restore.
+      - name: Packaging test
+        run: dotnet test test/mvdmio.Database.PgSQL.Tests.Packaging --no-build -c Release
+
   publish:
     name: Publish
     needs: test

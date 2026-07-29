@@ -90,20 +90,11 @@ internal static class TableDefinitionParser
 
       var mappedProperties = columnCandidates.Where(TableDefinitionSymbols.IsSupportedProperty).ToImmutableArray();
 
-      foreach (var property in mappedProperties.Where(x => !QueryMappableTypes.IsMappable(x.Type)))
-      {
-         diagnostics.Add(Diagnostic.Create(
-            TableRepositoryDiagnostics.UnmappableQueryPropertyType,
-            property.Locations.FirstOrDefault() ?? classSyntax.Identifier.GetLocation(),
-            classSymbol.Name,
-            property.Name,
-            property.Type.ToDisplayString()
-         ));
-      }
-
       var properties = mappedProperties
          .Select(TableDefinitionSymbols.CreatePropertyModel)
          .ToImmutableArray();
+
+      ReportStorageDiagnostics(classSymbol, classSyntax, mappedProperties, properties, diagnostics);
 
       // Abandons nothing: the claim has already been dropped, so every generated signature is still well-defined and
       // the consumer reads this one error rather than type-not-found errors from everything naming a missing type.
@@ -265,6 +256,87 @@ internal static class TableDefinitionParser
       );
 
       return new ParseResult(model, diagnostics.ToImmutable());
+   }
+
+   /// <summary>
+   ///    Everything one column's storage earns: an unwritable property type, a claim that cannot be honoured for it, a
+   ///    claim only one of the two surfaces can carry, and a type neither the claim nor a registered conversion covers.
+   /// </summary>
+   /// <remarks>
+   ///    Abandons nothing. Each of these leaves every generated signature well-defined, so reporting and carrying on
+   ///    gives the consumer the one message describing the mistake rather than that message buried under type-not-found
+   ///    errors from everything naming a type that was never emitted.
+   ///    <para>
+   ///       <paramref name="properties" /> is <paramref name="mappedProperties" /> in the same order, one model per
+   ///       symbol, so the two are read by index: the diagnostics need the symbol for its location and the type name the
+   ///       developer wrote, and the model for what its storage settled.
+   ///    </para>
+   /// </remarks>
+   private static void ReportStorageDiagnostics(
+      INamedTypeSymbol classSymbol,
+      ClassDeclarationSyntax classSyntax,
+      ImmutableArray<IPropertySymbol> mappedProperties,
+      ImmutableArray<PropertyDefinitionModel> properties,
+      ImmutableArray<Diagnostic>.Builder diagnostics
+   )
+   {
+      for (var index = 0; index < properties.Length; index++)
+      {
+         var property = properties[index];
+         var symbol = mappedProperties[index];
+         var storage = property.Storage;
+         var location = symbol.Locations.FirstOrDefault() ?? classSyntax.Identifier.GetLocation();
+
+         if (storage.IsUnwritableType)
+         {
+            diagnostics.Add(Diagnostic.Create(
+               TableRepositoryDiagnostics.UnwritablePropertyType,
+               location,
+               classSymbol.Name,
+               property.PropertyName,
+               symbol.Type.ToDisplayString(),
+               TableRepositoryDiagnostics.WRITABLE_ALTERNATIVES_FOR_UNSIGNED_INTEGERS
+            ));
+
+            // The unmappable-type warning would only add noise here: its advice is to register a conversion, and the
+            // error above is that there is no PostgreSQL type to convert to.
+            continue;
+         }
+
+         if (storage.RefusedClaim is not null)
+         {
+            diagnostics.Add(Diagnostic.Create(
+               TableRepositoryDiagnostics.RefusedStorageClaim,
+               location,
+               classSymbol.Name,
+               property.PropertyName,
+               storage.RefusedClaim,
+               symbol.Type.ToDisplayString(),
+               storage.RefusalAlternatives
+            ));
+         }
+         else if (storage.HasNoQueryRepresentation)
+         {
+            diagnostics.Add(Diagnostic.Create(
+               TableRepositoryDiagnostics.UnrepresentableStorageClaim,
+               location,
+               classSymbol.Name,
+               property.PropertyName,
+               storage.MappedAs
+            ));
+         }
+
+         if (!QueryMappableTypes.IsMappable(symbol.Type, storage))
+         {
+            diagnostics.Add(Diagnostic.Create(
+               TableRepositoryDiagnostics.UnmappableQueryPropertyType,
+               location,
+               classSymbol.Name,
+               property.PropertyName,
+               symbol.Type.ToDisplayString()
+            ));
+         }
+      }
    }
 
    /// <remarks>

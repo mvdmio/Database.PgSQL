@@ -12,6 +12,12 @@ dotnet add package mvdmio.Database.PgSQL
 
 Targets `net8.0`, `net9.0`, and `net10.0`.
 
+**Requires the .NET 8.0.100 SDK or newer to build.** The package carries the source generator that produces
+[generated repositories](#generated-repositories), and an SDK older than that cannot load it: the compiler warns
+(`CS9057` or `CS8032`) and then skips the generator without running it, so a `[Table]` class produces nothing and every
+name your code expects from it is undefined. If generated types are missing and you see one of those warnings, the SDK is
+the reason. Everything else in the package works on any SDK that can target `net8.0`.
+
 ## What You Can Do With It
 
 - [Open connections](#connections) directly or through a pooling factory
@@ -113,11 +119,9 @@ services.AddScoped(sp => sp.GetRequiredService<DatabaseConnectionFactory>()
 lifetime and connection string. A scoped registration gives each request its own connection while all of them share
 the factory's pool.
 
-If your models use enums, map them once at startup (see [Type Handling](#type-handling)):
-
-```csharp
-services.AddEnumDapperTypeHandlers(typeof(Program).Assembly);
-```
+Nothing has to be registered for enums: a [generated repository](#generated-repositories) states each enum column's
+storage on the column itself, and hand-written SQL reads one back from a `text` column without setup. See
+[Type Handling](#type-handling) for what to do when you write one.
 
 ## Queries and Commands
 
@@ -429,6 +433,12 @@ otherwise:
 The class name minus its `Table` suffix supplies these names, so `ProductTable` produces `ProductData`,
 `CreateProductCommand`, `IProductRepository`, and so on. All five are `partial`, so you can add members to them from
 your own files.
+
+On the data type, a `[Generated]` column is mirrored as `{ get; private set; }` — a caller cannot assign a value the
+database produces, which is usually the point of marking it. Every other column is `{ get; set; }`, and the command types
+keep every column publicly settable including generated ones, because an update addresses its row by a primary key that
+may itself be generated. `required` and `init` are not mirrored: these types have no constructor that could satisfy
+`required`, and a command has to be assignable to be built.
 
 The repository exposes:
 
@@ -745,7 +755,7 @@ fake, for instance — they throw `NotSupportedException` rather than quietly lo
 | `[Table("…")]`  | Marks the class and names the table. Takes `schema.table`, or `table` for the `public` schema           |
 | `[PrimaryKey]`  | Marks a property as part of the key used by `UpdateAsync`, `GetByPrimaryKeyAsync` and `DeleteByPrimaryKeyAsync`. At least one property must carry it; two or more makes the key composite, in declaration order |
 | `[Unique]`      | Adds a `GetBy…`/`DeleteBy…` pair for that property                                                     |
-| `[Column("…")]` | States facts about the column: its name, and — through `Null` and `NotNull` — whether it can hold null. Without a name, the property name is converted to `snake_case` |
+| `[Column("…")]` | States facts about the column: its name, whether it can hold null (`Null`, `NotNull`), and how it is stored (`StoredAs`). Without a name, the property name is converted to `snake_case` |
 | `[Generated]`   | The database produces the value (identity, computed, or defaulted): it is read back but never written   |
 | `[Relation("…")]` | Marks the property as a relation to another table definition rather than a column, naming one foreign-key property per member of the target's primary key |
 
@@ -797,6 +807,63 @@ that does hold null is not caught when the row is read — the null arrives in a
 is rows: an inequality over that column omits the ones where it is null. Claim not-null because the table says
 `NOT NULL`, not because the value is usually present.
 
+### Column Storage
+
+For most properties the type settles how the value reaches PostgreSQL and there is nothing to say. Where it does not,
+`[Column(StoredAs = …)]` states it, spelled with Npgsql's own `NpgsqlDbType`:
+
+```csharp
+using NpgsqlTypes;
+
+// Stored as the text of its member name — 'Open', 'Closed'. This is the default; the attribute is not needed.
+public TaskState State { get; set; }
+
+// The same enum on another table, stored as its underlying number.
+[Column(StoredAs = NpgsqlDbType.Integer)]
+public TaskState Priority { get; set; }
+
+// Arbitrary JSON held as a string. PostgreSQL will not cast text to jsonb implicitly, so this has to be stated.
+[Column(StoredAs = NpgsqlDbType.Jsonb)]
+public required string Document { get; init; }
+```
+
+The claim is per column, not per type, so two columns of one enum can be stored differently. It is read once and applied
+in two places at once — the parameter the generated command binds, and the mapping `Query()` translates against — so the
+two cannot disagree about a column. **An enum is stored as text unless you say otherwise**, which is what this package
+has always documented; if you were relying on `Query()` sending the underlying number, claim it explicitly.
+
+Nothing verifies the claim against the real table, the same way nothing verifies a column name.
+
+#### What the package tests
+
+A claim outside this table is **permitted** — the library carries it and the driver decides — but only these are
+exercised, so only these are known to round-trip:
+
+| Property type                | Without a claim               | Claims that are tested                     |
+|------------------------------|-------------------------------|--------------------------------------------|
+| `enum`, `enum?`              | the member name, as text      | `Text`, `Smallint`, `Integer`, `Bigint`     |
+| `string`, `string?`          | text, with no cast emitted    | `Text`, `Json`, `Jsonb`                     |
+| `Dictionary<string, string>` | `jsonb`                       | `Jsonb`, `Json`                             |
+| `sbyte`, `sbyte?`            | `smallint`, widened for you   | `Smallint`                                  |
+| anything else                | whatever the driver infers    | —                                           |
+
+Reading an enum is case-insensitive on both surfaces, so a stored value differing in case from the member name still
+reads. Two enum members differing only in case will throw when either surface parses them, and nothing diagnoses that.
+
+Three refusals, all at build time:
+
+- **`PGSQL0022`** — the claim cannot be honoured for the property's type. Only combinations with a test demonstrating the
+  failure are refused, so this list is short by design: an integral claim on a `string` is the one it starts with. The
+  claim is dropped and the column is bound as an unclaimed one would be.
+- **`PGSQL0023`** — `ushort`, `uint` and `ulong` cannot be column types. Npgsql has no integer or numeric mapping for any
+  of them, so a repository over one would read and filter and then throw on every insert. Use `int`, `long` or `decimal`.
+- **`PGSQL0024`** — a warning: the claim has no equivalent on the query surface, so generated commands use it and
+  `Query()` does not. The network-address and geometry types are the ones this covers.
+
+Serializing an arbitrary object to `jsonb` is not supported: only `string` and `Dictionary<string, string>` are. Native
+PostgreSQL enum types are not supported either — a claim describes how a value is bound, not a type the driver has to be
+taught.
+
 ### Requirements
 
 The generator reports a build error when a table definition does not satisfy these:
@@ -805,7 +872,12 @@ The generator reports a build error when a table definition does not satisfy the
 - `[Table]` names a valid `table` or `schema.table`
 - At least one property is marked `[PrimaryKey]`, and no property carrying it is nullable
 - At least one property is neither part of the primary key nor `[Generated]`, so there is something to update
-- Mapped properties are public, non-static, not indexers, and have both a public getter and setter
+- Mapped properties are public, non-static, not indexers, and have a public getter and a setter. The setter's
+  accessibility does not matter — `{ get; private set; }`, `{ get; init; }` and `{ get; protected set; }` are all legal
+  columns, because a table definition is purely declarative and is never instantiated. A setter has to be there, though:
+  a get-only or expression-bodied member is a computed value rather than a column
+- No mapped property is typed `ushort`, `uint` or `ulong`, which no PostgreSQL type accepts
+- No `[Column]` states a storage claim that cannot be honoured for the property's type
 - No two properties map to the same column, no two `[Unique]` properties yield the same method name, and no `[Unique]`
   property is named so that its lookup would collide with `GetByPrimaryKeyAsync`
 - A `[Relation]` property is a table definition or a supported collection of one, is nullable when it points at one row,
@@ -1011,14 +1083,24 @@ These types work out of the box, as parameters and in results, on `db.Dapper` an
 queries](#composable-queries) alike: `DateOnly`, `TimeOnly`, `Uri`, and `Dictionary<string, string>` mapped to
 `jsonb`.
 
-Enums are stored as strings, but have to be registered once at startup:
+Enums need nothing on a [generated repository](#generated-repositories): each enum column states how it is stored and the
+default is text — see [Column Storage](#column-storage).
+
+For hand-written SQL, an enum is read back from a `text` column without any setup, case-insensitively. Writing one is the
+part to know about: Dapper resolves an enum parameter to its **underlying number** before any type handler is consulted,
+so bind the member name yourself when the column is text.
 
 ```csharp
-services.AddEnumDapperTypeHandlers(typeof(Program).Assembly);
+// Sends 'Closed'.
+["state"] = state.ToString()
+
+// Sends 2.
+["state"] = state
 ```
 
-Every enum in the given assemblies is mapped. The mapping applies process-wide rather than per service collection, so
-calling it once is enough.
+`services.AddEnumDapperTypeHandlers(typeof(Program).Assembly)` registers a handler for every enum in the given
+assemblies, process-wide. It affects neither of the two lines above — Dapper never reaches it for a parameter — and it
+does not reach a generated repository either, whose binding is settled by the column's own storage claim.
 
 ### Types the query surface does not know
 
@@ -1053,7 +1135,7 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0006` | Error    | Two `[Unique]` properties would generate the same method name                       |
 | `PGSQL0007` | Error    | No updatable columns, so no update command can be generated                        |
 | `PGSQL0008` | Error    | `[Table]` value is not `table` or `schema.table`                                   |
-| `PGSQL0009` | Error    | A property is not a public instance property with a public getter and setter        |
+| `PGSQL0009` | Error    | A property is not a public instance property with a public getter and a setter of any accessibility |
 | `PGSQL0010` | Error    | A generated name is already taken — by a non-partial type in the same namespace, or by the primary key's own lookup |
 | `PGSQL0011` | Warning  | A property type cannot be mapped by the query surface — register a conversion       |
 | `PGSQL0012` | Error    | A `[Relation]` names a foreign-key property that does not exist — once per name       |
@@ -1066,15 +1148,23 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0019` | Error    | A `[Relation]` names a different number of foreign keys than the target's primary key has members |
 | `PGSQL0020` | Error    | A `[PrimaryKey]` property is nullable                                                |
 | `PGSQL0021` | Error    | A `[Column]` states a nullability that contradicts the property's type, its key membership, or itself |
+| `PGSQL0022` | Error    | A `[Column]` states a `StoredAs` that cannot be honoured for the property's type      |
+| `PGSQL0023` | Error    | A property is typed `ushort`, `uint` or `ulong`, which no PostgreSQL type accepts     |
+| `PGSQL0024` | Warning  | A `[Column]`'s `StoredAs` has no query surface equivalent — commands use it, `Query()` does not |
 
 `PGSQL0001` is a warning rather than an error because you can implement `Identifier` and `Name` yourself instead of
 following the naming convention. If you do neither, a misnamed migration class throws the moment those properties are
 read. `PGSQL0011` is a warning because the rest of the repository still works — only `Query()` cannot handle that
-column until a conversion is registered. `PGSQL0012` through `PGSQL0019` drop only the relation they describe and let
+column until a conversion is registered. `PGSQL0024` is a warning for the same reason, one surface down: commands honour
+the claim and only `Query()` cannot. `PGSQL0012` through `PGSQL0019` drop only the relation they describe and let
 the rest of the table generate, so the message you read is the mistake you made rather than a wall of
-type-not-found errors from everything that names the missing data type. `PGSQL0021` abandons nothing at all: dropping a
-contradictory nullability claim leaves every generated signature well-defined. Everything else — including `PGSQL0020` —
-abandons the table, because a malformed key leaves every generated signature undefined rather than one relation.
+type-not-found errors from everything that names the missing data type. `PGSQL0021` through `PGSQL0024` abandon nothing at
+all: a contradictory nullability claim, a refused storage claim and an unwritable property type all leave every generated
+signature well-defined. Everything else — including `PGSQL0020` — abandons the table, because a malformed key leaves every
+generated signature undefined rather than one relation.
+
+`PGSQL0023` exists rather than being folded into `PGSQL0011` because that warning's advice — register a conversion —
+cannot help: there is no PostgreSQL type to convert to.
 
 ## CLI Tool
 

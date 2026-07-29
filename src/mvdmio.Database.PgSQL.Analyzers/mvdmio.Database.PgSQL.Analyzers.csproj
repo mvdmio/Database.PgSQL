@@ -13,25 +13,34 @@
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <!--
+    Never a package of its own, and IsPackable says so rather than leaving it to nobody asking. Generated code calls
+    into the library's own API, so the two must version-lock; the analyzer travels inside mvdmio.Database.PgSQL, which
+    adds it under analyzers/dotnet/cs during its own pack, and the version is shared for the same reason.
+
+    Without IsPackable=false this project is still packable, and IncludeBuildOutput=false means what it would produce
+    is an empty package — which the publish pipeline collects by glob and pushes by glob. Packable-by-default is the
+    only thing standing between that and NuGet.org.
+  -->
   <PropertyGroup Label="Package configuration">
-    <Version>0.2.1</Version>
-    <Title>mvdmio.Database.PgSQL.Analyzers</Title>
-    <Description>Roslyn analyzers for mvdmio.Database.PgSQL — validates migration class naming conventions.</Description>
-    <Company>mvdmio</Company>
-    <Authors>Michiel van der Meer</Authors>
-    <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <DevelopmentDependency>true</DevelopmentDependency>
+    <IsPackable>false</IsPackable>
+    <Version>$(PgSqlVersion)</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Place the analyzer dll in the analyzers/dotnet/cs folder inside the NuGet package -->
-    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
     <!-- Release tracking files required by RS2008 -->
     <AdditionalFiles Include="AnalyzerReleases.*.md" />
   </ItemGroup>
 
+  <!--
+    The floor, not a preference. When an analyzer references a newer Roslyn than the host compiler, the compiler
+    warns (CS9057 / CS8032) and then skips the assembly without registering any generator — which is the "the
+    generator produces nothing" failure this version exists to prevent. 4.8.0 corresponds to SDK 8.0.1xx, the
+    oldest SDK that can target net8.0, so it is as low as the reach is worth: 4.3.1 is the true API floor
+    (ForAttributeWithMetadataName), but the extra SDKs it would reach cannot target net8.0 at all.
+  -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" PrivateAssets="all"/>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all"/>
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
