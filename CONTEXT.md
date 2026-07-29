@@ -29,7 +29,7 @@ A **Scope** an assembly may establish a schema-first baseline for: the scopes of
 _Avoid_: Trusted scope, verified scope.
 
 **Table definition**:
-A class that declares one database table's shape — its name, its columns, and which of them form the primary key. The single source every generated type for that table derives from. Named with a `Table` suffix by convention.
+A class that declares one database table's shape — its name, its columns, and which of them form the primary key. The single source every generated type for that table derives from. Named with a `Table` suffix by convention. Purely declarative: it is never instantiated and nothing reads or writes it at run time, so what its members permit a caller to do is not a constraint the library has any stake in.
 _Avoid_: Entity, model, POCO, mapping.
 
 **Key order**:
@@ -39,6 +39,10 @@ _Avoid_: Key ordinal, column order, index order.
 **Nullability claim**:
 What a **Table definition** states about whether one of its columns can hold null. Where it states nothing the column is taken to be nullable, matching PostgreSQL's own column default; a primary-key member is never nullable, because the database will not permit it. Never verified against the real table, and load-bearing rather than descriptive — the **Query surface** narrows a predicate on the strength of it, so a column holding a null it was claimed not to returns fewer rows than it should rather than failing.
 _Avoid_: Nullability, NOT NULL constraint (that is the database's, which this never creates and never checks), required, optional.
+
+**Storage claim**:
+What a **Table definition** states about how one of its columns is represented in PostgreSQL, spelled as the type the value is bound as. Where it states nothing the representation follows from the property's own type, except an enum, which is stored as the text of its member name. Never verified against the real table, and permissive rather than curated: a claim the library has no test for is still carried, so only a documented subset is known to round-trip, and one the **Query surface** cannot represent is honoured on the Dapper surface alone.
+_Avoid_: Column type, DbType, DataType, cast, conversion.
 
 **Entity name**:
 A **Table definition**'s class name with the `Table` suffix removed. The stem every generated type name is built from, so it — not the table name — is what appears in consuming code.
