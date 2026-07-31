@@ -184,7 +184,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine("      ArgumentNullException.ThrowIfNull(data);");
       builder.AppendLine();
       builder.AppendLine($"      return await _db.Dapper.QuerySingleAsync<{model.DataTypeName}>(");
-      AppendSqlLiteral(builder, 9, BuildCreateSql(model));
+      AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildCreateSql(model));
 
       if (model.CreateProperties.Length == 0)
       {
@@ -208,7 +208,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine($"   public async Task<IEnumerable<{model.DataTypeName}>> GetAllAsync(CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine($"      return await _db.Dapper.QueryAsync<{model.DataTypeName}>(");
-      AppendSqlLiteral(builder, 9, BuildGetAllSql(model));
+      AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildGetAllSql(model));
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -220,7 +220,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine($"   public async Task<{model.DataTypeName}?> {PRIMARY_KEY_LOOKUP_METHOD_NAME}({KeyParameterList(model)}, CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine($"      return await _db.Dapper.QuerySingleOrDefaultAsync<{model.DataTypeName}>(");
-      AppendSqlLiteral(builder, 9, BuildGetByPrimaryKeySql(model));
+      AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildGetByPrimaryKeySql(model));
       builder.AppendLine(",");
       AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeys), 9);
       builder.AppendLine(",");
@@ -234,7 +234,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine($"   public async Task<bool> {PRIMARY_KEY_DELETE_METHOD_NAME}({KeyParameterList(model)}, CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine("      var affectedRows = await _db.Dapper.ExecuteAsync(");
-      AppendSqlLiteral(builder, 9, BuildDeleteByPrimaryKeySql(model));
+      AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildDeleteByPrimaryKeySql(model));
       builder.AppendLine(",");
       AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeys), 9);
       builder.AppendLine(",");
@@ -250,7 +250,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine($"   public async Task<{model.DataTypeName}?> {LookupMethodName(property)}({property.TypeName} {property.ParameterName}, CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine($"      return await _db.Dapper.QuerySingleOrDefaultAsync<{model.DataTypeName}>(");
-      AppendSqlLiteral(builder, 9, BuildGetBySql(model, property));
+      AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildGetBySql(model, property));
       builder.AppendLine(",");
       AppendParameterDictionary(builder, ParameterBindings([property]), 9);
       builder.AppendLine(",");
@@ -266,7 +266,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine("      ArgumentNullException.ThrowIfNull(data);");
       builder.AppendLine();
       builder.AppendLine($"      return await _db.Dapper.QuerySingleAsync<{model.DataTypeName}>(");
-      AppendSqlLiteral(builder, 9, BuildUpdateSql(model));
+      AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildUpdateSql(model));
       builder.AppendLine(",");
       AppendParameterDictionary(builder, CommandBindings(model.UpdateProperties, "data"), 9);
       builder.AppendLine(",");
@@ -280,7 +280,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine($"   public async Task<bool> {DeleteMethodName(property)}({property.TypeName} {property.ParameterName}, CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine("      var affectedRows = await _db.Dapper.ExecuteAsync(");
-      AppendSqlLiteral(builder, 9, BuildDeleteBySql(model, property));
+      AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildDeleteBySql(model, property));
       builder.AppendLine(",");
       AppendParameterDictionary(builder, ParameterBindings([property]), 9);
       builder.AppendLine(",");
@@ -372,81 +372,4 @@ internal static class TableRepositorySourceBuilder
       builder.Append(' ', indentation).Append("\"\"\"");
    }
 
-   private static string BuildCreateSql(TableDefinitionModel model)
-   {
-      var tableName = FullyQualifiedTableName(model);
-      if (model.CreateProperties.Length == 0)
-      {
-         return $"INSERT INTO {tableName}\nDEFAULT VALUES\nRETURNING {BuildReturningList(model)}";
-      }
-
-      var columns = string.Join(", ", model.CreateProperties.Select(x => QuoteIdentifier(x.ColumnName)));
-      var values = string.Join(", ", model.CreateProperties.Select(x => $":{x.PropertyName}"));
-      return $"INSERT INTO {tableName} ({columns})\nVALUES ({values})\nRETURNING {BuildReturningList(model)}";
-   }
-
-   private static string BuildGetAllSql(TableDefinitionModel model)
-   {
-      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}";
-   }
-
-   private static string BuildGetBySql(TableDefinitionModel model, PropertyDefinitionModel property)
-   {
-      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {QuoteIdentifier(property.ColumnName)} = :{property.ParameterName}";
-   }
-
-   private static string BuildGetByPrimaryKeySql(TableDefinitionModel model)
-   {
-      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildKeyPredicate(model, x => x.ParameterName)}";
-   }
-
-   private static string BuildUpdateSql(TableDefinitionModel model)
-   {
-      var assignments = string.Join(", ", model.MutableUpdateProperties.Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{x.PropertyName}"));
-      return $"UPDATE {FullyQualifiedTableName(model)}\nSET {assignments}\nWHERE {BuildKeyPredicate(model, x => x.PropertyName)}\nRETURNING {BuildReturningList(model)}";
-   }
-
-   private static string BuildDeleteBySql(TableDefinitionModel model, PropertyDefinitionModel property)
-   {
-      return $"DELETE FROM {FullyQualifiedTableName(model)}\nWHERE {QuoteIdentifier(property.ColumnName)} = :{property.ParameterName}";
-   }
-
-   private static string BuildDeleteByPrimaryKeySql(TableDefinitionModel model)
-   {
-      return $"DELETE FROM {FullyQualifiedTableName(model)}\nWHERE {BuildKeyPredicate(model, x => x.ParameterName)}";
-   }
-
-   /// <summary>
-   ///    Every key member constrained, so a statement addressing a row by its primary key affects exactly one row.
-   /// </summary>
-   /// <remarks>
-   ///    <paramref name="bindingName" /> is which name the statement binds each key member by. A lookup and a delete take
-   ///    their values as method parameters and so bind by <see cref="PropertyDefinitionModel.ParameterName" />; an update
-   ///    takes them off a command object alongside its other columns and binds by
-   ///    <see cref="PropertyDefinitionModel.PropertyName" /> like the rest of that statement.
-   /// </remarks>
-   private static string BuildKeyPredicate(TableDefinitionModel model, Func<PropertyDefinitionModel, string> bindingName)
-   {
-      return string.Join(" AND ", model.PrimaryKeys.Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{bindingName(x)}"));
-   }
-
-   private static string BuildSelectList(TableDefinitionModel model)
-   {
-      return string.Join(", ", model.DataProperties.Select(x => $"{QuoteIdentifier(x.ColumnName)} AS {QuoteIdentifier(x.PropertyName)}"));
-   }
-
-   private static string BuildReturningList(TableDefinitionModel model)
-   {
-      return string.Join(", ", model.DataProperties.Select(x => $"{QuoteIdentifier(x.ColumnName)} AS {QuoteIdentifier(x.PropertyName)}"));
-   }
-
-   private static string FullyQualifiedTableName(TableDefinitionModel model)
-   {
-      return $"{QuoteIdentifier(model.SchemaName)}.{QuoteIdentifier(model.TableName)}";
-   }
-
-   private static string QuoteIdentifier(string value)
-   {
-      return $"\"{value.Replace("\"", "\"\"")}\"";
-   }
 }
