@@ -3,9 +3,10 @@ using AwesomeAssertions;
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
 /// <summary>
-///    What a table definition's <c>[Column(Tenancy = true)]</c> claim buys on the two members this step touches:
-///    <c>Query</c> and <c>GetAllAsync</c>. Pinned alongside the composite-key, nullability and storage classes that
-///    cover the other three <c>[Column]</c> claims the same way.
+///    What a table definition's <c>[Column(Tenancy = true)]</c> claim buys on the generated read and delete surface:
+///    <c>Query</c>, <c>GetAllAsync</c> (pinned by the sibling step-02 assertions below), every <c>GetBy{Unique}Async</c>
+///    and <c>DeleteBy{Unique}Async</c>, and <c>GetByPrimaryKeyAsync</c>/<c>DeleteByPrimaryKeyAsync</c>. Pinned alongside
+///    the composite-key, nullability and storage classes that cover the other three <c>[Column]</c> claims the same way.
 /// </summary>
 public class TableRepositoryGeneratorTenancyTests
 {
@@ -49,6 +50,9 @@ public class TableRepositoryGeneratorTenancyTests
          [Column(Tenancy = true)]
          public long AccountId { get; set; }
 
+         [Unique]
+         public string Code { get; set; } = string.Empty;
+
          public string Name { get; set; } = string.Empty;
       }
       """;
@@ -71,6 +75,30 @@ public class TableRepositoryGeneratorTenancyTests
 
          [Column(Tenancy = true)]
          public long WorkspaceId { get; set; }
+
+         [Unique]
+         public string Code { get; set; } = string.Empty;
+
+         public string Name { get; set; } = string.Empty;
+      }
+      """;
+
+   /// <summary>The tenancy column also carries <c>[Unique]</c>, so its own lookup and delete take that value once.</summary>
+   private const string TENANCY_COLUMN_IS_UNIQUE = """
+      using mvdmio.Database.PgSQL.Attributes;
+
+      namespace Demo;
+
+      [Table("public.rows")]
+      public partial class RowTable
+      {
+         [PrimaryKey]
+         [Generated]
+         public long RowId { get; set; }
+
+         [Column(Tenancy = true)]
+         [Unique]
+         public long AccountId { get; set; }
 
          public string Name { get; set; } = string.Empty;
       }
@@ -189,6 +217,7 @@ public class TableRepositoryGeneratorTenancyTests
       GeneratorHarness.AssertGeneratedSourcesCompile(TENANCY_INSIDE_KEY);
       GeneratorHarness.AssertGeneratedSourcesCompile(TENANCY_OUTSIDE_KEY);
       GeneratorHarness.AssertGeneratedSourcesCompile(TWO_TENANCY_COLUMNS);
+      GeneratorHarness.AssertGeneratedSourcesCompile(TENANCY_COLUMN_IS_UNIQUE);
       GeneratorHarness.AssertGeneratedSourcesCompile(UNTENANTED);
    }
 
@@ -198,5 +227,127 @@ public class TableRepositoryGeneratorTenancyTests
       GeneratorHarness.RunGenerator(TENANCY_INSIDE_KEY).Diagnostics.Should().BeEmpty();
       GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY).Diagnostics.Should().BeEmpty();
       GeneratorHarness.RunGenerator(TWO_TENANCY_COLUMNS).Diagnostics.Should().BeEmpty();
+      GeneratorHarness.RunGenerator(TENANCY_COLUMN_IS_UNIQUE).Diagnostics.Should().BeEmpty();
+   }
+
+   [Fact]
+   public void GetByPrimaryKeyAsync_AndDeleteByPrimaryKeyAsync_AreUnchanged_WhenTheTenancyColumnIsAlreadyAKeyMember()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_INSIDE_KEY));
+
+      repository.Should().Contain("Task<ProjectData?> GetByPrimaryKeyAsync(long accountId, long projectId, CancellationToken ct = default);");
+      repository.Should().Contain("Task<bool> DeleteByPrimaryKeyAsync(long accountId, long projectId, CancellationToken ct = default);");
+      repository.Should().Contain("public async Task<ProjectData?> GetByPrimaryKeyAsync(long accountId, long projectId, CancellationToken ct = default)");
+      repository.Should().Contain("public async Task<bool> DeleteByPrimaryKeyAsync(long accountId, long projectId, CancellationToken ct = default)");
+
+      // No duplicated predicate: the key predicate alone already constrains the tenant.
+      repository.Should().Contain("""WHERE "account_id" = :accountId AND "project_id" = :projectId""");
+   }
+
+   [Fact]
+   public void GetByPrimaryKeyAsync_AndDeleteByPrimaryKeyAsync_GainATenancyParameter_WhenItIsOutsideTheKey()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY));
+
+      repository.Should().Contain("Task<RowData?> GetByPrimaryKeyAsync(long accountId, long rowId, CancellationToken ct = default);");
+      repository.Should().Contain("Task<bool> DeleteByPrimaryKeyAsync(long accountId, long rowId, CancellationToken ct = default);");
+      repository.Should().Contain("public async Task<RowData?> GetByPrimaryKeyAsync(long accountId, long rowId, CancellationToken ct = default)");
+      repository.Should().Contain("public async Task<bool> DeleteByPrimaryKeyAsync(long accountId, long rowId, CancellationToken ct = default)");
+
+      repository.Should().Contain("""WHERE "row_id" = :rowId AND "account_id" = :accountId""");
+      repository.Should().Contain("""["rowId"] = rowId,""");
+      repository.Should().Contain("""["accountId"] = accountId,""");
+   }
+
+   [Fact]
+   public void GetByPrimaryKeyAsync_ConstrainsBothTenancyColumns_WhenBothSitOutsideTheKey()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TWO_TENANCY_COLUMNS));
+
+      repository.Should().Contain("Task<RowData?> GetByPrimaryKeyAsync(long accountId, long workspaceId, long rowId, CancellationToken ct = default);");
+      repository.Should().Contain("""WHERE "row_id" = :rowId AND "account_id" = :accountId AND "workspace_id" = :workspaceId""");
+   }
+
+   [Fact]
+   public void GetByUniqueAsync_AndDeleteByUniqueAsync_GainATenancyParameter_TenancyInsideTheKey()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_INSIDE_KEY));
+
+      repository.Should().Contain("Task<ProjectData?> GetByCodeAsync(long accountId, string code, CancellationToken ct = default);");
+      repository.Should().Contain("Task<bool> DeleteByCodeAsync(long accountId, string code, CancellationToken ct = default);");
+
+      repository.Should().Contain("""WHERE "code" = :code AND "account_id" = :accountId""");
+   }
+
+   [Fact]
+   public void GetByUniqueAsync_AndDeleteByUniqueAsync_GainATenancyParameter_TenancyOutsideTheKey()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY));
+
+      repository.Should().Contain("Task<RowData?> GetByCodeAsync(long accountId, string code, CancellationToken ct = default);");
+      repository.Should().Contain("Task<bool> DeleteByCodeAsync(long accountId, string code, CancellationToken ct = default);");
+
+      repository.Should().Contain("""WHERE "code" = :code AND "account_id" = :accountId""");
+   }
+
+   [Fact]
+   public void GetByUniqueAsync_ConstrainsBothTenancyColumns_InDeclarationOrder()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TWO_TENANCY_COLUMNS));
+
+      repository.Should().Contain("Task<RowData?> GetByCodeAsync(long accountId, long workspaceId, string code, CancellationToken ct = default);");
+      repository.Should().Contain("""WHERE "code" = :code AND "account_id" = :accountId AND "workspace_id" = :workspaceId""");
+   }
+
+   [Fact]
+   public void GetByUniqueAsync_AndDeleteByUniqueAsync_TakeTheTenancyColumnsOwnValueOnce_WhenItIsTheUniqueColumn()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_COLUMN_IS_UNIQUE));
+
+      repository.Should().Contain("Task<RowData?> GetByAccountIdAsync(long accountId, CancellationToken ct = default);");
+      repository.Should().Contain("Task<bool> DeleteByAccountIdAsync(long accountId, CancellationToken ct = default);");
+
+      repository.Should().Contain("""WHERE "account_id" = :accountId""");
+      repository.Should().NotContain("""WHERE "account_id" = :accountId AND""");
+   }
+
+   [Fact]
+   public void GetByPrimaryKeyAsync_TakesTheTenancyColumnsOwnValueOnce_WhenItIsAlsoTheUniqueColumn()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_COLUMN_IS_UNIQUE));
+
+      repository.Should().Contain("Task<RowData?> GetByPrimaryKeyAsync(long accountId, long rowId, CancellationToken ct = default);");
+   }
+
+   [Fact]
+   public void UntenantedTable_GetByAndDeleteByAndPrimaryKeyMembers_AreUnchanged()
+   {
+      const string UNTENANTED_WITH_UNIQUE = """
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.rows")]
+         public partial class RowTable
+         {
+            [PrimaryKey]
+            [Generated]
+            public long RowId { get; set; }
+
+            [Unique]
+            public string Code { get; set; } = string.Empty;
+
+            public long AccountId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """;
+
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(UNTENANTED_WITH_UNIQUE));
+
+      repository.Should().Contain("Task<RowData?> GetByPrimaryKeyAsync(long rowId, CancellationToken ct = default);");
+      repository.Should().Contain("Task<bool> DeleteByPrimaryKeyAsync(long rowId, CancellationToken ct = default);");
+      repository.Should().Contain("Task<RowData?> GetByCodeAsync(string code, CancellationToken ct = default);");
+      repository.Should().Contain("Task<bool> DeleteByCodeAsync(string code, CancellationToken ct = default);");
    }
 }

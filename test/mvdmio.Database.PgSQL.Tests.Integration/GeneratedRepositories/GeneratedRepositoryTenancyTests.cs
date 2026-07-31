@@ -79,6 +79,66 @@ public class GeneratedRepositoryTenancyTests : TestBase
       rows.Select(x => x.Code).Should().Equal("doc-first-b");
    }
 
+   [Fact]
+   public async Task GetByCodeAsync_ForAValueBelongingToAnotherTenant_ReturnsNull_TenancyOutsideTheKey()
+   {
+      var row = await _settings.GetByCodeAsync(FIRST_ACCOUNT, "setting-second-a", CancellationToken);
+
+      row.Should().BeNull();
+   }
+
+   [Fact]
+   public async Task DeleteByCodeAsync_ForAValueBelongingToAnotherTenant_LeavesTheRowInPlace_TenancyOutsideTheKey()
+   {
+      var deleted = await _settings.DeleteByCodeAsync(FIRST_ACCOUNT, "setting-second-a", CancellationToken);
+      var stillThere = await _settings.GetByCodeAsync(SECOND_ACCOUNT, "setting-second-a", CancellationToken);
+
+      deleted.Should().BeFalse();
+      stillThere.Should().NotBeNull();
+   }
+
+   [Fact]
+   public async Task GetByCodeAsync_ForAValueBelongingToAnotherTenant_ReturnsNull_TenancyInsideTheKey()
+   {
+      var row = await _documents.GetByCodeAsync(SECOND_ACCOUNT, "doc-first-a", CancellationToken);
+
+      row.Should().BeNull();
+   }
+
+   [Fact]
+   public async Task DeleteByCodeAsync_ForAValueBelongingToAnotherTenant_LeavesTheRowInPlace_TenancyInsideTheKey()
+   {
+      var deleted = await _documents.DeleteByCodeAsync(SECOND_ACCOUNT, "doc-first-a", CancellationToken);
+      var stillThere = await _documents.GetByCodeAsync(FIRST_ACCOUNT, "doc-first-a", CancellationToken);
+
+      deleted.Should().BeFalse();
+      stillThere.Should().NotBeNull();
+   }
+
+   [Fact]
+   public async Task GetByPrimaryKeyAsync_WithTheWrongTenant_ReturnsNull_WhenTheTenancyColumnIsOutsideTheKey()
+   {
+      var mine = await _settings.GetByCodeAsync(SECOND_ACCOUNT, "setting-second-a", CancellationToken);
+      mine.Should().NotBeNull();
+
+      var row = await _settings.GetByPrimaryKeyAsync(FIRST_ACCOUNT, mine!.SettingId, CancellationToken);
+
+      row.Should().BeNull();
+   }
+
+   [Fact]
+   public async Task GetByPrimaryKeyAsync_SignatureIsUnchanged_WhenTheTenancyColumnIsAlreadyAKeyMember()
+   {
+      var mine = await _documents.GetByCodeAsync(FIRST_ACCOUNT, "doc-first-a", CancellationToken);
+      mine.Should().NotBeNull();
+
+      // The signature takes only the key — the tenant is already one of its members — so the wrong account cannot
+      // even be asked for separately from the key itself.
+      var row = await _documents.GetByPrimaryKeyAsync(FIRST_ACCOUNT, mine!.DocumentId, CancellationToken);
+
+      row.Should().NotBeNull();
+   }
+
    private async Task CreateDocumentAsync(long accountId, string code, string title)
    {
       await _documents.CreateAsync(

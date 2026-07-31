@@ -108,19 +108,19 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine("{");
       builder.AppendLine($"   Task<{model.DataTypeName}> CreateAsync({model.CreateCommandTypeName} data, CancellationToken ct = default);");
       builder.AppendLine($"   Task<IEnumerable<{model.DataTypeName}>> GetAllAsync({GetAllParameterList(model)});");
-      builder.AppendLine($"   Task<{model.DataTypeName}?> {PRIMARY_KEY_LOOKUP_METHOD_NAME}({KeyParameterList(model)}, CancellationToken ct = default);");
+      builder.AppendLine($"   Task<{model.DataTypeName}?> {PRIMARY_KEY_LOOKUP_METHOD_NAME}({KeyAndTenancyParameterList(model)}, CancellationToken ct = default);");
 
       foreach (var property in model.LookupProperties)
       {
-         builder.AppendLine($"   Task<{model.DataTypeName}?> {LookupMethodName(property)}({property.TypeName} {property.ParameterName}, CancellationToken ct = default);");
+         builder.AppendLine($"   Task<{model.DataTypeName}?> {LookupMethodName(property)}({LookupParameterList(model, property)}, CancellationToken ct = default);");
       }
 
       builder.AppendLine($"   Task<{model.DataTypeName}> UpdateAsync({model.UpdateCommandTypeName} data, CancellationToken ct = default);");
-      builder.AppendLine($"   Task<bool> {PRIMARY_KEY_DELETE_METHOD_NAME}({KeyParameterList(model)}, CancellationToken ct = default);");
+      builder.AppendLine($"   Task<bool> {PRIMARY_KEY_DELETE_METHOD_NAME}({KeyAndTenancyParameterList(model)}, CancellationToken ct = default);");
 
       foreach (var property in model.LookupProperties)
       {
-         builder.AppendLine($"   Task<bool> {DeleteMethodName(property)}({property.TypeName} {property.ParameterName}, CancellationToken ct = default);");
+         builder.AppendLine($"   Task<bool> {DeleteMethodName(property)}({LookupParameterList(model, property)}, CancellationToken ct = default);");
       }
 
       builder.AppendLine($"   IQueryable<{model.DataTypeName}> Query({QueryParameterList(model)});");
@@ -238,12 +238,12 @@ internal static class TableRepositorySourceBuilder
 
    private static void AppendGetByPrimaryKeyMethod(StringBuilder builder, TableDefinitionModel model)
    {
-      builder.AppendLine($"   public async Task<{model.DataTypeName}?> {PRIMARY_KEY_LOOKUP_METHOD_NAME}({KeyParameterList(model)}, CancellationToken ct = default)");
+      builder.AppendLine($"   public async Task<{model.DataTypeName}?> {PRIMARY_KEY_LOOKUP_METHOD_NAME}({KeyAndTenancyParameterList(model)}, CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine($"      return await _db.Dapper.QuerySingleOrDefaultAsync<{model.DataTypeName}>(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildGetByPrimaryKeySql(model));
       builder.AppendLine(",");
-      AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeys), 9);
+      AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeys.Concat(TenancyColumnsOutsideKey(model))), 9);
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -252,12 +252,12 @@ internal static class TableRepositorySourceBuilder
 
    private static void AppendDeleteByPrimaryKeyMethod(StringBuilder builder, TableDefinitionModel model)
    {
-      builder.AppendLine($"   public async Task<bool> {PRIMARY_KEY_DELETE_METHOD_NAME}({KeyParameterList(model)}, CancellationToken ct = default)");
+      builder.AppendLine($"   public async Task<bool> {PRIMARY_KEY_DELETE_METHOD_NAME}({KeyAndTenancyParameterList(model)}, CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine("      var affectedRows = await _db.Dapper.ExecuteAsync(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildDeleteByPrimaryKeySql(model));
       builder.AppendLine(",");
-      AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeys), 9);
+      AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeys.Concat(TenancyColumnsOutsideKey(model))), 9);
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -268,12 +268,12 @@ internal static class TableRepositorySourceBuilder
 
    private static void AppendGetByMethod(StringBuilder builder, TableDefinitionModel model, PropertyDefinitionModel property)
    {
-      builder.AppendLine($"   public async Task<{model.DataTypeName}?> {LookupMethodName(property)}({property.TypeName} {property.ParameterName}, CancellationToken ct = default)");
+      builder.AppendLine($"   public async Task<{model.DataTypeName}?> {LookupMethodName(property)}({LookupParameterList(model, property)}, CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine($"      return await _db.Dapper.QuerySingleOrDefaultAsync<{model.DataTypeName}>(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildGetBySql(model, property));
       builder.AppendLine(",");
-      AppendParameterDictionary(builder, ParameterBindings([property]), 9);
+      AppendParameterDictionary(builder, ParameterBindings([property]).Concat(ParameterBindings(TenancyColumnsExcept(model, property))), 9);
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -298,12 +298,12 @@ internal static class TableRepositorySourceBuilder
 
    private static void AppendDeleteByMethod(StringBuilder builder, TableDefinitionModel model, PropertyDefinitionModel property)
    {
-      builder.AppendLine($"   public async Task<bool> {DeleteMethodName(property)}({property.TypeName} {property.ParameterName}, CancellationToken ct = default)");
+      builder.AppendLine($"   public async Task<bool> {DeleteMethodName(property)}({LookupParameterList(model, property)}, CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine("      var affectedRows = await _db.Dapper.ExecuteAsync(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildDeleteBySql(model, property));
       builder.AppendLine(",");
-      AppendParameterDictionary(builder, ParameterBindings([property]), 9);
+      AppendParameterDictionary(builder, ParameterBindings([property]).Concat(ParameterBindings(TenancyColumnsExcept(model, property))), 9);
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -316,6 +316,42 @@ internal static class TableRepositorySourceBuilder
    private static string KeyParameterList(TableDefinitionModel model)
    {
       return string.Join(", ", model.PrimaryKeys.Select(x => $"{x.TypeName} {x.ParameterName}"));
+   }
+
+   /// <summary>
+   ///    <see cref="AppendGetByPrimaryKeyMethod" /> and <see cref="AppendDeleteByPrimaryKeyMethod" />'s parameter list:
+   ///    every tenancy column that is not already a key member, first and in declaration order, then the key
+   ///    parameters. Identical to <see cref="KeyParameterList" /> where every tenancy column is already a key member —
+   ///    a table safe by construction gains no parameter here.
+   /// </summary>
+   private static string KeyAndTenancyParameterList(TableDefinitionModel model)
+   {
+      var tenancyPrefix = string.Join(string.Empty, TenancyColumnsOutsideKey(model).Select(x => $"{x.TypeName} {x.ParameterName}, "));
+      return $"{tenancyPrefix}{KeyParameterList(model)}";
+   }
+
+   /// <summary>
+   ///    <see cref="AppendGetByMethod" /> and <see cref="AppendDeleteByMethod" />'s parameter list: every tenancy
+   ///    column other than <paramref name="property" /> itself, first and in declaration order, then the looked-up
+   ///    property's own value. Where <paramref name="property" /> carries <c>Tenancy = true</c>, its own lookup takes
+   ///    that value once rather than twice.
+   /// </summary>
+   private static string LookupParameterList(TableDefinitionModel model, PropertyDefinitionModel property)
+   {
+      var tenancyPrefix = string.Join(string.Empty, TenancyColumnsExcept(model, property).Select(x => $"{x.TypeName} {x.ParameterName}, "));
+      return $"{tenancyPrefix}{property.TypeName} {property.ParameterName}";
+   }
+
+   /// <summary>The tenancy columns not already a primary-key member, in declaration order.</summary>
+   private static IEnumerable<PropertyDefinitionModel> TenancyColumnsOutsideKey(TableDefinitionModel model)
+   {
+      return model.TenancyColumns.Where(x => !model.PrimaryKeys.Contains(x));
+   }
+
+   /// <summary>The tenancy columns other than <paramref name="property" />, in declaration order.</summary>
+   private static IEnumerable<PropertyDefinitionModel> TenancyColumnsExcept(TableDefinitionModel model, PropertyDefinitionModel property)
+   {
+      return model.TenancyColumns.Where(x => !ReferenceEquals(x, property));
    }
 
    /// <summary>

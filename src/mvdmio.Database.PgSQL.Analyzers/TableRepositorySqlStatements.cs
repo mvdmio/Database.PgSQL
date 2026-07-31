@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace mvdmio.Database.PgSQL.Analyzers;
@@ -39,12 +40,12 @@ internal static class TableRepositorySqlStatements
 
    public static string BuildGetBySql(TableDefinitionModel model, PropertyDefinitionModel property)
    {
-      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {QuoteIdentifier(property.ColumnName)} = :{property.ParameterName}";
+      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildLookupPredicate(model, property)}";
    }
 
    public static string BuildGetByPrimaryKeySql(TableDefinitionModel model)
    {
-      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildKeyPredicate(model, x => x.ParameterName)}";
+      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildKeyAndTenancyPredicate(model, x => x.ParameterName)}";
    }
 
    public static string BuildUpdateSql(TableDefinitionModel model)
@@ -55,12 +56,12 @@ internal static class TableRepositorySqlStatements
 
    public static string BuildDeleteBySql(TableDefinitionModel model, PropertyDefinitionModel property)
    {
-      return $"DELETE FROM {FullyQualifiedTableName(model)}\nWHERE {QuoteIdentifier(property.ColumnName)} = :{property.ParameterName}";
+      return $"DELETE FROM {FullyQualifiedTableName(model)}\nWHERE {BuildLookupPredicate(model, property)}";
    }
 
    public static string BuildDeleteByPrimaryKeySql(TableDefinitionModel model)
    {
-      return $"DELETE FROM {FullyQualifiedTableName(model)}\nWHERE {BuildKeyPredicate(model, x => x.ParameterName)}";
+      return $"DELETE FROM {FullyQualifiedTableName(model)}\nWHERE {BuildKeyAndTenancyPredicate(model, x => x.ParameterName)}";
    }
 
    /// <summary>
@@ -75,6 +76,42 @@ internal static class TableRepositorySqlStatements
    public static string BuildKeyPredicate(TableDefinitionModel model, Func<PropertyDefinitionModel, string> bindingName)
    {
       return string.Join(" AND ", model.PrimaryKeys.Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{bindingName(x)}"));
+   }
+
+   /// <summary>
+   ///    Every key member constrained, plus every tenancy column not already a key member — used by the two members
+   ///    that address a row by its primary key alone. Identical to <see cref="BuildKeyPredicate" /> where every tenancy
+   ///    column is already a key member, which is why a table safe by construction gains no predicate here.
+   /// </summary>
+   public static string BuildKeyAndTenancyPredicate(TableDefinitionModel model, Func<PropertyDefinitionModel, string> bindingName)
+   {
+      var predicates = model.PrimaryKeys.Concat(TenancyColumnsOutsideKey(model)).Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{bindingName(x)}");
+      return string.Join(" AND ", predicates);
+   }
+
+   /// <summary>
+   ///    A <c>[Unique]</c> column constrained, plus every tenancy column other than the one being looked up — the
+   ///    lookup and delete a <c>[Unique]</c> property gets. Where the property itself carries <c>Tenancy = true</c>,
+   ///    it is excluded from the tenancy half so its value is constrained once rather than twice.
+   /// </summary>
+   private static string BuildLookupPredicate(TableDefinitionModel model, PropertyDefinitionModel property)
+   {
+      var predicates = new[] { $"{QuoteIdentifier(property.ColumnName)} = :{property.ParameterName}" }
+         .Concat(TenancyColumnsExcept(model, property).Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{x.ParameterName}"));
+
+      return string.Join(" AND ", predicates);
+   }
+
+   /// <summary>The tenancy columns not already a primary-key member, in declaration order.</summary>
+   private static IEnumerable<PropertyDefinitionModel> TenancyColumnsOutsideKey(TableDefinitionModel model)
+   {
+      return model.TenancyColumns.Where(x => !model.PrimaryKeys.Contains(x));
+   }
+
+   /// <summary>The tenancy columns other than <paramref name="property" />, in declaration order.</summary>
+   private static IEnumerable<PropertyDefinitionModel> TenancyColumnsExcept(TableDefinitionModel model, PropertyDefinitionModel property)
+   {
+      return model.TenancyColumns.Where(x => !ReferenceEquals(x, property));
    }
 
    public static string BuildSelectList(TableDefinitionModel model)
