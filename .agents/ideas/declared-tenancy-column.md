@@ -1,6 +1,10 @@
 # Declare a tenancy column once and let the compiler enforce it
 
-Status: needs-triage
+Status: ready-for-agent
+
+Grilled and specced. Every open question below is answered in
+[the spec](../specs/declared-tenancy-column.md) and [ADR 0009](../../docs/adr/0009-declared-tenancy-column.md).
+Delete this file when the feature ships.
 
 ## Motivation
 

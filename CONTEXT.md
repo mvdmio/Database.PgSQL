@@ -44,6 +44,10 @@ _Avoid_: Nullability, NOT NULL constraint (that is the database's, which this ne
 What a **Table definition** states about how one of its columns is represented in PostgreSQL, spelled as the type the value is bound as. Where it states nothing the representation follows from the property's own type, except an enum, which is stored as the text of its member name. Never verified against the real table, and permissive rather than curated: a claim the library has no test for is still carried, so only a documented subset is known to round-trip, and one the **Query surface** cannot represent is honoured on the Dapper surface alone.
 _Avoid_: Column type, DbType, DataType, cast, conversion.
 
+**Tenancy column**:
+A column a **Table definition** names as one that every generated member must constrain, so that no generated member can read or change a row belonging to another tenant. More than one column may be named, and each is constrained. What it changes is the generated API rather than any statement's meaning: a member that does not already constrain the column takes its value as a parameter, and the generated command types carry it as a required property, so leaving it out is a build error instead of a review responsibility. It reaches no further than generated code — the **Query surface** is still reachable directly, and hand-written Dapper is untouched. Never verified in any sense: nothing checks the column against the real table, and nothing checks the value against anything, because the library holds no tenant of its own and so cannot tell a right value from a wrong one. It makes the value impossible to omit and nothing more.
+_Avoid_: Tenant, tenant id, partition key, discriminator, row-level security (that is PostgreSQL's, which this library never configures).
+
 **Entity name**:
 A **Table definition**'s class name with the `Table` suffix removed. The stem every generated type name is built from, so it — not the table name — is what appears in consuming code.
 _Avoid_: Table name, class name, type name.
