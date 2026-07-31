@@ -107,7 +107,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine($"{model.Accessibility} partial interface {model.RepositoryInterfaceTypeName}");
       builder.AppendLine("{");
       builder.AppendLine($"   Task<{model.DataTypeName}> CreateAsync({model.CreateCommandTypeName} data, CancellationToken ct = default);");
-      builder.AppendLine($"   Task<IEnumerable<{model.DataTypeName}>> GetAllAsync(CancellationToken ct = default);");
+      builder.AppendLine($"   Task<IEnumerable<{model.DataTypeName}>> GetAllAsync({GetAllParameterList(model)});");
       builder.AppendLine($"   Task<{model.DataTypeName}?> {PRIMARY_KEY_LOOKUP_METHOD_NAME}({KeyParameterList(model)}, CancellationToken ct = default);");
 
       foreach (var property in model.LookupProperties)
@@ -123,7 +123,7 @@ internal static class TableRepositorySourceBuilder
          builder.AppendLine($"   Task<bool> {DeleteMethodName(property)}({property.TypeName} {property.ParameterName}, CancellationToken ct = default);");
       }
 
-      builder.AppendLine($"   IQueryable<{model.DataTypeName}> Query(TimeSpan? commandTimeout = null);");
+      builder.AppendLine($"   IQueryable<{model.DataTypeName}> Query({QueryParameterList(model)});");
       builder.AppendLine("}");
    }
 
@@ -171,9 +171,19 @@ internal static class TableRepositorySourceBuilder
 
    private static void AppendQueryMethod(StringBuilder builder, TableDefinitionModel model)
    {
-      builder.AppendLine($"   public IQueryable<{model.DataTypeName}> Query(TimeSpan? commandTimeout = null)");
+      builder.AppendLine($"   public IQueryable<{model.DataTypeName}> Query({QueryParameterList(model)})");
       builder.AppendLine("   {");
-      builder.AppendLine($"      return _db.Linq.Query<{model.DataTypeName}>(commandTimeout);");
+
+      if (model.TenancyColumns.Length == 0)
+      {
+         builder.AppendLine($"      return _db.Linq.Query<{model.DataTypeName}>(commandTimeout);");
+      }
+      else
+      {
+         var predicate = string.Join(" && ", model.TenancyColumns.Select(x => $"x.{x.PropertyName} == {x.ParameterName}"));
+         builder.AppendLine($"      return _db.Linq.Query<{model.DataTypeName}>(commandTimeout).Where(x => {predicate});");
+      }
+
       builder.AppendLine("   }");
    }
 
@@ -205,12 +215,23 @@ internal static class TableRepositorySourceBuilder
 
    private static void AppendGetAllMethod(StringBuilder builder, TableDefinitionModel model)
    {
-      builder.AppendLine($"   public async Task<IEnumerable<{model.DataTypeName}>> GetAllAsync(CancellationToken ct = default)");
+      builder.AppendLine($"   public async Task<IEnumerable<{model.DataTypeName}>> GetAllAsync({GetAllParameterList(model)})");
       builder.AppendLine("   {");
       builder.AppendLine($"      return await _db.Dapper.QueryAsync<{model.DataTypeName}>(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildGetAllSql(model));
       builder.AppendLine(",");
-      builder.AppendLine("         ct: ct");
+
+      if (model.TenancyColumns.Length == 0)
+      {
+         builder.AppendLine("         ct: ct");
+      }
+      else
+      {
+         AppendParameterDictionary(builder, ParameterBindings(model.TenancyColumns), 9);
+         builder.AppendLine(",");
+         builder.AppendLine("         ct: ct");
+      }
+
       builder.AppendLine("      );");
       builder.AppendLine("   }");
    }
@@ -295,6 +316,36 @@ internal static class TableRepositorySourceBuilder
    private static string KeyParameterList(TableDefinitionModel model)
    {
       return string.Join(", ", model.PrimaryKeys.Select(x => $"{x.TypeName} {x.ParameterName}"));
+   }
+
+   /// <summary>
+   ///    One parameter per tenancy column, in declaration order, with the trailing comma a parameter list after it needs
+   ///    — empty when the table declares none, so a member that takes nothing else stays untouched.
+   /// </summary>
+   private static string TenancyParameterListPrefix(TableDefinitionModel model)
+   {
+      if (model.TenancyColumns.Length == 0)
+         return string.Empty;
+
+      return string.Join(string.Empty, model.TenancyColumns.Select(x => $"{x.TypeName} {x.ParameterName}, "));
+   }
+
+   /// <summary>
+   ///    <see cref="AppendQueryMethod" />'s parameter list: every tenancy column first, in declaration order, with
+   ///    <c>commandTimeout</c> staying last and optional.
+   /// </summary>
+   private static string QueryParameterList(TableDefinitionModel model)
+   {
+      return $"{TenancyParameterListPrefix(model)}TimeSpan? commandTimeout = null";
+   }
+
+   /// <summary>
+   ///    <see cref="AppendGetAllMethod" />'s parameter list: every tenancy column first, in declaration order, with
+   ///    <c>ct</c> staying last and optional.
+   /// </summary>
+   private static string GetAllParameterList(TableDefinitionModel model)
+   {
+      return $"{TenancyParameterListPrefix(model)}CancellationToken ct = default";
    }
 
    /// <summary>

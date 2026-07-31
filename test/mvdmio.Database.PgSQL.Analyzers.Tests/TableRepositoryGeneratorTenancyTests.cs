@@ -1,0 +1,202 @@
+using AwesomeAssertions;
+
+namespace mvdmio.Database.PgSQL.Analyzers.Tests;
+
+/// <summary>
+///    What a table definition's <c>[Column(Tenancy = true)]</c> claim buys on the two members this step touches:
+///    <c>Query</c> and <c>GetAllAsync</c>. Pinned alongside the composite-key, nullability and storage classes that
+///    cover the other three <c>[Column]</c> claims the same way.
+/// </summary>
+public class TableRepositoryGeneratorTenancyTests
+{
+   /// <summary>The tenancy column is part of the primary key, which is the shape a driving multi-tenant schema has.</summary>
+   private const string TENANCY_INSIDE_KEY = """
+      using mvdmio.Database.PgSQL.Attributes;
+
+      namespace Demo;
+
+      [Table("public.projects")]
+      public partial class ProjectTable
+      {
+         [Column(Tenancy = true)]
+         [PrimaryKey]
+         public long AccountId { get; set; }
+
+         [PrimaryKey]
+         [Generated]
+         public long ProjectId { get; set; }
+
+         [Unique]
+         public string Code { get; set; } = string.Empty;
+
+         public string Name { get; set; } = string.Empty;
+      }
+      """;
+
+   /// <summary>The tenancy column sits outside the surrogate key, which is the common shape elsewhere.</summary>
+   private const string TENANCY_OUTSIDE_KEY = """
+      using mvdmio.Database.PgSQL.Attributes;
+
+      namespace Demo;
+
+      [Table("public.rows")]
+      public partial class RowTable
+      {
+         [PrimaryKey]
+         [Generated]
+         public long RowId { get; set; }
+
+         [Column(Tenancy = true)]
+         public long AccountId { get; set; }
+
+         public string Name { get; set; } = string.Empty;
+      }
+      """;
+
+   /// <summary>Two tenancy columns, declared account-then-workspace, so the two-level-tenancy case is exercised.</summary>
+   private const string TWO_TENANCY_COLUMNS = """
+      using mvdmio.Database.PgSQL.Attributes;
+
+      namespace Demo;
+
+      [Table("public.rows")]
+      public partial class RowTable
+      {
+         [PrimaryKey]
+         [Generated]
+         public long RowId { get; set; }
+
+         [Column(Tenancy = true)]
+         public long AccountId { get; set; }
+
+         [Column(Tenancy = true)]
+         public long WorkspaceId { get; set; }
+
+         public string Name { get; set; } = string.Empty;
+      }
+      """;
+
+   /// <summary>A table declaring no tenancy column at all, for the compatibility assertion.</summary>
+   private const string UNTENANTED = """
+      using mvdmio.Database.PgSQL.Attributes;
+
+      namespace Demo;
+
+      [Table("public.rows")]
+      public partial class RowTable
+      {
+         [PrimaryKey]
+         [Generated]
+         public long RowId { get; set; }
+
+         public long AccountId { get; set; }
+
+         public string Name { get; set; } = string.Empty;
+      }
+      """;
+
+   [Fact]
+   public void TenancyColumnInsideTheKey_AddsAParameterToQueryAndGetAll()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_INSIDE_KEY));
+
+      repository.Should().Contain("Task<IEnumerable<ProjectData>> GetAllAsync(long accountId, CancellationToken ct = default);");
+      repository.Should().Contain("IQueryable<ProjectData> Query(long accountId, TimeSpan? commandTimeout = null);");
+
+      repository.Should().Contain("public async Task<IEnumerable<ProjectData>> GetAllAsync(long accountId, CancellationToken ct = default)");
+      repository.Should().Contain("public IQueryable<ProjectData> Query(long accountId, TimeSpan? commandTimeout = null)");
+   }
+
+   [Fact]
+   public void TenancyColumnOutsideTheKey_AddsAParameterToQueryAndGetAll()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY));
+
+      repository.Should().Contain("Task<IEnumerable<RowData>> GetAllAsync(long accountId, CancellationToken ct = default);");
+      repository.Should().Contain("IQueryable<RowData> Query(long accountId, TimeSpan? commandTimeout = null);");
+   }
+
+   [Fact]
+   public void Query_ReturnsAQueryableAlreadyNarrowedToTheTenant()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_INSIDE_KEY));
+
+      repository.Should().Contain("return _db.Linq.Query<ProjectData>(commandTimeout).Where(x => x.AccountId == accountId);");
+   }
+
+   [Fact]
+   public void Query_StillTakesCommandTimeoutLastAsAnOptionalParameter()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TWO_TENANCY_COLUMNS));
+
+      repository.Should().Contain("IQueryable<RowData> Query(long accountId, long workspaceId, TimeSpan? commandTimeout = null);");
+   }
+
+   [Fact]
+   public void GetAllAsync_ConstrainsTheTenancyColumnInItsWhereClause_AndBindsItByParameter()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY));
+
+      repository.Should().Contain("""WHERE "account_id" = :accountId""");
+      repository.Should().Contain("""["accountId"] = accountId,""");
+   }
+
+   [Fact]
+   public void TwoTenancyColumns_AreBothConstrainedInDeclarationOrder()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TWO_TENANCY_COLUMNS));
+
+      repository.Should().Contain("""WHERE "account_id" = :accountId AND "workspace_id" = :workspaceId""");
+      repository.Should().Contain("return _db.Linq.Query<RowData>(commandTimeout).Where(x => x.AccountId == accountId && x.WorkspaceId == workspaceId);");
+
+      repository.Should().Contain("Task<IEnumerable<RowData>> GetAllAsync(long accountId, long workspaceId, CancellationToken ct = default);");
+   }
+
+   [Fact]
+   public void TenancyColumn_StaysAnOrdinaryColumnEverywhereElse()
+   {
+      var result = GeneratorHarness.RunGenerator(TENANCY_INSIDE_KEY);
+      var repository = GeneratorHarness.RepositorySource(result);
+      var registration = GeneratorHarness.RegistrationSource(result);
+
+      // Still in the select and returning lists.
+      repository.Should().Contain("""SELECT "account_id" AS "AccountId", "project_id" AS "ProjectId", "code" AS "Code", "name" AS "Name" """.TrimEnd());
+      repository.Should().Contain("""RETURNING "account_id" AS "AccountId", "project_id" AS "ProjectId", "code" AS "Code", "name" AS "Name" """.TrimEnd());
+
+      // Still a property on the generated data type.
+      repository.Should().Contain("public long AccountId { get; set; }");
+
+      // Still registered as an ordinary column on the query surface — a key member here, which is what it also claims.
+      registration.Should().Contain(""".Column(x => x.AccountId, "account_id", isPrimaryKey: true)""");
+   }
+
+   [Fact]
+   public void UntenantedTable_GeneratesExactlyWhatItGeneratesToday()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(UNTENANTED));
+
+      repository.Should().Contain("Task<IEnumerable<RowData>> GetAllAsync(CancellationToken ct = default);");
+      repository.Should().Contain("IQueryable<RowData> Query(TimeSpan? commandTimeout = null);");
+      repository.Should().Contain("return _db.Linq.Query<RowData>(commandTimeout);");
+
+      repository.Should().NotContain("GetAllAsync(long accountId");
+      repository.Should().NotContain("Query(long accountId");
+   }
+
+   [Fact]
+   public void EveryTenancyShape_EmitsSourceThatCompiles()
+   {
+      GeneratorHarness.AssertGeneratedSourcesCompile(TENANCY_INSIDE_KEY);
+      GeneratorHarness.AssertGeneratedSourcesCompile(TENANCY_OUTSIDE_KEY);
+      GeneratorHarness.AssertGeneratedSourcesCompile(TWO_TENANCY_COLUMNS);
+      GeneratorHarness.AssertGeneratedSourcesCompile(UNTENANTED);
+   }
+
+   [Fact]
+   public void EveryTenancyShape_ReportsNothing()
+   {
+      GeneratorHarness.RunGenerator(TENANCY_INSIDE_KEY).Diagnostics.Should().BeEmpty();
+      GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY).Diagnostics.Should().BeEmpty();
+      GeneratorHarness.RunGenerator(TWO_TENANCY_COLUMNS).Diagnostics.Should().BeEmpty();
+   }
+}

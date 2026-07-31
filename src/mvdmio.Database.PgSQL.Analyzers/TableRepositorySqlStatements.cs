@@ -25,7 +25,16 @@ internal static class TableRepositorySqlStatements
 
    public static string BuildGetAllSql(TableDefinitionModel model)
    {
-      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}";
+      if (model.TenancyColumns.IsEmpty)
+         return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}";
+
+      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildTenancyPredicate(model)}";
+   }
+
+   /// <summary>Every tenancy column constrained, bound by the parameter name the caller supplies it under.</summary>
+   private static string BuildTenancyPredicate(TableDefinitionModel model)
+   {
+      return string.Join(" AND ", model.TenancyColumns.Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{x.ParameterName}"));
    }
 
    public static string BuildGetBySql(TableDefinitionModel model, PropertyDefinitionModel property)

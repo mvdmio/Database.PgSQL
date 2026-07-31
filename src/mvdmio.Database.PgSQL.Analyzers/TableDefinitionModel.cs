@@ -24,6 +24,7 @@ internal sealed class TableDefinitionModel
       ImmutableArray<PropertyDefinitionModel> updateProperties,
       ImmutableArray<PropertyDefinitionModel> lookupProperties,
       ImmutableArray<PropertyDefinitionModel> mutableUpdateProperties,
+      ImmutableArray<PropertyDefinitionModel> tenancyColumns,
       ImmutableArray<RelationDeclarationModel> relations
    )
    {
@@ -45,6 +46,7 @@ internal sealed class TableDefinitionModel
       UpdateProperties = updateProperties;
       LookupProperties = lookupProperties;
       MutableUpdateProperties = mutableUpdateProperties;
+      TenancyColumns = tenancyColumns;
       Relations = relations;
    }
 
@@ -79,6 +81,12 @@ internal sealed class TableDefinitionModel
    /// </summary>
    public ImmutableArray<PropertyDefinitionModel> LookupProperties { get; }
    public ImmutableArray<PropertyDefinitionModel> MutableUpdateProperties { get; }
+
+   /// <summary>
+   ///    The columns declared <c>[Column(Tenancy = true)]</c>, in declaration order — the order every generated member
+   ///    constrains them in, and the order their parameters are added in.
+   /// </summary>
+   public ImmutableArray<PropertyDefinitionModel> TenancyColumns { get; }
 
    /// <summary>
    ///    The relations declared on this table, as declared. Whether each one resolves is decided once every table has
@@ -136,6 +144,7 @@ internal sealed class PropertyDefinitionModel
       bool isPrimaryKey,
       bool isUnique,
       bool isGenerated,
+      bool isTenancy,
       bool isNullable,
       bool isDeclaredNotNull,
       string? nullabilityContradiction,
@@ -150,6 +159,7 @@ internal sealed class PropertyDefinitionModel
       IsPrimaryKey = isPrimaryKey;
       IsUnique = isUnique;
       IsGenerated = isGenerated;
+      IsTenancy = isTenancy;
       IsNullable = isNullable;
       IsDeclaredNotNull = isDeclaredNotNull;
       NullabilityContradiction = nullabilityContradiction;
@@ -164,6 +174,12 @@ internal sealed class PropertyDefinitionModel
    public bool IsPrimaryKey { get; }
    public bool IsUnique { get; }
    public bool IsGenerated { get; }
+
+   /// <summary>
+   ///    Whether this column carries the tenant. More than one column on a table may say so; each is constrained
+   ///    independently by every generated member, in declaration order.
+   /// </summary>
+   public bool IsTenancy { get; }
 
    /// <summary>Whether the property can hold null, which a primary key member may not.</summary>
    public bool IsNullable { get; }

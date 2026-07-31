@@ -229,6 +229,10 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
+      // Declaration order, same as the primary key above: it fixes the parameter order of every generated member that
+      // takes a tenancy column's value.
+      var tenancyColumns = properties.Where(x => x.IsTenancy).ToImmutableArray();
+
       var relations = ParseRelations(classSymbol, relationProperties, diagnostics);
       var accessibility = classSymbol.DeclaredAccessibility == Accessibility.Public ? "public" : "internal";
       // Named throughout: five of these are same-typed property collections, so a transposition would compile and only
@@ -252,6 +256,7 @@ internal static class TableDefinitionParser
          updateProperties: primaryKeys.AddRange(mutableUpdateProperties),
          lookupProperties: lookupProperties,
          mutableUpdateProperties: mutableUpdateProperties,
+         tenancyColumns: tenancyColumns,
          relations: relations
       );
 

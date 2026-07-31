@@ -42,6 +42,7 @@ internal static class GeneratorHarness
             public bool Null { get; set; }
             public bool NotNull { get; set; }
             public NpgsqlTypes.NpgsqlDbType StoredAs { get; set; }
+            public bool Tenancy { get; set; }
          }
 
          [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]

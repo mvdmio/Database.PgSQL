@@ -23,6 +23,9 @@ internal static class TableDefinitionSymbols
    public const string GENERATED_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.GeneratedAttribute";
    public const string RELATION_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.RelationAttribute";
 
+   /// <summary>The <c>[Column]</c> named argument that declares a tenancy column.</summary>
+   private const string TENANCY_PROPERTY_NAME = "Tenancy";
+
    /// <summary>
    ///    The collection types a relation to many rows may be declared as. The generated mirror is always a concrete
    ///    list, so this only decides what the table definition itself is allowed to say.
@@ -106,12 +109,22 @@ internal static class TableDefinitionSymbols
          isPrimaryKey: isPrimaryKey,
          isUnique: HasAttribute(property, UNIQUE_ATTRIBUTE_FULL_NAME),
          isGenerated: HasAttribute(property, GENERATED_ATTRIBUTE_FULL_NAME),
+         isTenancy: HasNamedFlagSet(columnAttribute, TENANCY_PROPERTY_NAME),
          isNullable: TypeCanHoldNull(property.Type),
          isDeclaredNotNull: nullability.IsNotNull,
          nullabilityContradiction: nullability.Contradiction,
          requiresNullForgivingInitializer: property.Type.IsReferenceType && property.NullableAnnotation != NullableAnnotation.Annotated,
          storage: ColumnStorage.Read(property.Type, columnAttribute)
       );
+   }
+
+   /// <summary>Whether a <c>[Column]</c> argument, named rather than positional, was set to <see langword="true" />.</summary>
+   private static bool HasNamedFlagSet(AttributeData? attribute, string propertyName)
+   {
+      if (attribute is null)
+         return false;
+
+      return attribute.NamedArguments.Any(x => string.Equals(x.Key, propertyName, StringComparison.Ordinal) && x.Value.Value is true);
    }
 
    /// <summary>How generated code names a type: fully qualified, keywords for the special types, nullability included.</summary>

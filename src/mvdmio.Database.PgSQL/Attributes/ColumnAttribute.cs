@@ -83,4 +83,17 @@ public sealed class ColumnAttribute : Attribute
    ///    </para>
    /// </remarks>
    public NpgsqlDbType StoredAs { get; set; }
+
+   /// <summary>
+   ///    Gets or sets whether this column carries the tenant, so that every generated member is required to constrain it.
+   /// </summary>
+   /// <remarks>
+   ///    More than one column may carry this claim — each is constrained independently, in declaration order, which is
+   ///    what a consumer with two-level tenancy needs. A member that already constrains the column, because it is part of
+   ///    the primary key it addresses a row by or because it is the unique column being looked up, gains nothing further;
+   ///    every other generated member takes the value as a parameter, ahead of every other parameter. Nothing verifies
+   ///    the column against the real table, and nothing verifies a value passed for it against anything — the guarantee
+   ///    this buys is that the value cannot be omitted, not that it is right.
+   /// </remarks>
+   public bool Tenancy { get; set; }
 }
