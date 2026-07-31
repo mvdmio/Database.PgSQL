@@ -193,7 +193,11 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
-      var mutableUpdateProperties = properties.Where(x => !x.IsPrimaryKey && !x.IsGenerated).ToImmutableArray();
+      // A tenancy column is excluded here whether or not it is a key member: the generated update never assigns it, so a
+      // row cannot change tenant through the generated surface. It still reaches the update command type below, via
+      // primaryKeys where it is a key member and appended explicitly where it is not — the WHERE clause needs its value
+      // even though the SET list never does.
+      var mutableUpdateProperties = properties.Where(x => !x.IsPrimaryKey && !x.IsGenerated && !x.IsTenancy).ToImmutableArray();
       if (mutableUpdateProperties.Length == 0)
       {
          diagnostics.Add(Diagnostic.Create(
@@ -253,7 +257,7 @@ internal static class TableDefinitionParser
          primaryKeys: primaryKeys,
          dataProperties: properties,
          createProperties: properties.Where(x => !x.IsGenerated).ToImmutableArray(),
-         updateProperties: primaryKeys.AddRange(mutableUpdateProperties),
+         updateProperties: primaryKeys.AddRange(tenancyColumns.Where(x => !primaryKeys.Contains(x))).AddRange(mutableUpdateProperties),
          lookupProperties: lookupProperties,
          mutableUpdateProperties: mutableUpdateProperties,
          tenancyColumns: tenancyColumns,

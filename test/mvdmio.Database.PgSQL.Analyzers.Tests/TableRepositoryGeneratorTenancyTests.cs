@@ -104,6 +104,24 @@ public class TableRepositoryGeneratorTenancyTests
       }
       """;
 
+   /// <summary>A table whose only assignable column besides the key is its tenancy column, outside the key.</summary>
+   private const string TENANCY_ONLY_ASSIGNABLE_COLUMN = """
+      using mvdmio.Database.PgSQL.Attributes;
+
+      namespace Demo;
+
+      [Table("public.rows")]
+      public partial class RowTable
+      {
+         [PrimaryKey]
+         [Generated]
+         public long RowId { get; set; }
+
+         [Column(Tenancy = true)]
+         public long AccountId { get; set; }
+      }
+      """;
+
    /// <summary>A table declaring no tenancy column at all, for the compatibility assertion.</summary>
    private const string UNTENANTED = """
       using mvdmio.Database.PgSQL.Attributes;
@@ -349,5 +367,56 @@ public class TableRepositoryGeneratorTenancyTests
       repository.Should().Contain("Task<bool> DeleteByPrimaryKeyAsync(long rowId, CancellationToken ct = default);");
       repository.Should().Contain("Task<RowData?> GetByCodeAsync(string code, CancellationToken ct = default);");
       repository.Should().Contain("Task<bool> DeleteByCodeAsync(string code, CancellationToken ct = default);");
+   }
+
+   [Fact]
+   public void CreateAndUpdateCommandTypes_MakeTheTenancyColumnRequired_AndTheDataTypeDoesNot()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY));
+
+      repository.Should().Contain("public required long AccountId { get; set; }");
+
+      // The data type still materializes the column through a parameterless constructor, so it stays plain.
+      repository.Should().Contain("public long AccountId { get; set; }");
+   }
+
+   [Fact]
+   public void CreateAsync_StillInsertsTheTenancyColumnLikeAnyOtherColumn()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY));
+
+      repository.Should().Contain("""INSERT INTO "public"."rows" ("account_id", "code", "name")""");
+   }
+
+   [Fact]
+   public void UpdateStatement_ConstrainsTheTenancyColumnInWhere_AndExcludesItFromSet_WhenOutsideTheKey()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY));
+
+      repository.Should().Contain("""WHERE "row_id" = :RowId AND "account_id" = :AccountId""");
+      repository.Should().Contain("""SET "code" = :Code, "name" = :Name""");
+      repository.Should().NotContain("""SET "account_id" = :AccountId""");
+   }
+
+   [Fact]
+   public void UpdateStatement_IsByteForByteUnchanged_WhenTheTenancyColumnIsAlreadyAKeyMember()
+   {
+      var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_INSIDE_KEY));
+
+      // No extra tenancy predicate joins the key predicate: the row is already tenant-scoped by construction.
+      repository.Should().Contain("""WHERE "account_id" = :AccountId AND "project_id" = :ProjectId""");
+      repository.Should().Contain("""SET "code" = :Code, "name" = :Name""");
+   }
+
+   [Fact]
+   public void TenancyColumn_AsTheOnlyAssignableColumn_ReportsPGSQL0007_AndGeneratesNothing()
+   {
+      // The tenancy column is excluded from what an update assigns, so a table whose only non-key, non-generated
+      // column is its tenancy column has nothing left to assign — the pre-existing "no updatable columns" refusal,
+      // reported against the table even though the tenancy declaration is what caused it.
+      var result = GeneratorHarness.RunGenerator(TENANCY_ONLY_ASSIGNABLE_COLUMN);
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0007");
+      result.GeneratedSources.Should().BeEmpty();
    }
 }

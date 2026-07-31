@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using mvdmio.Database.PgSQL.Connectors.Linq;
+using mvdmio.Database.PgSQL.Exceptions;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
@@ -137,6 +138,74 @@ public class GeneratedRepositoryTenancyTests : TestBase
       var row = await _documents.GetByPrimaryKeyAsync(FIRST_ACCOUNT, mine!.DocumentId, CancellationToken);
 
       row.Should().NotBeNull();
+   }
+
+   [Fact]
+   public async Task CreateAsync_WritesTheRowUnderTheTenantTheRequiredPropertyCarries()
+   {
+      var created = await _documents.CreateAsync(
+         new CreateTenancyDocumentCommand { AccountId = SECOND_ACCOUNT, Code = "doc-created", Title = "Created", Body = "body" },
+         CancellationToken
+      );
+
+      created.AccountId.Should().Be(SECOND_ACCOUNT);
+
+      var mine = await _documents.GetByCodeAsync(SECOND_ACCOUNT, "doc-created", CancellationToken);
+      mine.Should().NotBeNull();
+
+      var notSomeoneElses = await _documents.GetByCodeAsync(FIRST_ACCOUNT, "doc-created", CancellationToken);
+      notSomeoneElses.Should().BeNull();
+   }
+
+   [Fact]
+   public async Task UpdateAsync_AimedAtAnotherTenantsRow_ChangesNothingAndThrows_TenancyInsideTheKey()
+   {
+      var mine = await _documents.GetByCodeAsync(FIRST_ACCOUNT, "doc-first-a", CancellationToken);
+      mine.Should().NotBeNull();
+
+      Func<Task> action = () => _documents.UpdateAsync(
+         new UpdateTenancyDocumentCommand { AccountId = SECOND_ACCOUNT, DocumentId = mine!.DocumentId, Code = mine.Code, Title = "Hijacked", Body = mine.Body },
+         CancellationToken
+      );
+
+      // Wrapped the same way any update against a missing key already throws — a mismatched WHERE, not a special case.
+      await action.Should().ThrowAsync<QueryException>();
+
+      var stillMine = await _documents.GetByCodeAsync(FIRST_ACCOUNT, "doc-first-a", CancellationToken);
+      stillMine!.Title.Should().Be("First A");
+   }
+
+   [Fact]
+   public async Task UpdateAsync_AimedAtAnotherTenantsRow_ChangesNothingAndThrows_TenancyOutsideTheKey()
+   {
+      var mine = await _settings.GetByCodeAsync(SECOND_ACCOUNT, "setting-second-a", CancellationToken);
+      mine.Should().NotBeNull();
+
+      Func<Task> action = () => _settings.UpdateAsync(
+         new UpdateTenancySettingCommand { SettingId = mine!.SettingId, AccountId = FIRST_ACCOUNT, Code = mine.Code, Label = mine.Label, Value = "Hijacked" },
+         CancellationToken
+      );
+
+      // Wrapped the same way any update against a missing key already throws — a mismatched WHERE, not a special case.
+      await action.Should().ThrowAsync<QueryException>();
+
+      var stillMine = await _settings.GetByCodeAsync(SECOND_ACCOUNT, "setting-second-a", CancellationToken);
+      stillMine!.Value.Should().Be("value");
+   }
+
+   [Fact]
+   public async Task UpdateAsync_OfTheCallersOwnRow_LeavesTheTenancyColumnAsItWas()
+   {
+      var mine = await _settings.GetByCodeAsync(SECOND_ACCOUNT, "setting-second-a", CancellationToken);
+      mine.Should().NotBeNull();
+
+      var updated = await _settings.UpdateAsync(
+         new UpdateTenancySettingCommand { SettingId = mine!.SettingId, AccountId = SECOND_ACCOUNT, Code = mine.Code, Label = mine.Label, Value = "updated" },
+         CancellationToken
+      );
+
+      updated.AccountId.Should().Be(SECOND_ACCOUNT);
+      updated.Value.Should().Be("updated");
    }
 
    private async Task CreateDocumentAsync(long accountId, string code, string title)

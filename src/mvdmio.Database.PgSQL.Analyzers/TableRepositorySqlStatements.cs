@@ -51,7 +51,7 @@ internal static class TableRepositorySqlStatements
    public static string BuildUpdateSql(TableDefinitionModel model)
    {
       var assignments = string.Join(", ", model.MutableUpdateProperties.Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{x.PropertyName}"));
-      return $"UPDATE {FullyQualifiedTableName(model)}\nSET {assignments}\nWHERE {BuildKeyPredicate(model, x => x.PropertyName)}\nRETURNING {BuildReturningList(model)}";
+      return $"UPDATE {FullyQualifiedTableName(model)}\nSET {assignments}\nWHERE {BuildKeyAndTenancyPredicate(model, x => x.PropertyName)}\nRETURNING {BuildReturningList(model)}";
    }
 
    public static string BuildDeleteBySql(TableDefinitionModel model, PropertyDefinitionModel property)
@@ -65,24 +65,17 @@ internal static class TableRepositorySqlStatements
    }
 
    /// <summary>
-   ///    Every key member constrained, so a statement addressing a row by its primary key affects exactly one row.
+   ///    Every key member constrained, plus every tenancy column not already a key member — used by the two members
+   ///    that address a row by its primary key alone, and by the update statement's <c>WHERE</c> clause. Where every
+   ///    tenancy column is already a key member, this constrains exactly the key, so a table safe by construction gains
+   ///    no predicate here.
    /// </summary>
    /// <remarks>
-   ///    <paramref name="bindingName" /> is which name the statement binds each key member by. A lookup and a delete take
+   ///    <paramref name="bindingName" /> is which name the statement binds each member by. A lookup and a delete take
    ///    their values as method parameters and so bind by <see cref="PropertyDefinitionModel.ParameterName" />; an update
    ///    takes them off a command object alongside its other columns and binds by
    ///    <see cref="PropertyDefinitionModel.PropertyName" /> like the rest of that statement.
    /// </remarks>
-   public static string BuildKeyPredicate(TableDefinitionModel model, Func<PropertyDefinitionModel, string> bindingName)
-   {
-      return string.Join(" AND ", model.PrimaryKeys.Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{bindingName(x)}"));
-   }
-
-   /// <summary>
-   ///    Every key member constrained, plus every tenancy column not already a key member — used by the two members
-   ///    that address a row by its primary key alone. Identical to <see cref="BuildKeyPredicate" /> where every tenancy
-   ///    column is already a key member, which is why a table safe by construction gains no predicate here.
-   /// </summary>
    public static string BuildKeyAndTenancyPredicate(TableDefinitionModel model, Func<PropertyDefinitionModel, string> bindingName)
    {
       var predicates = model.PrimaryKeys.Concat(TenancyColumnsOutsideKey(model)).Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{bindingName(x)}");

@@ -44,11 +44,11 @@ internal static class TableRepositorySourceBuilder
       }
 
       builder.AppendLine();
-      AppendDto(builder, model.Accessibility, model.DataTypeName, model.DataProperties, keepsGeneratedColumnsReadOnly: true);
+      AppendDto(builder, model.Accessibility, model.DataTypeName, model.DataProperties, keepsGeneratedColumnsReadOnly: true, mirrorsTenancyAsRequired: false);
       builder.AppendLine();
-      AppendDto(builder, model.Accessibility, model.CreateCommandTypeName, model.CreateProperties, keepsGeneratedColumnsReadOnly: false);
+      AppendDto(builder, model.Accessibility, model.CreateCommandTypeName, model.CreateProperties, keepsGeneratedColumnsReadOnly: false, mirrorsTenancyAsRequired: true);
       builder.AppendLine();
-      AppendDto(builder, model.Accessibility, model.UpdateCommandTypeName, model.UpdateProperties, keepsGeneratedColumnsReadOnly: false);
+      AppendDto(builder, model.Accessibility, model.UpdateCommandTypeName, model.UpdateProperties, keepsGeneratedColumnsReadOnly: false, mirrorsTenancyAsRequired: true);
       builder.AppendLine();
       AppendRepositoryInterface(builder, model);
       builder.AppendLine();
@@ -69,13 +69,22 @@ internal static class TableRepositorySourceBuilder
    ///       <c>{ get; private set; }</c> therefore keeps the half that guards a database-populated column and loses the
    ///       other.
    ///    </para>
+   ///    <para>
+   ///       The one exception is a tenancy column, on <paramref name="mirrorsTenancyAsRequired" />. It is not mirrored
+   ///       from anything the table definition declares about the column itself — <c>[Column(Tenancy = true)]</c> carries
+   ///       no <c>required</c> or <c>init</c> claim of its own — but added, so a construction site that omits the tenant
+   ///       fails to build rather than writing a row under a default value. Only the create and update command types set
+   ///       it; the data type never does, because Dapper materializes it through a parameterless constructor that cannot
+   ///       satisfy <c>required</c>.
+   ///    </para>
    /// </remarks>
    private static void AppendDto(
       StringBuilder builder,
       string accessibility,
       string typeName,
       ImmutableArray<PropertyDefinitionModel> properties,
-      bool keepsGeneratedColumnsReadOnly
+      bool keepsGeneratedColumnsReadOnly,
+      bool mirrorsTenancyAsRequired
    )
    {
       builder.AppendLine($"{accessibility} partial class {typeName}");
@@ -84,8 +93,10 @@ internal static class TableRepositorySourceBuilder
       foreach (var property in properties)
       {
          var setter = keepsGeneratedColumnsReadOnly && property.IsGenerated ? "private set;" : "set;";
+         var requiredKeyword = mirrorsTenancyAsRequired && property.IsTenancy ? "required " : string.Empty;
 
          builder.Append("   public ")
+            .Append(requiredKeyword)
             .Append(property.TypeName)
             .Append(' ')
             .Append(property.PropertyName)
@@ -93,7 +104,7 @@ internal static class TableRepositorySourceBuilder
             .Append(setter)
             .Append(" }");
 
-         if (property.RequiresNullForgivingInitializer)
+         if (property.RequiresNullForgivingInitializer && requiredKeyword.Length == 0)
             builder.Append(" = default!;");
 
          builder.AppendLine();
