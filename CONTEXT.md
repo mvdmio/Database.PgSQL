@@ -33,7 +33,7 @@ A class that declares one database table's shape — its name, its columns, and 
 _Avoid_: Entity, model, POCO, mapping.
 
 **Key order**:
-The order of a **Table definition**'s primary-key properties, taken from their source declaration order. It fixes the parameter order of the generated primary-key lookup and the order a **Relation**'s foreign-key properties are matched in, so it is part of the generated API rather than a detail of the mapping.
+The order of a **Table definition**'s primary-key properties, taken from their source declaration order. It fixes the parameter order of the generated primary-key lookup, so it is part of the generated API rather than a detail of the mapping. It says nothing about how a **Relation** matches columns; a **Relation key** states each pair itself.
 _Avoid_: Key ordinal, column order, index order.
 
 **Nullability claim**:
@@ -53,11 +53,23 @@ A **Table definition**'s class name with the `Table` suffix removed. The stem ev
 _Avoid_: Table name, class name, type name.
 
 **Relation**:
-A declared correspondence between two **Table definitions**, resolved through the foreign-key columns one of the two holds and matched in order against the other's primary key. One-directional: each direction is declared on its own, and declaring one does not imply the other. A claim about columns that already exist — declaring a relation never creates a database foreign key and never verifies that one is there.
+A declared correspondence between two **Table definitions**, resolved through the column pairs its **Relation definition** states as equal and narrowed by that definition's **Relation condition** where it has one. One-directional: each direction is declared on its own, and declaring one does not imply the other. A claim about columns that already exist — declaring a relation never creates a database foreign key and never verifies that one is there.
 _Avoid_: Association (that is the LINQ provider's word), foreign key (that is the database constraint), relationship, join.
 
+**Relation definition**:
+The class that declares one **Relation**, deriving from `RelationDefinition<TDeclaring, TTarget>`. Its two type arguments name the two **Table definitions**, and its members state the **Relation keys** and the **Relation condition**. Purely declarative in the same sense a Table definition is: never instantiated and never executed, because the generator reads what it says from source rather than running it.
+_Avoid_: Configuration, mapping, builder, entity type configuration (that is Entity Framework's, and this library configures nothing at run time).
+
+**Relation key**:
+One pair of columns a **Relation definition** states as equal, one on each of the two **Table definitions**. A relation states one pair per column it joins on, and their order carries no meaning. A **Relation** to one row must pair against columns the target claims are unique — its primary key, or a column marked unique — so that it reaches one row rather than an arbitrary one of several.
+_Avoid_: Foreign key (that is the database constraint), join key, key column, key pair.
+
+**Relation condition**:
+An extra condition a **Relation** carries beyond its **Relation keys** — any expression over the two rows, stated on the **Relation definition**. It is what lets two relations that pair the same columns reach different rows: one column names a kind, and each relation's condition fixes the value it reaches. It narrows filtering and materializing alike, because it belongs to the correspondence rather than to any one query.
+_Avoid_: Discriminator, filter (that is what a caller writes over the **Query surface**), scope, predicate.
+
 **Relation property**:
-The member on a **Table definition** that declares a **Relation** — typed as the other Table definition, naming the foreign-key properties that resolve it, and carrying the cardinality in its own type. Not a column: it is skipped by column mapping and mirrored onto the generated data type, where each end appears as that table's generated data type.
+The member on a **Table definition** that carries a **Relation** — typed as that relation's **Relation definition**, or as a collection of one, which is how the cardinality is stated. Not a column: it is skipped by column mapping and mirrored onto the generated data type, where it appears as the target's generated data type rather than as the relation definition.
 _Avoid_: Navigation property (it implies lazy loading and change tracking, which this library does not have), reference, link.
 
 **Query surface**:
