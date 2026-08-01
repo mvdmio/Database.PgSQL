@@ -318,7 +318,7 @@ internal static class TableRepositoryDiagnostics
       category: CATEGORY_GENERATION,
       defaultSeverity: DiagnosticSeverity.Warning,
       isEnabledByDefault: true,
-      description: "A relation always pairs its foreign key positionally against the other side's primary key. The property paired against a tenancy column must be the other side's own tenancy column, or the join can pull another tenant's related rows — and a tenancy column that sits outside the joined key entirely is paired with nothing, which is the same failure. Reported once per tenancy column that comes out unpinned either way."
+      description: "A tenancy column appearing on either side of a relation's joined key pairs must be paired with a tenancy column on the other side, or the join can pull another tenant's related rows — and a tenancy column that sits outside every pair entirely is paired with nothing, which is the same failure. Checked pair by pair and direction-free, so it covers the declaring side as well as the target side. Reported once per unpinned tenancy column on either table."
    );
 
    // The three diagnostics below cover a relation declared as a class deriving from RelationDefinition<,>. Like
@@ -364,5 +364,38 @@ internal static class TableRepositoryDiagnostics
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
       description: "A relation condition's body is lifted into the emitted join, with its two parameters rewritten from Table definition types to generated data types. A member touched directly on either parameter must exist on that table's generated data type — a mapped column or another relation property — or the lift would fail inside generated source with no line in the developer's own code to fix."
+   );
+
+   // The three diagnostics below read the resolved key pairs themselves rather than anything about how the relation
+   // was declared, so they apply to a relation declared through either form alike.
+
+   public static readonly DiagnosticDescriptor RelationToOneRowMayReachSeveral = new(
+      id: "PGSQL0031",
+      title: "Relation to one row may reach several",
+      messageFormat: "'{0}.{1}' declares a relation to one row, but its key pairs contain nothing '{2}' claims unique — its primary key or a [Unique] column — so it may reach an arbitrary one of several rows",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Warning,
+      isEnabledByDefault: true,
+      description: "A relation to one row is a claim, exactly like every other claim a Table definition makes, so pairing against nothing the target claims unique is a warning rather than an error — a relation whose Relation condition makes the pairing unique still builds. A superset of a unique set is still unique and reports nothing."
+   );
+
+   public static readonly DiagnosticDescriptor RelationMayResolveEveryKind = new(
+      id: "PGSQL0034",
+      title: "Relation may resolve every kind",
+      messageFormat: "'{0}.{1}' pairs the same key columns as another relation on '{0}' that declares a condition, but states none itself, so it may resolve every kind the condition would otherwise narrow",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Warning,
+      isEnabledByDefault: true,
+      description: "Two relations on the same table can pair the same columns and still reach different rows, each narrowed by its own condition. Where one of them declares no condition at all, it silently returns every kind the conditioned ones distinguish between — a forgotten condition rather than a deliberate, unconditioned relation."
+   );
+
+   public static readonly DiagnosticDescriptor RelationKeyPairsAgainstNullableUniqueColumn = new(
+      id: "PGSQL0035",
+      title: "Relation pairs against a nullable unique column",
+      messageFormat: "'{0}.{1}' pairs against '{2}.{3}', which is [Unique] but nullable — it matches at most one row but may match none for reasons the relation cannot see",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "A nullable [Unique] column is refused as a relation key's target side. On the target side a primary-key column can never be nullable, so this can only happen against a [Unique] column — and it is the one case that would otherwise need a third Key(...) overload, for a nullable target side. There is no such overload; the pairing is refused instead."
    );
 }

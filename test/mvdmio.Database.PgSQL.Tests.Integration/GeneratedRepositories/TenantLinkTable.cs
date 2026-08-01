@@ -1,4 +1,5 @@
 using mvdmio.Database.PgSQL.Attributes;
+using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
@@ -11,7 +12,7 @@ namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 ///    to be database-computed, and the relation declared against it is an ordinary relation. One kind is therefore the
 ///    proof for all of them — declaring a second would test the shape of a consumer's schema rather than this library.
 ///    It is also the nullable-foreign-key case against a non-nullable key member, which is what a per-kind column always
-///    is.
+///    is, exercised through the nullable-left <c>Key(...)</c> overload.
 /// </remarks>
 [Table("public.generated_tenant_links")]
 public partial class TenantLinkTable
@@ -34,6 +35,13 @@ public partial class TenantLinkTable
    [Generated]
    public long? ProjectRef { get; set; }
 
-   [Relation(nameof(AccountId), nameof(ProjectRef))]
-   public TenantProjectTable? Project { get; set; }
+   private ProjectRelation? Project { get; set; }
+
+   private class ProjectRelation : RelationDefinition<TenantLinkTable, TenantProjectTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AccountId, y => y.AccountId),
+         Key(x => x.ProjectRef, y => y.ProjectId),
+      ];
+   }
 }

@@ -1,4 +1,5 @@
 using mvdmio.Database.PgSQL.Attributes;
+using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
@@ -8,7 +9,9 @@ namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 /// </summary>
 /// <remarks>
 ///    A separate table set from the author-and-book one, which pins the single-column key path. The second key member is
-///    database-generated, which is what makes a key that is part caller-supplied and part computed observable.
+///    database-generated, which is what makes a key that is part caller-supplied and part computed observable. Declared
+///    in the RelationDefinition&lt;,&gt; form: pairs cover the same composite-key and generated-column-per-kind shapes
+///    Key order used to, without a foreign-key/primary-key side for cardinality to work out.
 /// </remarks>
 [Table("public.generated_tenant_projects")]
 public partial class TenantProjectTable
@@ -31,12 +34,33 @@ public partial class TenantProjectTable
    ///    Reaches a task by the tenancy column plus a task identifier that repeats across accounts, so the account column
    ///    is what tells two candidate rows apart rather than being redundant.
    /// </summary>
-   [Relation(nameof(AccountId), nameof(PrimaryTaskId))]
-   public TenantTaskTable? PrimaryTask { get; set; }
+   private PrimaryTaskRelation? PrimaryTask { get; set; }
 
-   [Relation(nameof(TenantTaskTable.AccountId), nameof(TenantTaskTable.ProjectId))]
-   public List<TenantTaskTable> Tasks { get; set; } = [];
+   private List<TasksRelation> Tasks { get; set; } = [];
 
-   [Relation(nameof(TenantLinkTable.AccountId), nameof(TenantLinkTable.ProjectRef))]
-   public List<TenantLinkTable> Links { get; set; } = [];
+   private List<LinksRelation> Links { get; set; } = [];
+
+   private class PrimaryTaskRelation : RelationDefinition<TenantProjectTable, TenantTaskTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AccountId, y => y.AccountId),
+         Key(x => x.PrimaryTaskId, y => y.TaskId),
+      ];
+   }
+
+   private class TasksRelation : RelationDefinition<TenantProjectTable, TenantTaskTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AccountId, y => y.AccountId),
+         Key(x => x.ProjectId, y => y.ProjectId),
+      ];
+   }
+
+   private class LinksRelation : RelationDefinition<TenantProjectTable, TenantLinkTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AccountId, y => y.AccountId),
+         Key(x => x.ProjectId, y => y.ProjectRef),
+      ];
+   }
 }

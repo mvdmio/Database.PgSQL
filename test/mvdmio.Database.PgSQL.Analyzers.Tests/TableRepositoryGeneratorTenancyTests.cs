@@ -635,6 +635,11 @@ public class TableRepositoryGeneratorTenancyTests
       // The declaring table does carry a tenancy column, but the relation's foreign key is a different property
       // entirely. The loose reading — warn only when nothing at all is paired against the target's tenancy column —
       // would pass this, because something is paired. The strict form must warn anyway.
+      //
+      // The pair-based, direction-free rule now reports this twice: once because the target's own tenancy column
+      // (AccountTable.AccountId) is paired against a non-tenancy property (OwnerId), and once because the declaring
+      // table's own tenancy column (DocumentTable.AccountId) is not paired against anything at all in this relation —
+      // the direction the old, positional rule missed entirely.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
 
@@ -668,10 +673,11 @@ public class TableRepositoryGeneratorTenancyTests
          }
          """);
 
-      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0027").Subject;
+      var diagnostics = result.Diagnostics.Where(x => x.Id == "PGSQL0027").ToList();
 
-      diagnostic.Severity.Should().Be(DiagnosticSeverity.Warning);
-      diagnostic.GetMessage().Should().Contain("Owner").And.Contain("AccountId");
+      diagnostics.Should().HaveCount(2);
+      diagnostics.All(x => x.Severity == DiagnosticSeverity.Warning).Should().BeTrue();
+      diagnostics.All(x => x.GetMessage().Contains("Owner") && x.GetMessage().Contains("AccountId")).Should().BeTrue();
    }
 
    [Fact]
@@ -712,10 +718,49 @@ public class TableRepositoryGeneratorTenancyTests
    }
 
    [Fact]
-   public void RelationToAnUntenantedTarget_ReportsNoWarning()
+   public void RelationToAnUntenantedTarget_WhereNeitherTableDeclaresTenancy_ReportsNoWarning()
    {
-      // The target declares no tenancy column at all, so there is nothing to pin and nothing to warn about — a
-      // relation to a shared, untenanted table is a legitimate shape.
+      // Neither table carries a tenancy column, so there is nothing to pin on either side and nothing to warn about
+      // — a relation between two shared, untenanted tables is a legitimate shape.
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.categories")]
+         public partial class CategoryTable
+         {
+            [PrimaryKey]
+            [Generated]
+            public long CategoryId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+
+         [Table("public.documents")]
+         public partial class DocumentTable
+         {
+            [PrimaryKey]
+            [Generated]
+            public long DocumentId { get; set; }
+
+            public long? CategoryId { get; set; }
+
+            [Relation(nameof(CategoryId))]
+            public CategoryTable? Category { get; set; }
+         }
+         """);
+
+      result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0027");
+   }
+
+   [Fact]
+   public void RelationToAnUntenantedTarget_FromATenantedDeclaringTable_ReportsPGSQL0027ForTheDeclaringSidesOwnTenancyColumn()
+   {
+      // The target declares no tenancy column at all, so there is nothing to pin against it. But the declaring
+      // table's own tenancy column is not part of this relation's key pairs either — it is paired with nothing — and
+      // the pair-based, direction-free rule warns on that regardless of what the target declares. This is the
+      // direction the old, positional rule missed: it only ever checked whichever side held the primary key.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
 
@@ -749,7 +794,10 @@ public class TableRepositoryGeneratorTenancyTests
          }
          """);
 
-      result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0027");
+      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0027").Subject;
+
+      diagnostic.Severity.Should().Be(DiagnosticSeverity.Warning);
+      diagnostic.GetMessage().Should().Contain("Category").And.Contain("AccountId");
    }
 
    [Fact]
@@ -880,7 +928,8 @@ public class TableRepositoryGeneratorTenancyTests
    public void RelationThatWarns_IsStillMirroredOntoTheDataTypeAndStillRegistered()
    {
       // PGSQL0027 drops nothing at all — not the relation, not the table — unlike every other relation diagnostic,
-      // which drops the relation, and unlike PGSQL0025/26, which drop the table.
+      // which drops the relation, and unlike PGSQL0025/26, which drop the table. This shape reports it twice: see
+      // RelationToOneRow_PairedAgainstAnUnrelatedProperty_ReportsPGSQL0027_TheStrictForm above.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
 
@@ -914,7 +963,7 @@ public class TableRepositoryGeneratorTenancyTests
          }
          """);
 
-      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0027");
+      result.Diagnostics.Where(x => x.Id == "PGSQL0027").Should().HaveCount(2);
 
       var documentRelations = GeneratorHarness.GeneratedSource(result, "Demo_DocumentTable.Relations.g.cs");
       var registration = GeneratorHarness.RegistrationSource(result);

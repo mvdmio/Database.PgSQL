@@ -1,4 +1,7 @@
 using mvdmio.Database.PgSQL.Attributes;
+using mvdmio.Database.PgSQL.Relations;
+using System;
+using System.Linq.Expressions;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
@@ -25,4 +28,21 @@ public partial class TenancyDocumentTable
    public string Title { get; set; } = string.Empty;
 
    public string Body { get; set; } = string.Empty;
+
+   /// <summary>
+   ///    Reaches <see cref="TenancyProfileTable" />, a per-tenant singleton whose whole primary key is the tenancy
+   ///    column — pairing that one column alone already claims uniqueness, and the Relation condition narrows further
+   ///    to only an active profile.
+   /// </summary>
+   private ProfileRelation? Profile { get; set; }
+
+   private class ProfileRelation : RelationDefinition<TenancyDocumentTable, TenancyProfileTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AccountId, y => y.AccountId),
+      ];
+
+      public override Expression<Func<TenancyDocumentTable, TenancyProfileTable, bool>> Condition
+         => (document, profile) => profile.IsActive;
+   }
 }

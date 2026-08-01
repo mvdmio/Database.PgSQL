@@ -241,6 +241,19 @@ public sealed class TestFixture : IAsyncLifetime
          )
          """
       );
+
+      // A per-tenant singleton whose whole primary key is the tenancy column — reached from
+      // generated_tenancy_documents by pairing that one column plus a Relation condition narrowing to an active
+      // profile.
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_tenancy_profiles (
+            account_id   BIGINT NOT NULL PRIMARY KEY,
+            is_active    BOOLEAN NOT NULL,
+            display_name TEXT NOT NULL
+         )
+         """
+      );
    }
 
    public async ValueTask DisposeAsync()

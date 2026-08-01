@@ -223,4 +223,32 @@ public class GeneratedRepositoryTenancyTests : TestBase
          CancellationToken
       );
    }
+
+   // A per-tenant singleton whose whole primary key is the tenancy column — reached by pairing that one column plus
+   // a Relation condition. See TenancyDocumentTable.Profile and the Settled section of the relation-definitions spec.
+
+   [Fact]
+   public async Task Include_ReachesThePerTenantSingleton_ThroughTheTenancyColumnAlonePlusACondition()
+   {
+      var profiles = new TenancyProfileRepository(Db);
+
+      await profiles.CreateAsync(new CreateTenancyProfileCommand { AccountId = FIRST_ACCOUNT, IsActive = true, DisplayName = "First" }, CancellationToken);
+      await profiles.CreateAsync(new CreateTenancyProfileCommand { AccountId = SECOND_ACCOUNT, IsActive = true, DisplayName = "Second" }, CancellationToken);
+
+      var rows = await _documents.Query(FIRST_ACCOUNT).Include(x => x.Profile).ToListAsync(CancellationToken);
+
+      rows.Should().AllSatisfy(row => row.Profile!.DisplayName.Should().Be("First"));
+   }
+
+   [Fact]
+   public async Task Include_ReachesNoRow_WhenThePerTenantSingletonsProfileIsInactive()
+   {
+      var profiles = new TenancyProfileRepository(Db);
+
+      await profiles.CreateAsync(new CreateTenancyProfileCommand { AccountId = FIRST_ACCOUNT, IsActive = false, DisplayName = "First" }, CancellationToken);
+
+      var rows = await _documents.Query(FIRST_ACCOUNT).Include(x => x.Profile).ToListAsync(CancellationToken);
+
+      rows.Should().AllSatisfy(row => row.Profile.Should().BeNull());
+   }
 }

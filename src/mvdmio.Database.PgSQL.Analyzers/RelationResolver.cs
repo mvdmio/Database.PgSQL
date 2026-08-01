@@ -39,6 +39,8 @@ internal static class RelationResolver
       {
          var relations = ImmutableArray.CreateBuilder<ResolvedRelation>(model.Relations.Length);
 
+         CheckForForgottenConditions(model, byFullName, diagnostics);
+
          foreach (var relation in model.Relations)
          {
             if (TryResolve(model, relation, byFullName, diagnostics, out var result))
@@ -164,18 +166,30 @@ internal static class RelationResolver
       if (diagnostics.Count != beforeTypeChecking)
          return false;
 
-      // Tenancy is checked last and never drops the relation: a relation to a shared, untenanted table can be
-      // legitimate, and per ADR 0005 a relation-level problem drops the relation rather than the table. This drops
-      // nothing at all — PGSQL0027 is a warning, reported alongside the relation it describes.
+      // Each pair states which side is the declaring table's own property and which is the target's, exactly like
+      // the definition form — the only difference is that cardinality, rather than the pair itself, decides which of
+      // foreignKeys/primaryKeys plays which role here.
       var resolvedForeignKeys = foreignKeys.ToImmutable();
-      CheckTenancyPairing(model, relation, primaryKeyOwner, primaryKeys, resolvedForeignKeys, diagnostics);
+
+      var joinedKeys = primaryKeys
+         .Select(
+            (primaryKey, position) => relation.IsToMany
+               ? new JoinedKeyPair(primaryKey, resolvedForeignKeys[position])
+               : new JoinedKeyPair(resolvedForeignKeys[position], primaryKey)
+         )
+         .ToImmutableArray();
+
+      // The uniqueness and tenancy claims read the resolved pairs themselves, so they apply here exactly as they do
+      // to a relation declared through the RelationDefinition<,> form below — a pair is a pair regardless of how it
+      // was written. Nullable-unique is the one check here that drops the relation; the rest are warnings.
+      if (!CheckKeyPairClaims(model, relation, target, joinedKeys, diagnostics))
+         return false;
 
       resolved = new ResolvedRelation(
          propertyName: relation.PropertyName,
          isToMany: relation.IsToMany,
          targetDataTypeName: QualifyTypeName(target.NamespaceName, target.DataTypeName),
-         foreignKeys: resolvedForeignKeys,
-         primaryKeys: primaryKeys
+         joinedKeys: joinedKeys
       );
 
       return true;
@@ -225,6 +239,11 @@ internal static class RelationResolver
       if (diagnostics.Count != beforeResolving)
          return false;
 
+      var resolvedJoinedKeys = joinedKeys.ToImmutable();
+
+      if (!CheckKeyPairClaims(model, relation, target, resolvedJoinedKeys, diagnostics))
+         return false;
+
       if (!TryCheckCondition(model, relation, target, diagnostics))
          return false;
 
@@ -232,11 +251,83 @@ internal static class RelationResolver
          propertyName: relation.PropertyName,
          isToMany: relation.IsToMany,
          targetDataTypeName: QualifyTypeName(target.NamespaceName, target.DataTypeName),
-         joinedKeys: joinedKeys.ToImmutable(),
+         joinedKeys: resolvedJoinedKeys,
          conditionBodyText: relation.Condition?.BodyText
       );
 
       return true;
+   }
+
+   /// <summary>
+   ///    Checks a relation's resolved key pairs against the target's uniqueness claim and both tables' tenancy
+   ///    claims. Applies to a relation declared through either form, because a resolved pair carries no memory of how
+   ///    it was written. Returns <see langword="false" />, dropping the relation, only when a pair reaches a nullable
+   ///    <c>[Unique]</c> target column (<c>PGSQL0035</c>) — the rest are warnings that report and keep the relation.
+   /// </summary>
+   private static bool CheckKeyPairClaims(
+      TableDefinitionModel model,
+      RelationDeclarationModel relation,
+      TableDefinitionModel target,
+      ImmutableArray<JoinedKeyPair> joinedKeys,
+      ImmutableArray<Diagnostic>.Builder diagnostics
+   )
+   {
+      var beforeChecking = diagnostics.Count;
+
+      foreach (var pair in joinedKeys)
+      {
+         if (!pair.TargetKey.IsUnique || !pair.TargetKey.IsNullable)
+            continue;
+
+         diagnostics.Add(
+            Diagnostic.Create(
+               TableRepositoryDiagnostics.RelationKeyPairsAgainstNullableUniqueColumn,
+               relation.Location,
+               model.TableClassName,
+               relation.PropertyName,
+               target.TableClassName,
+               pair.TargetKey.PropertyName
+            )
+         );
+      }
+
+      if (diagnostics.Count != beforeChecking)
+         return false;
+
+      // Reaching one row is a claim, exactly like every other claim a Table definition makes, so this is a warning
+      // rather than a refusal — and it only applies to a relation to one row. A relation to many rows is allowed to
+      // reach several by definition.
+      if (!relation.IsToMany && !PairedColumnsClaimUniqueness(target, joinedKeys))
+      {
+         diagnostics.Add(
+            Diagnostic.Create(
+               TableRepositoryDiagnostics.RelationToOneRowMayReachSeveral,
+               relation.Location,
+               model.TableClassName,
+               relation.PropertyName,
+               target.TableClassName
+            )
+         );
+      }
+
+      CheckTenancyPairing(model, relation, target, joinedKeys, diagnostics);
+
+      return true;
+   }
+
+   /// <summary>
+   ///    Whether the target-side columns of <paramref name="joinedKeys" /> contain something the target claims
+   ///    unique — its whole primary key, or any single <c>[Unique]</c> column. A superset of a unique set is still
+   ///    unique, which is why this checks containment rather than equality.
+   /// </summary>
+   private static bool PairedColumnsClaimUniqueness(TableDefinitionModel target, ImmutableArray<JoinedKeyPair> joinedKeys)
+   {
+      var pairedTargetColumns = new HashSet<PropertyDefinitionModel>(joinedKeys.Select(x => x.TargetKey));
+
+      if (!target.PrimaryKeys.IsEmpty && target.PrimaryKeys.All(pairedTargetColumns.Contains))
+         return true;
+
+      return pairedTargetColumns.Any(x => x.IsUnique);
    }
 
    /// <summary>
@@ -299,29 +390,43 @@ internal static class RelationResolver
    }
 
    /// <summary>
-   ///    Warns on every tenancy column of <paramref name="primaryKeyOwner" /> that the join does not pin to a tenancy
-   ///    column on the foreign-key side. The caller has already zipped <paramref name="foreignKeys" /> positionally
-   ///    against <paramref name="primaryKeys" /> by cardinality — the foreign-key side is the declaring table for a
-   ///    relation to one row, and the target for a relation to many — so checking "the paired property's own tenancy
-   ///    claim" reads the same regardless of cardinality. A tenancy column outside the joined key warns too: the join
-   ///    never touches it at all, which pins the tenant even less than pairing it against the wrong property would.
+   ///    Warns on every tenancy column of either table that the joined key pairs do not pin to a tenancy column on the
+   ///    other table — pair-based and direction-free, so it reads the same regardless of which side declared the
+   ///    relation or which side happens to hold the foreign key. A tenancy column outside every pair warns too: the
+   ///    join never touches it at all, which pins the tenant even less than pairing it against the wrong property
+   ///    would. Reports once per unpinned tenancy column on either table, so a relation missing both can report twice.
    /// </summary>
    private static void CheckTenancyPairing(
       TableDefinitionModel model,
       RelationDeclarationModel relation,
-      TableDefinitionModel primaryKeyOwner,
-      ImmutableArray<PropertyDefinitionModel> primaryKeys,
-      ImmutableArray<PropertyDefinitionModel> foreignKeys,
+      TableDefinitionModel target,
+      ImmutableArray<JoinedKeyPair> joinedKeys,
       ImmutableArray<Diagnostic>.Builder diagnostics
    )
    {
-      foreach (var tenancyColumn in primaryKeyOwner.TenancyColumns)
-      {
-         // Both sequences are filtered from the one property list the parser built for this table, so the same column
-         // is the same instance in each and the key position falls out of an identity search.
-         var position = primaryKeys.IndexOf(tenancyColumn);
+      CheckTenancySide(model, relation, model, joinedKeys, isDeclaringSide: true, diagnostics);
+      CheckTenancySide(model, relation, target, joinedKeys, isDeclaringSide: false, diagnostics);
+   }
 
-         if (position >= 0 && foreignKeys[position].IsTenancy)
+   /// <summary>
+   ///    Checks every tenancy column of <paramref name="owner" /> — the declaring table when <paramref name="isDeclaringSide" />
+   ///    is <see langword="true" />, the target otherwise — against the pair that names it, if any.
+   /// </summary>
+   private static void CheckTenancySide(
+      TableDefinitionModel model,
+      RelationDeclarationModel relation,
+      TableDefinitionModel owner,
+      ImmutableArray<JoinedKeyPair> joinedKeys,
+      bool isDeclaringSide,
+      ImmutableArray<Diagnostic>.Builder diagnostics
+   )
+   {
+      foreach (var tenancyColumn in owner.TenancyColumns)
+      {
+         var pair = joinedKeys.FirstOrDefault(x => ReferenceEquals(isDeclaringSide ? x.ThisKey : x.TargetKey, tenancyColumn));
+         var counterpart = pair is null ? null : isDeclaringSide ? pair.TargetKey : pair.ThisKey;
+
+         if (counterpart is { IsTenancy: true })
             continue;
 
          diagnostics.Add(
@@ -333,6 +438,62 @@ internal static class RelationResolver
                tenancyColumn.PropertyName
             )
          );
+      }
+   }
+
+   /// <summary>
+   ///    Warns, per <c>PGSQL0034</c>, when one table declares two relations to the same target pairing the same key
+   ///    columns, where one carries a Relation condition and another does not — the unconditioned one silently
+   ///    returns every kind the conditioned ones distinguish between. Only the definition form can carry a condition,
+   ///    so only relations declared that way take part.
+   /// </summary>
+   private static void CheckForForgottenConditions(
+      TableDefinitionModel model,
+      ImmutableDictionary<string, TableDefinitionModel> byFullName,
+      ImmutableArray<Diagnostic>.Builder diagnostics
+   )
+   {
+      var byShape = new Dictionary<string, List<RelationDeclarationModel>>(StringComparer.Ordinal);
+
+      foreach (var relation in model.Relations)
+      {
+         if (!relation.IsDefinitionForm || !byFullName.ContainsKey(relation.TargetClassFullName))
+            continue;
+
+         var pairs = relation.KeyPairs!.Value;
+
+         if (pairs.Any(x => x.DeclaringPropertyName is null || x.TargetPropertyName is null))
+            continue;
+
+         var shapeKey = relation.TargetClassFullName
+            + "|"
+            + string.Join("|", pairs.Select(x => $"{x.DeclaringPropertyName}->{x.TargetPropertyName}").OrderBy(x => x, StringComparer.Ordinal));
+
+         if (!byShape.TryGetValue(shapeKey, out var group))
+         {
+            group = [];
+            byShape[shapeKey] = group;
+         }
+
+         group.Add(relation);
+      }
+
+      foreach (var group in byShape.Values)
+      {
+         if (group.Count < 2 || group.All(x => x.Condition is null))
+            continue;
+
+         foreach (var unconditioned in group.Where(x => x.Condition is null))
+         {
+            diagnostics.Add(
+               Diagnostic.Create(
+                  TableRepositoryDiagnostics.RelationMayResolveEveryKind,
+                  unconditioned.Location,
+                  model.TableClassName,
+                  unconditioned.PropertyName
+               )
+            );
+         }
       }
    }
 
@@ -378,35 +539,11 @@ internal sealed class ResolvedTable
 /// </summary>
 internal sealed class ResolvedRelation
 {
-   public ResolvedRelation(
-      string propertyName,
-      bool isToMany,
-      string targetDataTypeName,
-      ImmutableArray<PropertyDefinitionModel> foreignKeys,
-      ImmutableArray<PropertyDefinitionModel> primaryKeys
-   )
-   {
-      PropertyName = propertyName;
-      IsToMany = isToMany;
-      TargetDataTypeName = targetDataTypeName;
-      ConditionBodyText = null;
-
-      // A relation always joins its foreign key to a primary key. Which of the two is on the declaring side is the
-      // whole of what the cardinality decides, so it is decided here and nowhere else — and the two sides are zipped
-      // here too, so nothing downstream can pair them by index and get it wrong.
-      JoinedKeys = primaryKeys
-         .Select(
-            (primaryKey, position) => isToMany
-               ? new JoinedKeyPair(primaryKey, foreignKeys[position])
-               : new JoinedKeyPair(foreignKeys[position], primaryKey)
-         )
-         .ToImmutableArray();
-   }
-
    /// <summary>
-   ///    Builds a resolved relation from pairs that already know their own declaring-side and target-side property —
-   ///    what a relation declared as a <c>RelationDefinition&lt;,&gt;</c> class states directly, with no
-   ///    foreign-key/primary-key side for cardinality to pick out.
+   ///    Builds a resolved relation from pairs that already know their own declaring-side and target-side property.
+   ///    Both declaration forms resolve to this shape before construction — the old attribute-argument form zips its
+   ///    foreign keys against the target's primary key by cardinality first, and the definition form's pairs already
+   ///    name both sides themselves — so nothing here has to know which form produced them.
    /// </summary>
    public ResolvedRelation(
       string propertyName,
