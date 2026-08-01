@@ -4,6 +4,14 @@ status: accepted
 
 # Declare a relation as a class, and let it carry a condition
 
+> **The "nullable-target-side question is settled by refusal, not by a third overload" consequence below is corrected
+> by [ADR 0011](0011-relation-key-pairs-refused-by-nullability-not-uniqueness.md).** `PGSQL0035` no longer asks
+> whether the target column is `[Unique]` and nullable — it asks whether *both* columns of the pair can hold null,
+> which is the shape that actually costs the index. A not-null foreign key against a nullable `[Unique]` column builds
+> now, exactly like a foreign key against any other nullable column. This ADR stays in place, pointing forward, the
+> same way it kept ADR 0005's and ADR 0006's superseded consequences in place: the record of why refusal looked right
+> at the time is worth keeping alongside the correction. Everything else this ADR decided is untouched.
+
 [ADR 0005](0005-table-relations-on-relation-properties.md) declared a **Relation** on an attribute: the property's type
 named the target, the attribute's argument named the foreign key, and the far end was always the target's primary key.
 [ADR 0006](0006-composite-primary-keys.md) admitted a composite key by making that argument variadic, paired

@@ -655,9 +655,12 @@ class (`CS0053`). Keep the property and its nested definition class at matching 
 `protected static` helper on the base class. Each side is a direct property reference — `x => x.Column` — so a rename
 is a build error rather than a silently wrong join, and a pair whose two sides hold different types does not compile.
 `Key` has two overloads: matching types on both sides, and a nullable left side against a non-nullable right — the
-ordinary outer-join shape, where a foreign key may hold null but the key it targets never does. The order the pairs
-are listed in carries no meaning; they are combined with `&&`, so reordering them changes nothing. A composite key
-needs no different shape from a single-column one — one `Key(…)` per column, in any order:
+ordinary outer-join shape, where a foreign key may hold null but the key it targets never does. The same-type overload
+alone already accepts every nullability combination, because its type argument is inferred from both lambdas at once
+and settles on whichever type the other converts to — a `long` column paired against a `long?` column infers `long?`
+and compiles. What a pair may *not* do is have both sides able to hold null at once: see `PGSQL0035` under Relations,
+below. The order the pairs are listed in carries no meaning; they are combined with `&&`, so reordering them changes
+nothing. A composite key needs no different shape from a single-column one — one `Key(…)` per column, in any order:
 
 ```csharp
 [Table("public.tasks")]
@@ -690,9 +693,10 @@ property must be nullable — a relation is always an outer join. Typed as a col
 rows; the generated data type always mirrors it as a `List<T>` initialized to empty. A relation to one row is a claim
 that its pairs reach at most one target row, exactly like every other claim a table definition makes: the target-side
 columns must contain something the target claims unique — its primary key, or a `[Unique]` column; a superset of a
-unique set still counts. Pairing against nothing the target claims unique is a build *warning*, `PGSQL0031`, not an
-error — a relation whose condition happens to make the pairing unique still builds, because the check reads the pairs
-and cannot see the condition.
+unique set still counts, and a `[Unique]` column that can hold null still counts too, because PostgreSQL admits any
+number of nulls under a unique constraint. Pairing against nothing the target claims unique is a build *warning*,
+`PGSQL0031`, not an error — a relation whose condition happens to make the pairing unique still builds, because the
+check reads the pairs and cannot see the condition.
 
 Each direction is declared on its own: a relation to a parent does not oblige the parent to declare the collection
 back. Two relations may point at the same target — a `CreatedByUserId` and an `UpdatedByUserId` both reaching the user
@@ -918,6 +922,9 @@ Nothing verifies a claim against the real table, the same way nothing verifies a
 that does hold null is not caught when the row is read — the null arrives in a property typed non-nullable. What it costs
 is rows: an inequality over that column omits the ones where it is null. Claim not-null because the table says
 `NOT NULL`, not because the value is usually present.
+
+A relation key reads this same claim on both of its columns, not their C# type — see `PGSQL0035` under Relations,
+below.
 
 ### Column Storage
 
@@ -1354,7 +1361,7 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0032` | Error    | A relation condition touches a member with no counterpart on the generated data type   |
 | `PGSQL0033` | Error    | `[Relation]` sits on a property whose type is not a relation definition               |
 | `PGSQL0034` | Warning  | A relation reads the same columns of its own table as another that carries a condition, but states none itself |
-| `PGSQL0035` | Error    | A relation pairs against a target column that is `[Unique]` but nullable              |
+| `PGSQL0035` | Error    | A relation key pair's two columns can both hold null                                  |
 
 `PGSQL0001` is a warning rather than an error because you can implement `Identifier` and `Name` yourself instead of
 following the naming convention. If you do neither, a misnamed migration class throws the moment those properties are

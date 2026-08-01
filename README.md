@@ -77,7 +77,8 @@ address the row by all of them, in the order you declared them.
 
 A property's type also tells the query surface whether its column can hold null, so a predicate over a non-nullable
 column reaches PostgreSQL without an `OR column IS NULL` alternative that could never match — and can use an index.
-Where the type cannot say it, `[Column(Null = true)]` and `[Column(NotNull = true)]` do.
+Where the type cannot say it, `[Column(Null = true)]` and `[Column(NotNull = true)]` do. A relation key reads the same
+claim, and pairing two columns that can both hold null is refused.
 
 A column can state how it is stored, too. Enums go in as the text of their member name with nothing to declare;
 `[Column(StoredAs = NpgsqlDbType.Integer)]` stores one as a number instead, and `StoredAs = NpgsqlDbType.Jsonb` puts a

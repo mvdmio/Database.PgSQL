@@ -37,7 +37,7 @@ The order of a **Table definition**'s primary-key properties, taken from their s
 _Avoid_: Key ordinal, column order, index order.
 
 **Nullability claim**:
-What a **Table definition** states about whether one of its columns can hold null. Where it states nothing the column is taken to be nullable, matching PostgreSQL's own column default; a primary-key member is never nullable, because the database will not permit it. Never verified against the real table, and load-bearing rather than descriptive — the **Query surface** narrows a predicate on the strength of it, so a column holding a null it was claimed not to returns fewer rows than it should rather than failing.
+What a **Table definition** states about whether one of its columns can hold null. Where it states nothing the column is taken to be nullable, matching PostgreSQL's own column default; a primary-key member is never nullable, because the database will not permit it. Never verified against the real table, and load-bearing rather than descriptive — the **Query surface** narrows a predicate on the strength of it, so a column holding a null it was claimed not to returns fewer rows than it should rather than failing. A **Relation key** reads this claim rather than a property's C# type when it decides whether a pair can be declared at all, which is the one place the two disagree in practice — a column claimed nullable over a non-nullable type, or an unannotated type in a file with nullable annotations switched off.
 _Avoid_: Nullability, NOT NULL constraint (that is the database's, which this never creates and never checks), required, optional.
 
 **Storage claim**:
@@ -61,7 +61,7 @@ The class that declares one **Relation**, deriving from `RelationDefinition<TDec
 _Avoid_: Configuration, mapping, builder, entity type configuration (that is Entity Framework's, and this library configures nothing at run time).
 
 **Relation key**:
-One pair of columns a **Relation definition** states as equal, one on each of the two **Table definitions**. A relation states one pair per column it joins on, and their order carries no meaning. A **Relation** to one row must pair against columns the target claims are unique — its primary key, or a column marked unique — so that it reaches one row rather than an arbitrary one of several.
+One pair of columns a **Relation definition** states as equal, one on each of the two **Table definitions**. A relation states one pair per column it joins on, and their order carries no meaning. A **Relation** to one row must pair against columns the target claims are unique — its primary key, or a column marked unique — so that it reaches one row rather than an arbitrary one of several. A pair is refused, whatever it pairs against, where both its columns' **Nullability claim** says either can hold null — that shape widens the join the query provider emits and loses the index behind either column, whether or not either side is unique.
 _Avoid_: Foreign key (that is the database constraint), join key, key column, key pair.
 
 **Relation condition**:
