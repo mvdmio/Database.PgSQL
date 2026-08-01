@@ -75,12 +75,9 @@ internal static class TableDefinitionSymbols
    /// </summary>
    public static bool IsRelationProperty(IPropertySymbol property, Compilation compilation)
    {
-      var type = property.Type;
+      var (elementType, _) = ReadCardinality(property.Type);
 
-      if (type is INamedTypeSymbol { IsGenericType: true } collection && _toManyCollectionTypeNames.Contains(collection.OriginalDefinition.ToDisplayString()))
-         type = collection.TypeArguments[0];
-
-      return TryGetRelationDefinitionBase(type, compilation, out _);
+      return TryGetRelationDefinitionBase(elementType, compilation, out _);
    }
 
    /// <remarks>
@@ -197,10 +194,6 @@ internal static class TableDefinitionSymbols
       return property.NullableAnnotation == NullableAnnotation.NotAnnotated;
    }
 
-   /// <summary>
-   ///    Reads the relation's target and its cardinality off the property's type, which is the only place either is
-   ///    stated.
-   /// </summary>
    /// <summary>What a relation property's type states, or <see langword="null" /> when it states nothing usable.</summary>
    /// <remarks>
    ///    A property whose type — or whose collection element type, for a relation to many — derives from
@@ -213,13 +206,29 @@ internal static class TableDefinitionSymbols
    /// </remarks>
    public static RelationPropertyShape? ReadRelationPropertyShape(ITypeSymbol propertyType, Compilation compilation)
    {
+      var (elementType, isToMany) = ReadCardinality(propertyType);
+
+      return ReadTargetCandidate(elementType, compilation, isToMany);
+   }
+
+   /// <summary>
+   ///    A relation property's cardinality and the type its target is read from: the element type of a supported
+   ///    collection for a relation to many, and the property's own type otherwise.
+   /// </summary>
+   /// <remarks>
+   ///    The one place a collection is recognised as a relation to many. Both the question of whether a property is a
+   ///    relation at all and the question of what it targets come off this same answer, so the two cannot come to
+   ///    disagree about which collection types count.
+   /// </remarks>
+   private static (ITypeSymbol ElementType, bool IsToMany) ReadCardinality(ITypeSymbol propertyType)
+   {
       if (propertyType is INamedTypeSymbol { IsGenericType: true } collection
           && _toManyCollectionTypeNames.Contains(collection.OriginalDefinition.ToDisplayString()))
       {
-         return ReadTargetCandidate(collection.TypeArguments[0], compilation, isToMany: true);
+         return (collection.TypeArguments[0], true);
       }
 
-      return ReadTargetCandidate(propertyType, compilation, isToMany: false);
+      return (propertyType, false);
    }
 
    /// <summary>
@@ -245,7 +254,6 @@ internal static class TableDefinitionSymbols
 
       return false;
    }
-
 
    /// <summary>
    ///    Where a mapped property was declared, so a diagnostic about it points at the property rather than at the class.

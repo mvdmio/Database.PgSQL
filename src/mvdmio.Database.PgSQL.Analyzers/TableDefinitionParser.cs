@@ -60,16 +60,19 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
-      var allProperties = classSymbol.GetMembers()
-         .OfType<IPropertySymbol>()
-         .ToImmutableArray();
+      var compilation = context.SemanticModel.Compilation;
 
       // The relation split is entirely type-driven: a property typed as a class deriving from RelationDefinition<,>,
       // or a supported collection of one, is a relation on its own. [Relation] is an optional marker that changes
       // nothing about the split — a property carrying it whose type is not a relation reports PGSQL0033 below rather
-      // than being treated as one.
-      var relationProperties = allProperties.Where(x => TableDefinitionSymbols.IsRelationProperty(x, context.SemanticModel.Compilation)).ToImmutableArray();
-      var columnCandidates = allProperties.Where(x => !TableDefinitionSymbols.IsRelationProperty(x, context.SemanticModel.Compilation)).ToImmutableArray();
+      // than being treated as one. Split in one pass, so the two sides are answers to a single question rather than
+      // to a question and its negation.
+      var bySide = classSymbol.GetMembers()
+         .OfType<IPropertySymbol>()
+         .ToLookup(x => TableDefinitionSymbols.IsRelationProperty(x, compilation));
+
+      var relationProperties = bySide[true].ToImmutableArray();
+      var columnCandidates = bySide[false].ToImmutableArray();
 
       foreach (var property in columnCandidates.Where(x => TableDefinitionSymbols.HasAttribute(x, TableDefinitionSymbols.RELATION_ATTRIBUTE_FULL_NAME)))
       {
@@ -283,7 +286,7 @@ internal static class TableDefinitionParser
       // takes a tenancy column's value.
       var tenancyColumns = properties.Where(x => x.IsTenancy).ToImmutableArray();
 
-      var relations = RelationDeclarationParser.ParseRelations(classSymbol, relationProperties, context.SemanticModel.Compilation, diagnostics);
+      var relations = RelationDeclarationParser.ParseRelations(classSymbol, relationProperties, compilation, diagnostics);
       var accessibility = classSymbol.DeclaredAccessibility == Accessibility.Public ? "public" : "internal";
       // Named throughout: four of these are same-typed property collections, so a transposition would compile and only
       // show up as wrong generated SQL.

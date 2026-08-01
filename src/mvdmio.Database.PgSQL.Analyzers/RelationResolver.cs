@@ -41,7 +41,9 @@ internal static class RelationResolver
    {
       var byFullName = models.ToImmutableDictionary(x => x.TableClassFullName, StringComparer.Ordinal);
       var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
-      var candidatesByTable = new Dictionary<string, List<RelationCandidate>>(StringComparer.Ordinal);
+      // Each table is held together with the relations of its own still standing, rather than in a table-keyed lookup
+      // beside the models, so the two cannot come to disagree about which relations belong to which table.
+      var pending = new List<(TableDefinitionModel Model, List<RelationCandidate> Candidates)>(models.Length);
 
       foreach (var model in models)
       {
@@ -51,23 +53,22 @@ internal static class RelationResolver
 
          foreach (var relation in model.Relations)
          {
-            if (TryPairColumns(model, relation, byFullName, diagnostics, out var candidate))
+            if (PairColumns(model, relation, byFullName, diagnostics) is { } candidate)
                candidates.Add(candidate);
          }
 
-         candidatesByTable[model.TableClassFullName] = candidates;
+         pending.Add((model, candidates));
       }
 
-      DropRelationsWhoseConditionCannotBeCarried(models, candidatesByTable, diagnostics);
+      DropRelationsWhoseConditionCannotBeCarried(pending, diagnostics);
 
-      var tables = ImmutableArray.CreateBuilder<ResolvedTable>(models.Length);
+      var tables = ImmutableArray.CreateBuilder<ResolvedTable>(pending.Count);
 
-      foreach (var model in models)
+      foreach (var (model, candidates) in pending)
       {
-         var relations = candidatesByTable[model.TableClassFullName];
-         var resolved = ImmutableArray.CreateBuilder<ResolvedRelation>(relations.Count);
+         var resolved = ImmutableArray.CreateBuilder<ResolvedRelation>(candidates.Count);
 
-         foreach (var candidate in relations)
+         foreach (var candidate in candidates)
             resolved.Add(candidate.ToResolvedRelation());
 
          tables.Add(new ResolvedTable(model, resolved.ToImmutable()));
@@ -83,16 +84,13 @@ internal static class RelationResolver
    ///    from cardinality, unlike the old attribute-argument form's positional matching, which this mechanism replaces
    ///    entirely. The Relation condition is left for the second pass; see <see cref="Resolve" />.
    /// </summary>
-   private static bool TryPairColumns(
+   private static RelationCandidate? PairColumns(
       TableDefinitionModel model,
       RelationDeclarationModel relation,
       ImmutableDictionary<string, TableDefinitionModel> byFullName,
-      ImmutableArray<Diagnostic>.Builder diagnostics,
-      out RelationCandidate candidate
+      ImmutableArray<Diagnostic>.Builder diagnostics
    )
    {
-      candidate = null!;
-
       if (!byFullName.TryGetValue(relation.TargetClassFullName, out var target))
       {
          diagnostics.Add(
@@ -105,14 +103,13 @@ internal static class RelationResolver
             )
          );
 
-         return false;
+         return null;
       }
 
-      var pairs = relation.KeyPairs;
-      var joinedKeys = ImmutableArray.CreateBuilder<JoinedKeyPair>(pairs.Length);
+      var joinedKeys = ImmutableArray.CreateBuilder<JoinedKeyPair>(relation.KeyPairs.Length);
       var beforeResolving = diagnostics.Count;
 
-      foreach (var pair in pairs)
+      foreach (var pair in relation.KeyPairs)
       {
          var declaringProperty = model.DataProperties.FirstOrDefault(x => string.Equals(x.PropertyName, pair.DeclaringPropertyName, StringComparison.Ordinal));
          var targetProperty = target.DataProperties.FirstOrDefault(x => string.Equals(x.PropertyName, pair.TargetPropertyName, StringComparison.Ordinal));
@@ -135,16 +132,11 @@ internal static class RelationResolver
       }
 
       if (diagnostics.Count != beforeResolving)
-         return false;
+         return null;
 
-      var resolvedJoinedKeys = joinedKeys.ToImmutable();
+      var candidate = new RelationCandidate(model, relation, target, joinedKeys.ToImmutable());
 
-      if (!CheckKeyPairClaims(model, relation, target, resolvedJoinedKeys, diagnostics))
-         return false;
-
-      candidate = new RelationCandidate(model, relation, target, resolvedJoinedKeys);
-
-      return true;
+      return CheckKeyPairClaims(candidate, diagnostics) ? candidate : null;
    }
 
    /// <summary>
@@ -152,17 +144,12 @@ internal static class RelationResolver
    ///    claims. Returns <see langword="false" />, dropping the relation, only when a pair reaches a nullable
    ///    <c>[Unique]</c> target column (<c>PGSQL0035</c>) — the rest are warnings that report and keep the relation.
    /// </summary>
-   private static bool CheckKeyPairClaims(
-      TableDefinitionModel model,
-      RelationDeclarationModel relation,
-      TableDefinitionModel target,
-      ImmutableArray<JoinedKeyPair> joinedKeys,
-      ImmutableArray<Diagnostic>.Builder diagnostics
-   )
+   private static bool CheckKeyPairClaims(RelationCandidate candidate, ImmutableArray<Diagnostic>.Builder diagnostics)
    {
+      var relation = candidate.Relation;
       var beforeChecking = diagnostics.Count;
 
-      foreach (var pair in joinedKeys)
+      foreach (var pair in candidate.JoinedKeys)
       {
          if (!pair.TargetKey.IsUnique || !pair.TargetKey.IsNullable)
             continue;
@@ -171,9 +158,9 @@ internal static class RelationResolver
             Diagnostic.Create(
                TableRepositoryDiagnostics.RelationKeyPairsAgainstNullableUniqueColumn,
                relation.Location,
-               model.TableClassName,
+               candidate.Model.TableClassName,
                relation.PropertyName,
-               target.TableClassName,
+               candidate.Target.TableClassName,
                pair.TargetKey.PropertyName
             )
          );
@@ -185,20 +172,20 @@ internal static class RelationResolver
       // Reaching one row is a claim, exactly like every other claim a Table definition makes, so this is a warning
       // rather than a refusal — and it only applies to a relation to one row. A relation to many rows is allowed to
       // reach several by definition.
-      if (!relation.IsToMany && !PairedColumnsClaimUniqueness(target, joinedKeys))
+      if (!relation.IsToMany && !PairedColumnsClaimUniqueness(candidate.Target, candidate.JoinedKeys))
       {
          diagnostics.Add(
             Diagnostic.Create(
                TableRepositoryDiagnostics.RelationToOneRowMayReachSeveral,
                relation.Location,
-               model.TableClassName,
+               candidate.Model.TableClassName,
                relation.PropertyName,
-               target.TableClassName
+               candidate.Target.TableClassName
             )
          );
       }
 
-      CheckTenancyPairing(model, relation, target, joinedKeys, diagnostics);
+      CheckTenancyPairing(candidate, diagnostics);
 
       return true;
    }
@@ -230,8 +217,7 @@ internal static class RelationResolver
    ///    relation. A dropped relation reports once and is never re-checked, so no round can report it twice.
    /// </remarks>
    private static void DropRelationsWhoseConditionCannotBeCarried(
-      ImmutableArray<TableDefinitionModel> models,
-      Dictionary<string, List<RelationCandidate>> candidatesByTable,
+      List<(TableDefinitionModel Model, List<RelationCandidate> Candidates)> pending,
       ImmutableArray<Diagnostic>.Builder diagnostics
    )
    {
@@ -241,13 +227,13 @@ internal static class RelationResolver
       {
          droppedAny = false;
 
-         var memberNamesByTable = models.ToDictionary(
-            x => x.TableClassFullName,
-            x => MemberNames(x, candidatesByTable[x.TableClassFullName]),
+         var memberNamesByTable = pending.ToDictionary(
+            x => x.Model.TableClassFullName,
+            x => MemberNames(x.Model, x.Candidates),
             StringComparer.Ordinal
          );
 
-         foreach (var candidates in candidatesByTable.Values)
+         foreach (var (_, candidates) in pending)
          {
             // Reverse, so removing an entry cannot skip the one after it.
             for (var index = candidates.Count - 1; index >= 0; index--)
@@ -338,16 +324,10 @@ internal static class RelationResolver
    ///    fix. A tenanted table reading a shared, untenanted lookup is the common shape that falls under this, and the
    ///    same reasoning applies facing the other way.
    /// </remarks>
-   private static void CheckTenancyPairing(
-      TableDefinitionModel model,
-      RelationDeclarationModel relation,
-      TableDefinitionModel target,
-      ImmutableArray<JoinedKeyPair> joinedKeys,
-      ImmutableArray<Diagnostic>.Builder diagnostics
-   )
+   private static void CheckTenancyPairing(RelationCandidate candidate, ImmutableArray<Diagnostic>.Builder diagnostics)
    {
-      CheckTenancySide(model, relation, model, target, joinedKeys, isDeclaringSide: true, diagnostics);
-      CheckTenancySide(model, relation, target, model, joinedKeys, isDeclaringSide: false, diagnostics);
+      CheckTenancySide(candidate, candidate.Model, candidate.Target, isDeclaringSide: true, diagnostics);
+      CheckTenancySide(candidate, candidate.Target, candidate.Model, isDeclaringSide: false, diagnostics);
    }
 
    /// <summary>
@@ -355,18 +335,16 @@ internal static class RelationResolver
    ///    is <see langword="true" />, the target otherwise — against the pair that names it, if any.
    /// </summary>
    private static void CheckTenancySide(
-      TableDefinitionModel model,
-      RelationDeclarationModel relation,
+      RelationCandidate candidate,
       TableDefinitionModel owner,
       TableDefinitionModel otherSide,
-      ImmutableArray<JoinedKeyPair> joinedKeys,
       bool isDeclaringSide,
       ImmutableArray<Diagnostic>.Builder diagnostics
    )
    {
       foreach (var tenancyColumn in owner.TenancyColumns)
       {
-         var pair = joinedKeys.FirstOrDefault(x => ReferenceEquals(isDeclaringSide ? x.ThisKey : x.TargetKey, tenancyColumn));
+         var pair = candidate.JoinedKeys.FirstOrDefault(x => ReferenceEquals(isDeclaringSide ? x.ThisKey : x.TargetKey, tenancyColumn));
          var counterpart = pair is null ? null : isDeclaringSide ? pair.TargetKey : pair.ThisKey;
 
          if (counterpart is { IsTenancy: true })
@@ -380,9 +358,9 @@ internal static class RelationResolver
          diagnostics.Add(
             Diagnostic.Create(
                TableRepositoryDiagnostics.RelationCouldReachAcrossTenants,
-               relation.Location,
-               model.TableClassName,
-               relation.PropertyName,
+               candidate.Relation.Location,
+               candidate.Model.TableClassName,
+               candidate.Relation.PropertyName,
                tenancyColumn.PropertyName
             )
          );
@@ -407,32 +385,18 @@ internal static class RelationResolver
       ImmutableArray<Diagnostic>.Builder diagnostics
    )
    {
-      var byShape = new Dictionary<string, List<RelationDeclarationModel>>(StringComparer.Ordinal);
+      // Every pair of a relation that reaches here names both of its sides: one that does not is reported as
+      // PGSQL0030 and dropped by RelationDeclarationParser, so it never becomes a RelationDeclarationModel.
+      var byShape = model.Relations
+         .Where(x => byFullName.ContainsKey(x.TargetClassFullName))
+         .GroupBy(
+            x => string.Join("|", x.KeyPairs.Select(pair => pair.DeclaringPropertyName).OrderBy(name => name, StringComparer.Ordinal)),
+            StringComparer.Ordinal
+         );
 
-      foreach (var relation in model.Relations)
+      foreach (var group in byShape)
       {
-         if (!byFullName.ContainsKey(relation.TargetClassFullName))
-            continue;
-
-         var pairs = relation.KeyPairs;
-
-         if (pairs.Any(x => x.DeclaringPropertyName is null || x.TargetPropertyName is null))
-            continue;
-
-         var shapeKey = string.Join("|", pairs.Select(x => x.DeclaringPropertyName).OrderBy(x => x, StringComparer.Ordinal));
-
-         if (!byShape.TryGetValue(shapeKey, out var group))
-         {
-            group = [];
-            byShape[shapeKey] = group;
-         }
-
-         group.Add(relation);
-      }
-
-      foreach (var group in byShape.Values)
-      {
-         if (group.Count < 2 || group.All(x => x.Condition is null))
+         if (group.Count() < 2 || group.All(x => x.Condition is null))
             continue;
 
          foreach (var unconditioned in group.Where(x => x.Condition is null))
