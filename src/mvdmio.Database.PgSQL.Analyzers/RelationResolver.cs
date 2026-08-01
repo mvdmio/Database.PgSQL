@@ -53,6 +53,12 @@ internal static class RelationResolver
       return new ResolveResult(tables.ToImmutable(), diagnostics.ToImmutable());
    }
 
+   /// <summary>
+   ///    Resolves a relation declared as a <c>RelationDefinition&lt;,&gt;</c> class. Each pair already names its own
+   ///    declaring-side and target-side property, so resolving is just looking each name up on its own table's
+   ///    mapped columns — there is no foreign-key/primary-key side to work out from cardinality, unlike the old
+   ///    attribute-argument form's positional matching, which this mechanism replaces entirely.
+   /// </summary>
    private static bool TryResolve(
       TableDefinitionModel model,
       RelationDeclarationModel relation,
@@ -78,139 +84,7 @@ internal static class RelationResolver
          return false;
       }
 
-      // A relation declared as a RelationDefinition<,> class already states both sides of each pair itself, so there
-      // is no foreign-key/primary-key side to work out from cardinality — that only applies to the old
-      // attribute-argument form below.
-      if (relation.IsDefinitionForm)
-         return TryResolveDefinitionForm(model, relation, target, diagnostics, out resolved);
-
-      // Cardinality decides one thing: which side holds the foreign key and which holds the primary key it joins. A
-      // relation to one row is resolved through a foreign key on the declaring type, one to many through a foreign key
-      // on the target. The far end is always the other side's primary key, which may have more than one member — and
-      // then the declaration names one foreign-key property per member, paired positionally against it.
-      var (foreignKeyOwner, primaryKeyOwner) = relation.IsToMany ? (target, model) : (model, target);
-      var primaryKeys = primaryKeyOwner.PrimaryKeys;
-
-      if (relation.ForeignKeyPropertyNames.Length != primaryKeys.Length)
-      {
-         diagnostics.Add(
-            Diagnostic.Create(
-               TableRepositoryDiagnostics.RelationForeignKeyArityMismatch,
-               relation.Location,
-               model.TableClassName,
-               relation.PropertyName,
-               relation.ForeignKeyPropertyNames.Length,
-               DescribeNames(relation.ForeignKeyPropertyNames),
-               primaryKeyOwner.TableClassName,
-               primaryKeys.Length
-            )
-         );
-
-         return false;
-      }
-
-      // Each phase below reports every problem it finds rather than only the first, because each is a separate mistake.
-      // Whether the phase found any is read off the diagnostic count, so no phase carries a flag of its own.
-      var foreignKeys = ImmutableArray.CreateBuilder<PropertyDefinitionModel>(primaryKeys.Length);
-      var beforeResolving = diagnostics.Count;
-
-      foreach (var foreignKeyPropertyName in relation.ForeignKeyPropertyNames)
-      {
-         var foreignKey = foreignKeyOwner.DataProperties.FirstOrDefault(x => string.Equals(x.PropertyName, foreignKeyPropertyName, StringComparison.Ordinal));
-
-         if (foreignKey is null)
-         {
-            diagnostics.Add(
-               Diagnostic.Create(
-                  TableRepositoryDiagnostics.RelationForeignKeyNotFound,
-                  relation.Location,
-                  model.TableClassName,
-                  relation.PropertyName,
-                  foreignKeyPropertyName,
-                  foreignKeyOwner.TableClassName
-               )
-            );
-
-            continue;
-         }
-
-         foreignKeys.Add(foreignKey);
-      }
-
-      // Nothing can be type-checked until every name resolves.
-      if (diagnostics.Count != beforeResolving)
-         return false;
-
-      var beforeTypeChecking = diagnostics.Count;
-
-      for (var position = 0; position < primaryKeys.Length; position++)
-      {
-         if (CanJoin(foreignKeys[position].TypeName, primaryKeys[position].TypeName))
-            continue;
-
-         diagnostics.Add(
-            Diagnostic.Create(
-               TableRepositoryDiagnostics.RelationForeignKeyTypeMismatch,
-               relation.Location,
-               model.TableClassName,
-               relation.PropertyName,
-               foreignKeys[position].PropertyName,
-               foreignKeys[position].TypeName,
-               primaryKeys[position].PropertyName,
-               primaryKeys[position].TypeName,
-               position + 1
-            )
-         );
-      }
-
-      if (diagnostics.Count != beforeTypeChecking)
-         return false;
-
-      // Each pair states which side is the declaring table's own property and which is the target's, exactly like
-      // the definition form — the only difference is that cardinality, rather than the pair itself, decides which of
-      // foreignKeys/primaryKeys plays which role here.
-      var resolvedForeignKeys = foreignKeys.ToImmutable();
-
-      var joinedKeys = primaryKeys
-         .Select(
-            (primaryKey, position) => relation.IsToMany
-               ? new JoinedKeyPair(primaryKey, resolvedForeignKeys[position])
-               : new JoinedKeyPair(resolvedForeignKeys[position], primaryKey)
-         )
-         .ToImmutableArray();
-
-      // The uniqueness and tenancy claims read the resolved pairs themselves, so they apply here exactly as they do
-      // to a relation declared through the RelationDefinition<,> form below — a pair is a pair regardless of how it
-      // was written. Nullable-unique is the one check here that drops the relation; the rest are warnings.
-      if (!CheckKeyPairClaims(model, relation, target, joinedKeys, diagnostics))
-         return false;
-
-      resolved = new ResolvedRelation(
-         propertyName: relation.PropertyName,
-         isToMany: relation.IsToMany,
-         targetDataTypeName: QualifyTypeName(target.NamespaceName, target.DataTypeName),
-         joinedKeys: joinedKeys
-      );
-
-      return true;
-   }
-
-   /// <summary>
-   ///    Resolves a relation declared as a <c>RelationDefinition&lt;,&gt;</c> class. Each pair already names its own
-   ///    declaring-side and target-side property, so there is no foreign-key/primary-key side to work out from
-   ///    cardinality — resolving is just looking each name up on its own table's mapped columns.
-   /// </summary>
-   private static bool TryResolveDefinitionForm(
-      TableDefinitionModel model,
-      RelationDeclarationModel relation,
-      TableDefinitionModel target,
-      ImmutableArray<Diagnostic>.Builder diagnostics,
-      out ResolvedRelation resolved
-   )
-   {
-      resolved = null!;
-
-      var pairs = relation.KeyPairs!.Value;
+      var pairs = relation.KeyPairs;
       var joinedKeys = ImmutableArray.CreateBuilder<JoinedKeyPair>(pairs.Length);
       var beforeResolving = diagnostics.Count;
 
@@ -260,8 +134,7 @@ internal static class RelationResolver
 
    /// <summary>
    ///    Checks a relation's resolved key pairs against the target's uniqueness claim and both tables' tenancy
-   ///    claims. Applies to a relation declared through either form, because a resolved pair carries no memory of how
-   ///    it was written. Returns <see langword="false" />, dropping the relation, only when a pair reaches a nullable
+   ///    claims. Returns <see langword="false" />, dropping the relation, only when a pair reaches a nullable
    ///    <c>[Unique]</c> target column (<c>PGSQL0035</c>) — the rest are warnings that report and keep the relation.
    /// </summary>
    private static bool CheckKeyPairClaims(
@@ -444,8 +317,7 @@ internal static class RelationResolver
    /// <summary>
    ///    Warns, per <c>PGSQL0034</c>, when one table declares two relations to the same target pairing the same key
    ///    columns, where one carries a Relation condition and another does not — the unconditioned one silently
-   ///    returns every kind the conditioned ones distinguish between. Only the definition form can carry a condition,
-   ///    so only relations declared that way take part.
+   ///    returns every kind the conditioned ones distinguish between.
    /// </summary>
    private static void CheckForForgottenConditions(
       TableDefinitionModel model,
@@ -457,10 +329,10 @@ internal static class RelationResolver
 
       foreach (var relation in model.Relations)
       {
-         if (!relation.IsDefinitionForm || !byFullName.ContainsKey(relation.TargetClassFullName))
+         if (!byFullName.ContainsKey(relation.TargetClassFullName))
             continue;
 
-         var pairs = relation.KeyPairs!.Value;
+         var pairs = relation.KeyPairs;
 
          if (pairs.Any(x => x.DeclaringPropertyName is null || x.TargetPropertyName is null))
             continue;
@@ -497,20 +369,6 @@ internal static class RelationResolver
       }
    }
 
-   private static string DescribeNames(ImmutableArray<string> names)
-   {
-      return names.IsEmpty ? "none" : string.Join(", ", names);
-   }
-
-   /// <summary>
-   ///    Whether a foreign key can join a primary key. Nullability is ignored: a nullable foreign key joining a
-   ///    non-nullable primary key is the ordinary case, and is exactly what makes the relation an outer join.
-   /// </summary>
-   private static bool CanJoin(string foreignKeyTypeName, string primaryKeyTypeName)
-   {
-      return string.Equals(foreignKeyTypeName.TrimEnd('?'), primaryKeyTypeName.TrimEnd('?'), StringComparison.Ordinal);
-   }
-
    private static string QualifyTypeName(string namespaceName, string typeName)
    {
       return string.IsNullOrWhiteSpace(namespaceName) ? $"global::{typeName}" : $"global::{namespaceName}.{typeName}";
@@ -540,10 +398,8 @@ internal sealed class ResolvedTable
 internal sealed class ResolvedRelation
 {
    /// <summary>
-   ///    Builds a resolved relation from pairs that already know their own declaring-side and target-side property.
-   ///    Both declaration forms resolve to this shape before construction — the old attribute-argument form zips its
-   ///    foreign keys against the target's primary key by cardinality first, and the definition form's pairs already
-   ///    name both sides themselves — so nothing here has to know which form produced them.
+   ///    Builds a resolved relation from pairs that already know their own declaring-side and target-side property —
+   ///    a relation definition's <c>Keys</c> override names both sides of each pair itself.
    /// </summary>
    public ResolvedRelation(
       string propertyName,

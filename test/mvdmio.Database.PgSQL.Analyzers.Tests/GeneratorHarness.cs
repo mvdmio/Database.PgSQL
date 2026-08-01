@@ -49,10 +49,7 @@ internal static class GeneratorHarness
          public sealed class GeneratedAttribute : System.Attribute { }
 
          [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
-         public sealed class RelationAttribute : System.Attribute
-         {
-            public RelationAttribute(params string[] foreignKeyPropertyNames) { }
-         }
+         public sealed class RelationAttribute : System.Attribute { }
       }
 
       namespace mvdmio.Database.PgSQL.Relations
@@ -180,18 +177,6 @@ internal static class GeneratorHarness
                bool isPrimaryKey = false,
                bool isNotNull = false
             ) => throw null!;
-
-            public QueryEntityMappingBuilder<TEntity> Relation<TTarget, TThisKey, TTargetKey>(
-               System.Linq.Expressions.Expression<System.Func<TEntity, TTarget?>> property,
-               System.Linq.Expressions.Expression<System.Func<TEntity, TThisKey>> thisKey,
-               System.Linq.Expressions.Expression<System.Func<TTarget, TTargetKey>> targetKey
-            ) where TTarget : class => throw null!;
-
-            public QueryEntityMappingBuilder<TEntity> Relation<TTarget, TThisKey, TTargetKey>(
-               System.Linq.Expressions.Expression<System.Func<TEntity, System.Collections.Generic.IEnumerable<TTarget>>> property,
-               System.Linq.Expressions.Expression<System.Func<TEntity, TThisKey>> thisKey,
-               System.Linq.Expressions.Expression<System.Func<TTarget, TTargetKey>> targetKey
-            ) where TTarget : class => throw null!;
 
             public QueryEntityMappingBuilder<TEntity> Relation<TTarget>(
                System.Linq.Expressions.Expression<System.Func<TEntity, TTarget?>> property,

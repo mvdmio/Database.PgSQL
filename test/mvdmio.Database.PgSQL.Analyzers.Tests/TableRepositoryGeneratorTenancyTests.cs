@@ -595,6 +595,8 @@ public class TableRepositoryGeneratorTenancyTests
    {
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
 
          namespace Demo;
 
@@ -621,8 +623,14 @@ public class TableRepositoryGeneratorTenancyTests
 
             public string Title { get; set; } = string.Empty;
 
-            [Relation(nameof(AccountId))]
-            public AccountTable? Account { get; set; }
+            private AccountRelation? Account { get; set; }
+
+            private class AccountRelation : RelationDefinition<DocumentTable, AccountTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AccountId, y => y.AccountId),
+               ];
+            }
          }
          """);
 
@@ -642,6 +650,8 @@ public class TableRepositoryGeneratorTenancyTests
       // the direction the old, positional rule missed entirely.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
 
          namespace Demo;
 
@@ -668,8 +678,14 @@ public class TableRepositoryGeneratorTenancyTests
 
             public long OwnerId { get; set; }
 
-            [Relation(nameof(OwnerId))]
-            public AccountTable? Owner { get; set; }
+            private OwnerRelation? Owner { get; set; }
+
+            private class OwnerRelation : RelationDefinition<DocumentTable, AccountTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.OwnerId, y => y.AccountId),
+               ];
+            }
          }
          """);
 
@@ -687,6 +703,8 @@ public class TableRepositoryGeneratorTenancyTests
       // tenancy column falls out of the rule automatically: it cannot be the declaring table's own tenancy column.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
 
          namespace Demo;
 
@@ -709,8 +727,14 @@ public class TableRepositoryGeneratorTenancyTests
 
             public long AccountId { get; set; }
 
-            [Relation(nameof(AccountId))]
-            public AccountTable? Account { get; set; }
+            private AccountRelation? Account { get; set; }
+
+            private class AccountRelation : RelationDefinition<DocumentTable, AccountTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AccountId, y => y.AccountId),
+               ];
+            }
          }
          """);
 
@@ -724,6 +748,8 @@ public class TableRepositoryGeneratorTenancyTests
       // — a relation between two shared, untenanted tables is a legitimate shape.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
 
          namespace Demo;
 
@@ -746,8 +772,14 @@ public class TableRepositoryGeneratorTenancyTests
 
             public long? CategoryId { get; set; }
 
-            [Relation(nameof(CategoryId))]
-            public CategoryTable? Category { get; set; }
+            private CategoryRelation? Category { get; set; }
+
+            private class CategoryRelation : RelationDefinition<DocumentTable, CategoryTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.CategoryId, y => y.CategoryId),
+               ];
+            }
          }
          """);
 
@@ -763,6 +795,8 @@ public class TableRepositoryGeneratorTenancyTests
       // direction the old, positional rule missed: it only ever checked whichever side held the primary key.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
 
          namespace Demo;
 
@@ -789,8 +823,14 @@ public class TableRepositoryGeneratorTenancyTests
 
             public long? CategoryId { get; set; }
 
-            [Relation(nameof(CategoryId))]
-            public CategoryTable? Category { get; set; }
+            private CategoryRelation? Category { get; set; }
+
+            private class CategoryRelation : RelationDefinition<DocumentTable, CategoryTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.CategoryId, y => y.CategoryId),
+               ];
+            }
          }
          """);
 
@@ -807,6 +847,7 @@ public class TableRepositoryGeneratorTenancyTests
       // paired property against the declaring table's own tenancy column.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
          using System.Collections.Generic;
 
          namespace Demo;
@@ -833,8 +874,14 @@ public class TableRepositoryGeneratorTenancyTests
 
             public string Name { get; set; } = string.Empty;
 
-            [Relation(nameof(DocumentTable.AccountId))]
-            public List<DocumentTable> Documents { get; set; } = new();
+            private List<DocumentsRelation> Documents { get; set; } = new();
+
+            private class DocumentsRelation : RelationDefinition<AccountTable, DocumentTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AccountId, y => y.AccountId),
+               ];
+            }
          }
          """);
 
@@ -846,6 +893,7 @@ public class TableRepositoryGeneratorTenancyTests
    {
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
          using System.Collections.Generic;
 
          namespace Demo;
@@ -871,8 +919,14 @@ public class TableRepositoryGeneratorTenancyTests
 
             public string Name { get; set; } = string.Empty;
 
-            [Relation(nameof(DocumentTable.OwnerAccountId))]
-            public List<DocumentTable> Documents { get; set; } = new();
+            private List<DocumentsRelation> Documents { get; set; } = new();
+
+            private class DocumentsRelation : RelationDefinition<AccountTable, DocumentTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AccountId, y => y.OwnerAccountId),
+               ];
+            }
          }
          """);
 
@@ -889,6 +943,8 @@ public class TableRepositoryGeneratorTenancyTests
       // against it at all — which is the same failure as pairing the wrong property, and warns exactly once.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
 
          namespace Demo;
 
@@ -914,8 +970,14 @@ public class TableRepositoryGeneratorTenancyTests
 
             public long TenantId { get; set; }
 
-            [Relation(nameof(TenantId))]
-            public TenantTable? Tenant { get; set; }
+            private TenantRelation? Tenant { get; set; }
+
+            private class TenantRelation : RelationDefinition<WidgetTable, TenantTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.TenantId, y => y.TenantId),
+               ];
+            }
          }
          """);
 
@@ -932,6 +994,8 @@ public class TableRepositoryGeneratorTenancyTests
       // RelationToOneRow_PairedAgainstAnUnrelatedProperty_ReportsPGSQL0027_TheStrictForm above.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
 
          namespace Demo;
 
@@ -958,8 +1022,14 @@ public class TableRepositoryGeneratorTenancyTests
 
             public long OwnerId { get; set; }
 
-            [Relation(nameof(OwnerId))]
-            public AccountTable? Owner { get; set; }
+            private OwnerRelation? Owner { get; set; }
+
+            private class OwnerRelation : RelationDefinition<DocumentTable, AccountTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.OwnerId, y => y.AccountId),
+               ];
+            }
          }
          """);
 
@@ -977,6 +1047,8 @@ public class TableRepositoryGeneratorTenancyTests
    {
       GeneratorHarness.AssertGeneratedSourcesCompile("""
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
 
          namespace Demo;
 
@@ -1003,8 +1075,14 @@ public class TableRepositoryGeneratorTenancyTests
 
             public long OwnerId { get; set; }
 
-            [Relation(nameof(OwnerId))]
-            public AccountTable? Owner { get; set; }
+            private OwnerRelation? Owner { get; set; }
+
+            private class OwnerRelation : RelationDefinition<DocumentTable, AccountTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.OwnerId, y => y.AccountId),
+               ];
+            }
          }
          """);
    }

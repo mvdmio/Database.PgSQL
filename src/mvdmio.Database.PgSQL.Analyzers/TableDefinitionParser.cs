@@ -64,12 +64,22 @@ internal static class TableDefinitionParser
          .OfType<IPropertySymbol>()
          .ToImmutableArray();
 
-      // The relation split is type-driven: a property typed as a class deriving from RelationDefinition<,>, or a
-      // supported collection of one, is a relation on its own. [Relation] still opts a property out of column
-      // mapping too, which is what the old attribute-argument form needs, since its target is the property's own
-      // type with nothing further to read.
+      // The relation split is entirely type-driven: a property typed as a class deriving from RelationDefinition<,>,
+      // or a supported collection of one, is a relation on its own. [Relation] is an optional marker that changes
+      // nothing about the split — a property carrying it whose type is not a relation reports PGSQL0033 below rather
+      // than being treated as one.
       var relationProperties = allProperties.Where(x => TableDefinitionSymbols.IsRelationProperty(x, context.SemanticModel.Compilation)).ToImmutableArray();
       var columnCandidates = allProperties.Where(x => !TableDefinitionSymbols.IsRelationProperty(x, context.SemanticModel.Compilation)).ToImmutableArray();
+
+      foreach (var property in columnCandidates.Where(x => TableDefinitionSymbols.HasAttribute(x, TableDefinitionSymbols.RELATION_ATTRIBUTE_FULL_NAME)))
+      {
+         diagnostics.Add(Diagnostic.Create(
+            TableRepositoryDiagnostics.RelationAttributeOnNonRelationProperty,
+            property.Locations.FirstOrDefault() ?? classSyntax.Identifier.GetLocation(),
+            classSymbol.Name,
+            property.Name
+         ));
+      }
 
       var invalidProperties = columnCandidates
          .Where(TableDefinitionSymbols.ShouldValidateProperty)
@@ -385,10 +395,9 @@ internal static class TableDefinitionParser
 
    /// <remarks>
    ///    Only what one table can decide on its own is checked here: the property's shape, its type, and whether it
-   ///    contradicts a column attribute. Whether the target is a table definition and whether the named foreign key
-   ///    (or, for the type-driven form, a key pair's target side) resolves to a mapped column are cross-table
-   ///    questions, answered once every table has been parsed. A relation that fails a check here is dropped and the
-   ///    rest of the table still generates.
+   ///    contradicts a column attribute. Whether the target is a table definition and whether a key pair's target
+   ///    side resolves to a mapped column are cross-table questions, answered once every table has been parsed. A
+   ///    relation that fails a check here is dropped and the rest of the table still generates.
    /// </remarks>
    private static ImmutableArray<RelationDeclarationModel> ParseRelations(
       INamedTypeSymbol classSymbol,
@@ -429,30 +438,13 @@ internal static class TableDefinitionParser
             continue;
          }
 
-         if (relationDefinition is not null)
-         {
-            if (!TryParseRelationDefinition(classSymbol, property, location, target, isToMany, relationDefinition, declaringTypeArgument, compilation, diagnostics, out var definitionRelation))
-               continue;
-
-            relations.Add(definitionRelation);
+         // relationDefinition is never null here: IsRelationProperty already required the property's type to derive
+         // from RelationDefinition<,>, and TryGetRelationTarget agrees or this property would have hit the
+         // unsupported-type branch above.
+         if (!TryParseRelationDefinition(classSymbol, property, location, target, isToMany, relationDefinition!, declaringTypeArgument, compilation, diagnostics, out var definitionRelation))
             continue;
-         }
 
-         // The old attribute-argument form: the target is the property's own type (or collection element type),
-         // and the foreign key is named on the [Relation] attribute rather than stated as key pairs.
-         var relationAttribute = TableDefinitionSymbols.RelationAttributeOf(property);
-
-         relations.Add(
-            new RelationDeclarationModel(
-               property.Name,
-               TableDefinitionSymbols.GetFullName(target),
-               target.ToDisplayString(),
-               TableDefinitionSymbols.GetForeignKeyPropertyNames(relationAttribute),
-               keyPairs: null,
-               isToMany,
-               location
-            )
-         );
+         relations.Add(definitionRelation);
       }
 
       return relations.ToImmutable();
@@ -521,7 +513,6 @@ internal static class TableDefinitionParser
          property.Name,
          TableDefinitionSymbols.GetFullName(target),
          target.ToDisplayString(),
-         ImmutableArray<string>.Empty,
          keyPairs,
          isToMany,
          location,

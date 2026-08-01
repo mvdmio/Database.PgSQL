@@ -120,25 +120,10 @@ internal static class TableRepositoryDiagnostics
    // unlike every diagnostic above. Abandoning the table would suppress its generated data type and bury the one
    // message describing the actual mistake under type-not-found errors from everything that names that type.
 
-   public static readonly DiagnosticDescriptor RelationForeignKeyNotFound = new(
-      id: "PGSQL0012",
-      title: "Relation foreign key property not found",
-      messageFormat: "'{0}.{1}' names foreign key property '{2}', which '{3}' does not declare as a mapped column",
-      category: CATEGORY_GENERATION,
-      defaultSeverity: DiagnosticSeverity.Error,
-      isEnabledByDefault: true,
-      description: "A relation is resolved through a foreign key property: on the declaring type for a relation to one row, and on the target type for a relation to many."
-   );
-
-   public static readonly DiagnosticDescriptor RelationForeignKeyTypeMismatch = new(
-      id: "PGSQL0013",
-      title: "Relation foreign key type cannot match the primary key",
-      messageFormat: "'{0}.{1}' joins foreign key '{2}' of type '{3}' to primary key '{4}' of type '{5}' at key position {6}",
-      category: CATEGORY_GENERATION,
-      defaultSeverity: DiagnosticSeverity.Error,
-      isEnabledByDefault: true,
-      description: "A relation always joins its foreign key to the target's primary key, pairing them positionally, so the two must have the same type at every position apart from nullability."
-   );
+   // PGSQL0012 (relation foreign key property not found) and PGSQL0013 (relation foreign key type cannot match the
+   // primary key) are retired: both described the old attribute-argument form's positional foreign-key matching,
+   // which is gone now that a relation states its pairs as expressions the compiler already checks. Their ids are
+   // never reused.
 
    public static readonly DiagnosticDescriptor RelationTargetIsNotATableDefinition = new(
       id: "PGSQL0014",
@@ -163,11 +148,11 @@ internal static class TableRepositoryDiagnostics
    public static readonly DiagnosticDescriptor UnsupportedRelationPropertyType = new(
       id: "PGSQL0016",
       title: "Unsupported relation property type",
-      messageFormat: "'{0}.{1}' has type '{2}'; a relation property must be a table definition or a list, collection or sequence of one",
+      messageFormat: "'{0}.{1}' has type '{2}'; a relation property must be a relation definition or a list, collection or sequence of one",
       category: CATEGORY_GENERATION,
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
-      description: "A relation property states its target and its cardinality through its own type, so only a table definition or a supported collection of one can carry a relation."
+      description: "A relation property states its target and its cardinality through its own type, so only a class deriving RelationDefinition<,> or a supported collection of one can carry a relation."
    );
 
    public static readonly DiagnosticDescriptor UnsupportedRelationPropertyShape = new(
@@ -190,15 +175,10 @@ internal static class TableRepositoryDiagnostics
       description: "A relation property is skipped by column mapping, so naming a column for it describes something that will never be read or written."
    );
 
-   public static readonly DiagnosticDescriptor RelationForeignKeyArityMismatch = new(
-      id: "PGSQL0019",
-      title: "Relation foreign key does not match the target's primary key arity",
-      messageFormat: "'{0}.{1}' names a foreign key of arity {2} ({3}), but the primary key of '{4}' has arity {5}",
-      category: CATEGORY_GENERATION,
-      defaultSeverity: DiagnosticSeverity.Error,
-      isEnabledByDefault: true,
-      description: "A relation pairs its foreign-key properties positionally against the target's primary key, so it must name exactly one per key member."
-   );
+   // PGSQL0019 (relation foreign key does not match the target's primary key arity) is retired along with it: there
+   // is no fixed arity left to check once a relation states its pairs explicitly rather than matching a count
+   // against the target's primary key. What it protected — a relation to one row reaching more than one — is now
+   // the uniqueness warning PGSQL0031 below. Its id is never reused.
 
    // Abandons the table, unlike the relation diagnostics above: a malformed key leaves the lookup, the delete and the
    // update undefined rather than one relation.
@@ -364,6 +344,16 @@ internal static class TableRepositoryDiagnostics
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
       description: "A relation condition's body is lifted into the emitted join, with its two parameters rewritten from Table definition types to generated data types. A member touched directly on either parameter must exist on that table's generated data type — a mapped column or another relation property — or the lift would fail inside generated source with no line in the developer's own code to fix."
+   );
+
+   public static readonly DiagnosticDescriptor RelationAttributeOnNonRelationProperty = new(
+      id: "PGSQL0033",
+      title: "Relation attribute on a non-relation property",
+      messageFormat: "'{0}.{1}' carries [Relation], but its type is not a relation definition or a supported collection of one",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "[Relation] is an optional marker: a property is a Relation because its type derives from RelationDefinition<,>, or is a supported collection of one, not because it carries this attribute. Writing it on a property whose type is neither would let the attribute say something untrue."
    );
 
    // The three diagnostics below read the resolved key pairs themselves rather than anything about how the relation

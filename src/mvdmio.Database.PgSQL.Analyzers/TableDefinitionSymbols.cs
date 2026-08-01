@@ -57,11 +57,6 @@ internal static class TableDefinitionSymbols
       return property.GetAttributes().Any(x => x.AttributeClass?.ToDisplayString() == fullName);
    }
 
-   public static AttributeData RelationAttributeOf(IPropertySymbol property)
-   {
-      return property.GetAttributes().First(x => x.AttributeClass?.ToDisplayString() == RELATION_ATTRIBUTE_FULL_NAME);
-   }
-
    /// <summary>
    ///    Whether a property that is not a mappable column still has to be validated, because an attribute on it says the
    ///    developer meant it to be one.
@@ -72,17 +67,14 @@ internal static class TableDefinitionSymbols
    }
 
    /// <summary>
-   ///    Whether a property is a relation rather than a column candidate. Type-driven: a property whose type, or
-   ///    whose collection element type for a relation to many, derives from
-   ///    <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c> is a relation on its own, and writing <c>[Relation]</c>
-   ///    on it besides is accepted but adds nothing. The old attribute-argument form still needs the attribute to say
-   ///    so, because its target is stated by the property's own type with nothing further to read.
+   ///    Whether a property is a relation rather than a column candidate. Entirely type-driven: a property whose
+   ///    type, or whose collection element type for a relation to many, derives from
+   ///    <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c> is a relation on its own. Writing <c>[Relation]</c> on
+   ///    it besides is accepted and changes nothing; writing it on a property this method answers
+   ///    <see langword="false" /> for is what <c>PGSQL0033</c> catches.
    /// </summary>
    public static bool IsRelationProperty(IPropertySymbol property, Compilation compilation)
    {
-      if (HasAttribute(property, RELATION_ATTRIBUTE_FULL_NAME))
-         return true;
-
       var type = property.Type;
 
       if (type is INamedTypeSymbol { IsGenericType: true } collection && _toManyCollectionTypeNames.Contains(collection.OriginalDefinition.ToDisplayString()))
@@ -211,10 +203,12 @@ internal static class TableDefinitionSymbols
    /// </summary>
    /// <remarks>
    ///    A property whose type — or whose collection element type, for a relation to many — derives from
-   ///    <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c> is the type-driven form: the target and the declaring
-   ///    type argument are read from that base type, and <paramref name="relationDefinition" /> is set so the caller
-   ///    can go on to read its <c>Keys</c>. Otherwise the property's own type (or element type) is read as the target
-   ///    directly, which is the old attribute-argument form.
+   ///    <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c> is a relation: the target and the declaring type
+   ///    argument are read from that base type, and <paramref name="relationDefinition" /> is set so the caller can
+   ///    go on to read its <c>Keys</c>. Called only for a property <see cref="IsRelationProperty" /> already answered
+   ///    <see langword="true" /> for, so failure here means the declaration is malformed rather than that the
+   ///    property is not a relation at all — <c>TTarget</c> resolving to something other than a named type, for
+   ///    instance.
    /// </remarks>
    public static bool TryGetRelationTarget(
       ITypeSymbol propertyType,
@@ -237,11 +231,6 @@ internal static class TableDefinitionSymbols
 
          return IsTargetCandidate(collection.TypeArguments[0], compilation, out target, out relationDefinition, out declaringTypeArgument);
       }
-
-      // A sequence this does not support is rejected as an unsupported type rather than read as a single target, so
-      // the diagnostic names the real mistake instead of complaining that the collection is not a table definition.
-      if (propertyType.SpecialType != SpecialType.System_String && IsSequence(propertyType))
-         return false;
 
       return IsTargetCandidate(propertyType, compilation, out target, out relationDefinition, out declaringTypeArgument);
    }
@@ -533,22 +522,6 @@ internal static class TableDefinitionSymbols
    }
 
    /// <summary>
-   ///    Reads the foreign-key property names off the relation attribute, in declaration order. The parameter is
-   ///    variadic, so a single name and several arrive the same way.
-   /// </summary>
-   public static ImmutableArray<string> GetForeignKeyPropertyNames(AttributeData relationAttribute)
-   {
-      var argument = relationAttribute.ConstructorArguments.FirstOrDefault();
-
-      if (argument.Kind != TypedConstantKind.Array || argument.IsNull)
-         return ImmutableArray<string>.Empty;
-
-      return argument.Values
-         .Select(x => x.Value as string ?? string.Empty)
-         .ToImmutableArray();
-   }
-
-   /// <summary>
    ///    Where a mapped property was declared, so a diagnostic about it points at the property rather than at the class.
    /// </summary>
    public static Location PropertyLocation(
@@ -611,6 +584,12 @@ internal static class TableDefinitionSymbols
       return false;
    }
 
+   /// <summary>
+   ///    Whether <paramref name="candidate" /> derives from <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c>, and
+   ///    if so, that base type's two type arguments — the declaring type and the target. Fails when
+   ///    <c>TTarget</c> resolves to something other than a named type, which is the one way a relation definition
+   ///    class can compile and still not name a usable target.
+   /// </summary>
    private static bool IsTargetCandidate(
       ITypeSymbol candidate,
       Compilation compilation,
@@ -626,26 +605,17 @@ internal static class TableDefinitionSymbols
       if (candidate is not INamedTypeSymbol { TypeKind: TypeKind.Class } named)
          return false;
 
-      if (TryGetRelationDefinitionBase(named, compilation, out var relationDefinitionBase))
-      {
-         relationDefinition = named;
-         declaringTypeArgument = relationDefinitionBase.TypeArguments[0] as INamedTypeSymbol;
+      if (!TryGetRelationDefinitionBase(named, compilation, out var relationDefinitionBase))
+         return false;
 
-         if (relationDefinitionBase.TypeArguments[1] is not INamedTypeSymbol targetTypeArgument)
-            return false;
+      relationDefinition = named;
+      declaringTypeArgument = relationDefinitionBase.TypeArguments[0] as INamedTypeSymbol;
 
-         target = targetTypeArgument;
-         return true;
-      }
+      if (relationDefinitionBase.TypeArguments[1] is not INamedTypeSymbol targetTypeArgument)
+         return false;
 
-      target = named;
+      target = targetTypeArgument;
       return true;
-   }
-
-   private static bool IsSequence(ITypeSymbol type)
-   {
-      return type is IArrayTypeSymbol
-             || type.AllInterfaces.Any(x => x.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T);
    }
 
    private static bool HasRelevantAttribute(IPropertySymbol property)

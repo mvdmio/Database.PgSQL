@@ -16,6 +16,7 @@ public class TableRepositoryGeneratorCompositeKeyTests
    /// </summary>
    private const string COMPOSITE_KEY_TABLES = """
       using mvdmio.Database.PgSQL.Attributes;
+      using mvdmio.Database.PgSQL.Relations;
       using System.Collections.Generic;
 
       namespace Demo;
@@ -32,8 +33,15 @@ public class TableRepositoryGeneratorCompositeKeyTests
 
          public string Name { get; set; } = string.Empty;
 
-         [Relation(nameof(TaskTable.AccountId), nameof(TaskTable.ProjectId))]
-         public List<TaskTable> Tasks { get; set; } = new();
+         private List<TasksRelation> Tasks { get; set; } = new();
+
+         private class TasksRelation : RelationDefinition<ProjectTable, TaskTable>
+         {
+            public override IReadOnlyList<RelationKey> Keys => [
+               Key(x => x.AccountId, y => y.AccountId),
+               Key(x => x.ProjectId, y => y.ProjectId),
+            ];
+         }
       }
 
       [Table("public.tasks")]
@@ -49,8 +57,15 @@ public class TableRepositoryGeneratorCompositeKeyTests
 
          public string Title { get; set; } = string.Empty;
 
-         [Relation(nameof(AccountId), nameof(ProjectId))]
-         public ProjectTable? Project { get; set; }
+         private ProjectRelation? Project { get; set; }
+
+         private class ProjectRelation : RelationDefinition<TaskTable, ProjectTable>
+         {
+            public override IReadOnlyList<RelationKey> Keys => [
+               Key(x => x.AccountId, y => y.AccountId),
+               Key(x => x.ProjectId, y => y.ProjectId),
+            ];
+         }
       }
       """;
 
@@ -234,61 +249,6 @@ public class TableRepositoryGeneratorCompositeKeyTests
       result.GeneratedSources.Should().BeEmpty();
    }
 
-   [Theory]
-   [InlineData("[Relation(nameof(AccountId))]", 1, 2)]
-   [InlineData("[Relation(nameof(AccountId), nameof(ProjectId), nameof(TaskId))]", 3, 2)]
-   public void RelationNamingTheWrongNumberOfForeignKeys_ProducesDiagnosticWithoutAbandoningTheTable(
-      string relationAttribute,
-      int declaredArity,
-      int keyArity
-   )
-   {
-      var result = GeneratorHarness.RunGenerator(TaskSourceWithRelation($$"""
-         {{relationAttribute}}
-            public ProjectTable? Project { get; set; }
-         """));
-
-      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0019").Subject;
-
-      diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
-      diagnostic.GetMessage().Should().ContainAll($"arity {declaredArity}", $"arity {keyArity}", "ProjectTable");
-
-      // A relation-level problem drops only the relation, so the diagnostic is not buried under type-not-found errors.
-      result.GeneratedSources.Should().NotBeEmpty();
-      GeneratorHarness.GeneratedSource(result, "Demo_TaskTable.Repository.g.cs").Should().Contain("public partial class TaskData");
-      result.GeneratedSources.Should().NotContain(x => x.HintName == "Demo_TaskTable.Relations.g.cs");
-   }
-
-   [Fact]
-   public void RelationWithAForeignKeyThatCannotMatchItsKeyMember_NamesThePositionAndBothProperties()
-   {
-      var result = GeneratorHarness.RunGenerator(TaskSourceWithRelation("""
-         [Relation(nameof(AccountId), nameof(Title))]
-            public ProjectTable? Project { get; set; }
-         """));
-
-      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0013").Subject;
-
-      diagnostic.GetMessage().Should().ContainAll("Title", "string", "ProjectId", "long", "at key position 2");
-      result.GeneratedSources.Should().NotBeEmpty();
-   }
-
-   [Fact]
-   public void RelationNamingSeveralUnknownForeignKeys_ReportsEachOfThem()
-   {
-      var result = GeneratorHarness.RunGenerator(TaskSourceWithRelation("""
-         [Relation("NoSuchAccount", "NoSuchProject")]
-            public ProjectTable? Project { get; set; }
-         """));
-
-      var messages = result.Diagnostics.Where(x => x.Id == "PGSQL0012").Select(x => x.GetMessage()).ToList();
-
-      messages.Should().HaveCount(2);
-      messages.Should().Contain(x => x.Contains("NoSuchAccount", StringComparison.Ordinal));
-      messages.Should().Contain(x => x.Contains("NoSuchProject", StringComparison.Ordinal));
-      result.GeneratedSources.Should().NotBeEmpty();
-   }
-
    [Fact]
    public void UniqueColumnNamedAfterThePrimaryKeyLookup_ProducesDiagnostic()
    {
@@ -314,45 +274,5 @@ public class TableRepositoryGeneratorCompositeKeyTests
 
       diagnostic.GetMessage().Should().ContainAll("GetByPrimaryKeyAsync", "the primary key's own lookup");
       result.GeneratedSources.Should().BeEmpty();
-   }
-
-   /// <summary>
-   ///    The task table carrying whichever relation member the caller spells out, plus the composite-key project table it
-   ///    points at.
-   /// </summary>
-   private static string TaskSourceWithRelation(string member)
-   {
-      return $$"""
-         using mvdmio.Database.PgSQL.Attributes;
-
-         namespace Demo;
-
-         [Table("public.tasks")]
-         public partial class TaskTable
-         {
-            [PrimaryKey]
-            public long AccountId { get; set; }
-
-            [PrimaryKey]
-            public long TaskId { get; set; }
-
-            public long ProjectId { get; set; }
-            public string Title { get; set; } = string.Empty;
-
-            {{member}}
-         }
-
-         [Table("public.projects")]
-         public partial class ProjectTable
-         {
-            [PrimaryKey]
-            public long AccountId { get; set; }
-
-            [PrimaryKey]
-            public long ProjectId { get; set; }
-
-            public string Name { get; set; } = string.Empty;
-         }
-         """;
    }
 }

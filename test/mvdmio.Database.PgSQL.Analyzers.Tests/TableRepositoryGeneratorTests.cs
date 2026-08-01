@@ -257,6 +257,7 @@ public class TableRepositoryGeneratorTests
 
    private const string VALID_RELATIONS = """
       using mvdmio.Database.PgSQL.Attributes;
+      using mvdmio.Database.PgSQL.Relations;
       using System.Collections.Generic;
 
       namespace Demo;
@@ -272,11 +273,22 @@ public class TableRepositoryGeneratorTests
          public long? AuthorId { get; set; }
          public long? EditorId { get; set; }
 
-         [Relation(nameof(AuthorId))]
-         public AuthorTable? Author { get; set; }
+         private AuthorRelation? Author { get; set; }
+         private EditorRelation? Editor { get; set; }
 
-         [Relation(nameof(EditorId))]
-         public AuthorTable? Editor { get; set; }
+         private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+         {
+            public override IReadOnlyList<RelationKey> Keys => [
+               Key(x => x.AuthorId, y => y.AuthorId),
+            ];
+         }
+
+         private class EditorRelation : RelationDefinition<BookTable, AuthorTable>
+         {
+            public override IReadOnlyList<RelationKey> Keys => [
+               Key(x => x.EditorId, y => y.AuthorId),
+            ];
+         }
       }
 
       [Table("public.authors")]
@@ -288,8 +300,14 @@ public class TableRepositoryGeneratorTests
 
          public string Name { get; set; } = string.Empty;
 
-         [Relation(nameof(BookTable.AuthorId))]
-         public List<BookTable> Books { get; set; } = new();
+         private List<BooksRelation> Books { get; set; } = new();
+
+         private class BooksRelation : RelationDefinition<AuthorTable, BookTable>
+         {
+            public override IReadOnlyList<RelationKey> Keys => [
+               Key(x => x.AuthorId, y => y.AuthorId),
+            ];
+         }
       }
       """;
 
@@ -321,61 +339,13 @@ public class TableRepositoryGeneratorTests
       GeneratorHarness.AssertGeneratedSourcesCompile(VALID_RELATIONS);
    }
 
-   /// <remarks>
-   ///    A property typed as a concrete list matches both <c>Relation</c> overloads, so generated code states its type
-   ///    arguments. A hand-written call has to resolve without them, and this holds the overload set to that.
-   /// </remarks>
-   [Fact]
-   public void AHandWrittenRelationCall_ResolvesWithoutTypeArguments()
-   {
-      var source = $$"""
-         {{VALID_RELATIONS}}
-
-         public static class HandWritten
-         {
-            public static void Register(mvdmio.Database.PgSQL.Connectors.Linq.QueryEntityMappingBuilder<AuthorData> builder)
-            {
-               builder.Relation(x => x.Books, x => x.AuthorId, x => x.AuthorId);
-            }
-         }
-         """;
-
-      GeneratorHarness.AssertGeneratedSourcesCompile(source);
-   }
-
-   [Fact]
-   public void RelationWithAnUnknownForeignKey_ProducesDiagnostic()
-   {
-      var result = GeneratorHarness.RunGenerator(RelationSource("""
-         [Relation("NoSuchProperty")]
-            public AuthorTable? Author { get; set; }
-         """));
-
-      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0012");
-      result.Diagnostics.Single(x => x.Id == "PGSQL0012").Severity.Should().Be(DiagnosticSeverity.Error);
-      result.GeneratedSources.Should().NotBeEmpty("one invalid relation must not stop the table from generating");
-   }
-
-   [Fact]
-   public void RelationWithAForeignKeyThatCannotMatchThePrimaryKey_ProducesDiagnostic()
-   {
-      var result = GeneratorHarness.RunGenerator(RelationSource("""
-         [Relation(nameof(Title))]
-            public AuthorTable? Author { get; set; }
-         """));
-
-      var mismatch = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0013").Subject;
-
-      // The position is named even on a single-column key, so one message shape covers both.
-      mismatch.GetMessage().Should().Contain("at key position 1");
-      result.GeneratedSources.Should().NotBeEmpty();
-   }
-
    [Fact]
    public void RelationToSomethingThatIsNotATableDefinition_ProducesDiagnostic()
    {
       var source = """
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
 
          namespace Demo;
 
@@ -392,8 +362,14 @@ public class TableRepositoryGeneratorTests
 
             public long? AuthorId { get; set; }
 
-            [Relation(nameof(AuthorId))]
-            public Elsewhere? Author { get; set; }
+            private AuthorRelation? Author { get; set; }
+
+            private class AuthorRelation : RelationDefinition<BookTable, Elsewhere>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorId, y => y.Id),
+               ];
+            }
          }
          """;
 
@@ -406,32 +382,10 @@ public class TableRepositoryGeneratorTests
    [Fact]
    public void RelationToOneRowThatIsNotNullable_ProducesDiagnostic()
    {
-      var result = GeneratorHarness.RunGenerator(RelationSource("""
-         [Relation(nameof(AuthorId))]
-            public AuthorTable Author { get; set; } = new();
-         """));
-
-      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0015");
-      result.GeneratedSources.Should().NotBeEmpty();
-   }
-
-   [Fact]
-   public void RelationOnAnUnsupportedPropertyType_ProducesDiagnostic()
-   {
-      var result = GeneratorHarness.RunGenerator(RelationSource("""
-         [Relation(nameof(AuthorId))]
-            public System.Collections.Generic.HashSet<AuthorTable> Authors { get; set; } = new();
-         """));
-
-      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0016");
-      result.GeneratedSources.Should().NotBeEmpty();
-   }
-
-   [Fact]
-   public void RelationOnAnUnsupportedPropertyShape_ProducesDiagnostic()
-   {
       var source = """
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
 
          namespace Demo;
 
@@ -443,8 +397,108 @@ public class TableRepositoryGeneratorTests
 
             public long? AuthorId { get; set; }
 
-            [Relation(nameof(AuthorId))]
-            public AuthorTable? Author => null;
+            private AuthorRelation Author { get; set; } = new();
+
+            private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorId, y => y.AuthorId),
+               ];
+            }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """;
+
+      var result = GeneratorHarness.RunGenerator(source);
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0015");
+      result.GeneratedSources.Should().NotBeEmpty();
+   }
+
+   /// <remarks>
+   ///    Reaching PGSQL0016 takes an unusual shape now that the relation split is entirely type-driven: the relation
+   ///    property's own type is a perfectly good relation definition, so what has to be malformed is what its
+   ///    <c>TTarget</c> type argument resolves to. An array satisfies the <c>where TTarget : class</c> constraint —
+   ///    arrays are reference types — but is not a named type, so it can never be a table definition.
+   /// </remarks>
+   [Fact]
+   public void RelationTargetingSomethingThatIsNotANamedType_ProducesDiagnostic()
+   {
+      var source = """
+         using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            public long BookCount { get; set; }
+
+            private AuthorRelation? Author { get; set; }
+
+            private class AuthorRelation : RelationDefinition<BookTable, AuthorTable[]>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.BookCount, y => y.LongLength),
+               ];
+            }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """;
+
+      var result = GeneratorHarness.RunGenerator(source);
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0016");
+      result.GeneratedSources.Should().NotBeEmpty();
+   }
+
+   [Fact]
+   public void RelationOnAnUnsupportedPropertyShape_ProducesDiagnostic()
+   {
+      var source = """
+         using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            public long? AuthorId { get; set; }
+
+            private AuthorRelation? Author => null;
+
+            private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorId, y => y.AuthorId),
+               ];
+            }
          }
 
          [Table("public.authors")]
@@ -466,23 +520,10 @@ public class TableRepositoryGeneratorTests
    [Fact]
    public void RelationCombinedWithAColumnAttribute_ProducesDiagnostic()
    {
-      var result = GeneratorHarness.RunGenerator(RelationSource("""
-         [Relation(nameof(AuthorId))]
-            [Column("author")]
-            public AuthorTable? Author { get; set; }
-         """));
-
-      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0018");
-      result.GeneratedSources.Should().NotBeEmpty();
-   }
-
-   /// <summary>
-   ///    A book table carrying whichever relation member the caller spells out, plus the author table it points at.
-   /// </summary>
-   private static string RelationSource(string member)
-   {
-      return $$"""
+      var source = """
          using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
 
          namespace Demo;
 
@@ -492,10 +533,17 @@ public class TableRepositoryGeneratorTests
             [PrimaryKey]
             public long BookId { get; set; }
 
-            public string Title { get; set; } = string.Empty;
             public long? AuthorId { get; set; }
 
-            {{member}}
+            [Column("author")]
+            private AuthorRelation? Author { get; set; }
+
+            private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorId, y => y.AuthorId),
+               ];
+            }
          }
 
          [Table("public.authors")]
@@ -507,5 +555,99 @@ public class TableRepositoryGeneratorTests
             public string Name { get; set; } = string.Empty;
          }
          """;
+
+      var result = GeneratorHarness.RunGenerator(source);
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0018");
+      result.GeneratedSources.Should().NotBeEmpty();
+   }
+
+   [Fact]
+   public void RelationAttributeOnAPropertyThatIsNotARelation_ProducesDiagnostic()
+   {
+      var source = """
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            public long? AuthorId { get; set; }
+
+            [Relation]
+            public AuthorTable? Author { get; set; }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """;
+
+      var result = GeneratorHarness.RunGenerator(source);
+
+      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0033").Subject;
+
+      diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
+      diagnostic.GetMessage().Should().Contain("Author");
+      // Author is still an ordinary column candidate — an unmapped, unattributed AuthorTable-typed reference type
+      // that the query surface cannot map — so the table still generates around it.
+      result.GeneratedSources.Should().NotBeEmpty();
+   }
+
+   [Fact]
+   public void RelationAttributeOnAnUnsupportedCollectionOfARelationDefinition_ProducesDiagnostic()
+   {
+      // A HashSet is not a supported to-many collection type, so even wrapping a genuine relation definition does
+      // not make this a relation — the marker attribute is simply wrong here, the same as it would be on any other
+      // non-relation property.
+      var source = """
+         using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            public long? AuthorId { get; set; }
+
+            [Relation]
+            private HashSet<AuthorRelation> Authors { get; set; } = new();
+
+            private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorId, y => y.AuthorId),
+               ];
+            }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """;
+
+      var result = GeneratorHarness.RunGenerator(source);
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0033");
+      result.GeneratedSources.Should().NotBeEmpty();
    }
 }

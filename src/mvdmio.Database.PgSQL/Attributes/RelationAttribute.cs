@@ -3,36 +3,19 @@ using JetBrains.Annotations;
 namespace mvdmio.Database.PgSQL.Attributes;
 
 /// <summary>
-///    Declares that the annotated property is a relation to another table definition rather than a column.
+///    Marks the annotated property as a Relation, spelling out on the property itself an intent the property's own
+///    type already states.
 /// </summary>
 /// <remarks>
-///    The property's type names the other table definition, and states the cardinality by whether it is a collection:
-///    a single table definition is a relation to one row, resolved through a foreign key on the declaring type, and a
-///    collection of one is a relation to many rows, resolved through a foreign key on the target type. The other side
-///    of the relation is always the target's primary key, so the foreign key is the only thing left to name — pass it
-///    with <c>nameof</c> so a rename is caught at build time. A target whose primary key is composite takes one
-///    foreign-key property per key member, paired positionally against it.
+///    Optional: a property is a Relation because its type derives from
+///    <see cref="mvdmio.Database.PgSQL.Relations.RelationDefinition{TDeclaring,TTarget}" />, or is a supported
+///    collection of one — not because it carries this attribute. Writing it besides is accepted and changes nothing,
+///    which is what lets a developer spell the intent out where they want it stated explicitly. Writing it on a
+///    property whose type is not a Relation definition fails the build (<c>PGSQL0033</c>), because the attribute
+///    would otherwise say something untrue.
 /// </remarks>
 [PublicAPI]
 [AttributeUsage(AttributeTargets.Property)]
 public sealed class RelationAttribute : Attribute
 {
-   /// <summary>
-   ///    Initializes a new instance of the <see cref="RelationAttribute" /> class.
-   /// </summary>
-   /// <param name="foreignKeyPropertyNames">
-   ///    The names of the properties holding the foreign key that resolves the relation, one per member of the target's
-   ///    primary key and in that key's order. They live on the declaring type for a relation to one row, and on the
-   ///    target type for a relation to many.
-   /// </param>
-   public RelationAttribute(params string[] foreignKeyPropertyNames)
-   {
-      ForeignKeyPropertyNames = foreignKeyPropertyNames;
-   }
-
-   /// <summary>
-   ///    Gets the names of the properties holding the foreign key that resolves the relation, in the order they are
-   ///    paired against the target's primary key.
-   /// </summary>
-   public IReadOnlyList<string> ForeignKeyPropertyNames { get; }
 }

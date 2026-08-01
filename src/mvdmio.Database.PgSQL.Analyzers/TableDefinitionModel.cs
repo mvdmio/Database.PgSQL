@@ -180,8 +180,7 @@ internal sealed class RelationDeclarationModel
       string propertyName,
       string targetClassFullName,
       string targetTypeDisplayName,
-      ImmutableArray<string> foreignKeyPropertyNames,
-      ImmutableArray<RelationKeyPairDeclaration>? keyPairs,
+      ImmutableArray<RelationKeyPairDeclaration> keyPairs,
       bool isToMany,
       Location? location,
       RelationConditionDeclaration? condition = null
@@ -190,7 +189,6 @@ internal sealed class RelationDeclarationModel
       PropertyName = propertyName;
       TargetClassFullName = targetClassFullName;
       TargetTypeDisplayName = targetTypeDisplayName;
-      ForeignKeyPropertyNames = foreignKeyPropertyNames;
       KeyPairs = keyPairs;
       IsToMany = isToMany;
       Location = location;
@@ -205,31 +203,15 @@ internal sealed class RelationDeclarationModel
    /// <summary>The target as the developer wrote it, for a diagnostic message to quote.</summary>
    public string TargetTypeDisplayName { get; }
 
-   /// <summary>
-   ///    The foreign-key property names as declared, in the order they are paired against the target's primary key.
-   ///    Only set for the old attribute-argument form; a relation declared as a <c>RelationDefinition&lt;,&gt;</c>
-   ///    class states its pairs through <see cref="KeyPairs" /> instead.
-   /// </summary>
-   public ImmutableArray<string> ForeignKeyPropertyNames { get; }
-
-   /// <summary>
-   ///    The column pairs read off a relation definition's <c>Keys</c> override, in the order they are written —
-   ///    <see langword="null" /> for the old attribute-argument form, which pairs its foreign key positionally against
-   ///    the target's primary key instead. <see cref="IsDefinitionForm" /> is what a caller should read rather than
-   ///    checking this for <see langword="null" /> directly.
-   /// </summary>
-   public ImmutableArray<RelationKeyPairDeclaration>? KeyPairs { get; }
-
-   /// <summary>Whether this relation was declared as a class deriving from <c>RelationDefinition&lt;,&gt;</c> rather than through the old attribute-argument form.</summary>
-   public bool IsDefinitionForm => KeyPairs is not null;
+   /// <summary>The column pairs read off a relation definition's <c>Keys</c> override, in the order they are written.</summary>
+   public ImmutableArray<RelationKeyPairDeclaration> KeyPairs { get; }
 
    public bool IsToMany { get; }
    public Location? Location { get; }
 
    /// <summary>
    ///    The relation definition's <c>Condition</c> override, read off its syntax — <see langword="null" /> when the
-   ///    override is absent (an ordinary relation) or when the old attribute-argument form declared this relation,
-   ///    which has no condition to state.
+   ///    override is absent, which is an ordinary relation.
    /// </summary>
    public RelationConditionDeclaration? Condition { get; }
 }
