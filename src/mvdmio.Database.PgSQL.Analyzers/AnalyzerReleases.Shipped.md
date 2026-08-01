@@ -35,3 +35,13 @@ PGSQL0021 | Generation | Error | Contradictory column nullability
 PGSQL0022 | Generation | Error | Storage claim cannot be honoured for the property's type
 PGSQL0023 | Generation | Error | Property type cannot be written by a generated repository
 PGSQL0024 | Generation | Warning | Storage claim has no query surface representation
+
+## Release 0.36
+
+### New Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|-------
+PGSQL0025 | Generation | Error | Tenancy column property cannot be nullable
+PGSQL0026 | Generation | Error | Tenancy column property cannot be [Generated]
+PGSQL0027 | Generation | Warning | Relation could reach across tenants

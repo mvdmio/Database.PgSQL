@@ -755,7 +755,7 @@ fake, for instance — they throw `NotSupportedException` rather than quietly lo
 | `[Table("…")]`  | Marks the class and names the table. Takes `schema.table`, or `table` for the `public` schema           |
 | `[PrimaryKey]`  | Marks a property as part of the key used by `UpdateAsync`, `GetByPrimaryKeyAsync` and `DeleteByPrimaryKeyAsync`. At least one property must carry it; two or more makes the key composite, in declaration order |
 | `[Unique]`      | Adds a `GetBy…`/`DeleteBy…` pair for that property                                                     |
-| `[Column("…")]` | States facts about the column: its name, whether it can hold null (`Null`, `NotNull`), and how it is stored (`StoredAs`). Without a name, the property name is converted to `snake_case` |
+| `[Column("…")]` | States facts about the column: its name, whether it can hold null (`Null`, `NotNull`), how it is stored (`StoredAs`), and whether it is a tenancy column (`Tenancy`). Without a name, the property name is converted to `snake_case` |
 | `[Generated]`   | The database produces the value (identity, computed, or defaulted): it is read back but never written   |
 | `[Relation("…")]` | Marks the property as a relation to another table definition rather than a column, naming one foreign-key property per member of the target's primary key |
 
@@ -864,6 +864,80 @@ Serializing an arbitrary object to `jsonb` is not supported: only `string` and `
 PostgreSQL enum types are not supported either — a claim describes how a value is bound, not a type the driver has to be
 taught.
 
+### Tenancy Column
+
+On a multi-tenant table, `[Column(Tenancy = true)]` names the column every generated member must constrain, so leaving
+the tenant out is a build error instead of a review responsibility:
+
+```csharp
+[Table("public.projects")]
+public partial class ProjectTable
+{
+   [Column(Tenancy = true)]
+   [PrimaryKey] public long AccountId { get; set; }
+   [PrimaryKey] [Generated] public long ProjectId { get; set; }
+
+   [Unique] public string Name { get; set; } = string.Empty;
+}
+```
+
+Every generated member constrains the column. A member that already constrains it — because it is part of the primary
+key the member addresses a row by, or because it *is* the unique column being looked up — gains nothing; every other
+member takes the value as a parameter, tenancy parameters first and in declaration order, ahead of key parameters and
+ahead of a unique column's value:
+
+| Member | Tenancy column inside the primary key | Tenancy column outside it |
+| --- | --- | --- |
+| `Query` | gains a parameter | gains a parameter |
+| `GetAllAsync` | gains a parameter | gains a parameter |
+| `GetBy{Unique}Async` | gains a parameter * | gains a parameter * |
+| `DeleteBy{Unique}Async` | gains a parameter * | gains a parameter * |
+| `GetByPrimaryKeyAsync` | unchanged | gains a parameter |
+| `DeleteByPrimaryKeyAsync` | unchanged | gains a parameter |
+| `CreateAsync` | unchanged | unchanged |
+| `UpdateAsync` | unchanged | unchanged |
+
+\* Except for the tenancy column's own lookup and delete. Those already constrain it, so they take that value once.
+
+`Query()`'s optional `commandTimeout` stays last, and the predicate it applies is already part of the queryable it
+returns — a query front-end composing on top of it cannot remove it.
+
+`CreateAsync` and `UpdateAsync` keep their single command parameter. The tenancy column becomes a `required` property
+on both generated command types instead, so a construction site that omits it fails to build. It is not added to the
+generated data type, which Dapper materializes through a parameterless constructor and so cannot satisfy `required`.
+
+Where the tenancy column sits outside the primary key, a generated update also moves it from the `SET` list to the
+`WHERE` clause: the update addresses its row by every key member plus every tenancy column not already among them, and
+assigns every other updatable column. An update aimed at another tenant's row then matches nothing and throws, exactly
+as one against a missing key already does. A table whose only assignable column was the tenancy column has nothing
+left to assign once it moves to the `WHERE` clause, which is the same build error, `PGSQL0007`, a table with no
+updatable columns already produces — it will just read as unrelated to the tenancy declaration that caused it.
+
+More than one column may carry `Tenancy = true`. Each is constrained independently, in declaration order, which is the
+shape a two-level tenant — an account and a workspace, say — needs.
+
+Everywhere else the column is ordinary: it keeps its nullability claim, its storage claim, its place in the select and
+returning lists, and its property on the generated data type.
+
+The guarantee is narrow, and worth stating plainly. It reaches generated code and stops there — `db.Linq.Query<TData>()`
+is still reachable directly, and hand-written Dapper is untouched. Nothing checks the column against the real table,
+and nothing checks the value passed against anything: the library holds no tenant of its own and cannot tell a right
+value from a wrong one. It makes the tenant impossible to omit. It does not make it impossible to get wrong.
+
+Two diagnostics abandon the table when the declaration cannot be honoured, the way a malformed key does:
+
+- **`PGSQL0025`** — the tenancy column is nullable. A null tenant matches no row, so every generated member would
+  return nothing.
+- **`PGSQL0026`** — the tenancy column is `[Generated]`. Such a column is on no command type, so there is no property
+  to make `required`.
+
+A third warns rather than refusing anything:
+
+- **`PGSQL0027`** — a relation could reach across tenants. It fires unless the foreign-key property paired against the
+  target's tenancy column is the declaring table's own tenancy column — which also covers a declaring table with no
+  tenancy column at all. It drops nothing: the relation still generates, one warning per unpaired tenancy column,
+  naming the relation property.
+
 ### Requirements
 
 The generator reports a build error when a table definition does not satisfy these:
@@ -883,6 +957,10 @@ The generator reports a build error when a table definition does not satisfy the
 - A `[Relation]` property is a table definition or a supported collection of one, is nullable when it points at one row,
   carries no `[Column]`, and names as many foreign-key properties as the target's primary key has members, each of which
   exists and can join the member it is paired with
+
+A tenancy column's `required` property lands in the consumer's own compilation, not this package's, so a project
+declaring one needs **C# 11 or newer**. Every framework this package targets defaults above that, but a consumer
+pinning `LangVersion` lower will not compile.
 
 A separate analyzer warns — rather than errors — when the class name does not end with `Table`, since the suffix only
 determines the generated names. See [Build-Time Diagnostics](#build-time-diagnostics) for the codes.
@@ -1151,17 +1229,22 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0022` | Error    | A `[Column]` states a `StoredAs` that cannot be honoured for the property's type      |
 | `PGSQL0023` | Error    | A property is typed `ushort`, `uint` or `ulong`, which no PostgreSQL type accepts     |
 | `PGSQL0024` | Warning  | A `[Column]`'s `StoredAs` has no query surface equivalent — commands use it, `Query()` does not |
+| `PGSQL0025` | Error    | A tenancy column is nullable                                                          |
+| `PGSQL0026` | Error    | A tenancy column is `[Generated]`                                                     |
+| `PGSQL0027` | Warning  | A `[Relation]` could reach across tenants                                            |
 
 `PGSQL0001` is a warning rather than an error because you can implement `Identifier` and `Name` yourself instead of
 following the naming convention. If you do neither, a misnamed migration class throws the moment those properties are
 read. `PGSQL0011` is a warning because the rest of the repository still works — only `Query()` cannot handle that
 column until a conversion is registered. `PGSQL0024` is a warning for the same reason, one surface down: commands honour
-the claim and only `Query()` cannot. `PGSQL0012` through `PGSQL0019` drop only the relation they describe and let
-the rest of the table generate, so the message you read is the mistake you made rather than a wall of
-type-not-found errors from everything that names the missing data type. `PGSQL0021` through `PGSQL0024` abandon nothing at
-all: a contradictory nullability claim, a refused storage claim and an unwritable property type all leave every generated
-signature well-defined. Everything else — including `PGSQL0020` — abandons the table, because a malformed key leaves every
-generated signature undefined rather than one relation.
+the claim and only `Query()` cannot. `PGSQL0027` is a warning too, and drops nothing at all — the relation it names
+still generates; it flags a hole in the tenancy guarantee rather than a malformed declaration. `PGSQL0012` through `PGSQL0019` drop only
+the relation they describe and let the rest of the table generate, so the message you read is the mistake you made
+rather than a wall of type-not-found errors from everything that names the missing data type. `PGSQL0021` through
+`PGSQL0024` abandon nothing at all either: a contradictory nullability claim, a refused storage claim and an
+unwritable property type all leave every generated signature well-defined. Everything else — including `PGSQL0020`,
+`PGSQL0025` and `PGSQL0026` — abandons the table, because a malformed key or a malformed tenancy declaration leaves
+every generated signature undefined rather than one relation.
 
 `PGSQL0023` exists rather than being folded into `PGSQL0011` because that warning's advice — register a conversion —
 cannot help: there is no PostgreSQL type to convert to.

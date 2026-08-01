@@ -84,6 +84,27 @@ A column can state how it is stored, too. Enums go in as the text of their membe
 `string` into a `jsonb` column. The claim is per column, so two columns of the same enum can differ, and it feeds the
 generated commands and `Query()` from one declaration — the two can never disagree about a column.
 
+A column can also be declared the tenant a multi-tenant table is scoped by:
+
+```csharp
+[Column(Tenancy = true)]
+[PrimaryKey]
+public long AccountId { get; set; }
+```
+
+Every generated member then constrains that column, so a caller cannot start a query, a lookup, or a write without
+supplying the tenant:
+
+| Member | Tenancy column inside the primary key | Tenancy column outside it |
+| --- | --- | --- |
+| `Query`, `GetAllAsync`, `GetBy{Unique}Async`, `DeleteBy{Unique}Async` | gains a parameter | gains a parameter |
+| `GetByPrimaryKeyAsync`, `DeleteByPrimaryKeyAsync` | unchanged | gains a parameter |
+| `CreateAsync`, `UpdateAsync` | unchanged — the tenancy column becomes a `required` property on the command instead | unchanged — the tenancy column becomes a `required` property on the command instead |
+
+The guarantee is narrow, and worth stating plainly: it reaches generated code and stops there, nothing checks the
+column against the real table, and nothing checks the value you pass against anything. It makes the tenant impossible
+to omit. It does not make it impossible to get wrong.
+
 Need a query whose shape is only known at runtime? Every generated repository also hands you an `IQueryable<T>` that
 translates to SQL:
 
