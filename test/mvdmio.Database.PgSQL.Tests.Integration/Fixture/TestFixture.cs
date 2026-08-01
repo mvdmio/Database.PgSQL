@@ -254,6 +254,28 @@ public sealed class TestFixture : IAsyncLifetime
          )
          """
       );
+
+      // The nullable-unique-relation-target pair, separate from generated_authors/generated_books so those tables'
+      // existing assertions stay untouched. A real UNIQUE constraint over a nullable column — PostgreSQL admits any
+      // number of nulls under one, which is what makes it honest cover for the shape: a not-null foreign key on the
+      // declaring side paired against a target column that is both [Unique] and nullable.
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_catalog_entries (
+            entry_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            sku      TEXT NULL UNIQUE
+         )
+         """
+      );
+
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_catalog_items (
+            item_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            sku     TEXT NOT NULL
+         )
+         """
+      );
    }
 
    public async ValueTask DisposeAsync()
