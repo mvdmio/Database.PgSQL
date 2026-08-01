@@ -23,6 +23,9 @@ internal static class TableDefinitionSymbols
    public const string GENERATED_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.GeneratedAttribute";
    public const string RELATION_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.RelationAttribute";
 
+   /// <summary>The open generic <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c> a relation definition class derives from.</summary>
+   public const string RELATION_DEFINITION_FULL_NAME = "mvdmio.Database.PgSQL.Relations.RelationDefinition`2";
+
    /// <summary>The <c>[Column]</c> named argument that declares a tenancy column.</summary>
    private const string TENANCY_PROPERTY_NAME = "Tenancy";
 
@@ -68,6 +71,26 @@ internal static class TableDefinitionSymbols
       return property.DeclaredAccessibility == Accessibility.Public || HasRelevantAttribute(property);
    }
 
+   /// <summary>
+   ///    Whether a property is a relation rather than a column candidate. Type-driven: a property whose type, or
+   ///    whose collection element type for a relation to many, derives from
+   ///    <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c> is a relation on its own, and writing <c>[Relation]</c>
+   ///    on it besides is accepted but adds nothing. The old attribute-argument form still needs the attribute to say
+   ///    so, because its target is stated by the property's own type with nothing further to read.
+   /// </summary>
+   public static bool IsRelationProperty(IPropertySymbol property, Compilation compilation)
+   {
+      if (HasAttribute(property, RELATION_ATTRIBUTE_FULL_NAME))
+         return true;
+
+      var type = property.Type;
+
+      if (type is INamedTypeSymbol { IsGenericType: true } collection && _toManyCollectionTypeNames.Contains(collection.OriginalDefinition.ToDisplayString()))
+         type = collection.TypeArguments[0];
+
+      return TryGetRelationDefinitionBase(type, compilation, out _);
+   }
+
    /// <remarks>
    ///    A setter has to exist, and its accessibility is not looked at. The requirement that one exist is what keeps a
    ///    computed member out — a get-only or expression-bodied property describes no column, and admitting it would turn
@@ -81,6 +104,21 @@ internal static class TableDefinitionSymbols
              && property.DeclaredAccessibility == Accessibility.Public
              && property.Parameters.Length == 0
              && property.GetMethod?.DeclaredAccessibility == Accessibility.Public
+             && property.SetMethod is not null;
+   }
+
+   /// <remarks>
+   ///    Unlike <see cref="IsSupportedProperty" />, neither the property's own accessibility nor its accessors' is
+   ///    looked at here. A relation property is purely declarative in the same sense the table definition holding it
+   ///    is: nothing ever reads or writes it at run time, only its type identifies the relation. That is what lets it
+   ///    be typed as a privately nested relation definition class — C# itself then requires the property to be no
+   ///    more accessible than that type, exactly as it would for any other member, and this check does not relax that.
+   /// </remarks>
+   public static bool IsSupportedRelationPropertyShape(IPropertySymbol property)
+   {
+      return !property.IsStatic
+             && property.Parameters.Length == 0
+             && property.GetMethod is not null
              && property.SetMethod is not null;
    }
 
@@ -171,17 +209,33 @@ internal static class TableDefinitionSymbols
    ///    Reads the relation's target and its cardinality off the property's type, which is the only place either is
    ///    stated.
    /// </summary>
-   public static bool TryGetRelationTarget(ITypeSymbol propertyType, out INamedTypeSymbol target, out bool isToMany)
+   /// <remarks>
+   ///    A property whose type — or whose collection element type, for a relation to many — derives from
+   ///    <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c> is the type-driven form: the target and the declaring
+   ///    type argument are read from that base type, and <paramref name="relationDefinition" /> is set so the caller
+   ///    can go on to read its <c>Keys</c>. Otherwise the property's own type (or element type) is read as the target
+   ///    directly, which is the old attribute-argument form.
+   /// </remarks>
+   public static bool TryGetRelationTarget(
+      ITypeSymbol propertyType,
+      Compilation compilation,
+      out INamedTypeSymbol target,
+      out bool isToMany,
+      out INamedTypeSymbol? relationDefinition,
+      out INamedTypeSymbol? declaringTypeArgument
+   )
    {
       target = null!;
       isToMany = false;
+      relationDefinition = null;
+      declaringTypeArgument = null;
 
       if (propertyType is INamedTypeSymbol { IsGenericType: true } collection
           && _toManyCollectionTypeNames.Contains(collection.OriginalDefinition.ToDisplayString()))
       {
          isToMany = true;
 
-         return IsTargetCandidate(collection.TypeArguments[0], out target);
+         return IsTargetCandidate(collection.TypeArguments[0], compilation, out target, out relationDefinition, out declaringTypeArgument);
       }
 
       // A sequence this does not support is rejected as an unsupported type rather than read as a single target, so
@@ -189,7 +243,145 @@ internal static class TableDefinitionSymbols
       if (propertyType.SpecialType != SpecialType.System_String && IsSequence(propertyType))
          return false;
 
-      return IsTargetCandidate(propertyType, out target);
+      return IsTargetCandidate(propertyType, compilation, out target, out relationDefinition, out declaringTypeArgument);
+   }
+
+   /// <summary>
+   ///    Whether <paramref name="type" /> derives from <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c>, and if
+   ///    so, that closed base type — from which the two type arguments are read.
+   /// </summary>
+   public static bool TryGetRelationDefinitionBase(ITypeSymbol type, Compilation compilation, out INamedTypeSymbol relationDefinitionBase)
+   {
+      relationDefinitionBase = null!;
+
+      var relationDefinitionSymbol = compilation.GetTypeByMetadataName(RELATION_DEFINITION_FULL_NAME);
+      if (relationDefinitionSymbol is null)
+         return false;
+
+      for (var current = type as INamedTypeSymbol; current is not null; current = current.BaseType)
+      {
+         if (SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, relationDefinitionSymbol))
+         {
+            relationDefinitionBase = current;
+            return true;
+         }
+      }
+
+      return false;
+   }
+
+   /// <summary>
+   ///    Reads the column pairs off a relation definition's <c>Keys</c> override, in the order they are written. Each
+   ///    pair's side is <see langword="null" /> when it is not a direct reference to a property of the expected
+   ///    parameter — the caller reports that as a diagnostic rather than this method, which only reads what the syntax
+   ///    says.
+   /// </summary>
+   public static ImmutableArray<RelationKeyPairDeclaration> ReadRelationKeyPairDeclarations(INamedTypeSymbol relationDefinitionType, Compilation compilation)
+   {
+      var keysProperty = relationDefinitionType.GetMembers("Keys").OfType<IPropertySymbol>().FirstOrDefault(x => x.IsOverride);
+      var syntaxReference = keysProperty?.DeclaringSyntaxReferences.FirstOrDefault();
+
+      if (syntaxReference is null)
+         return ImmutableArray<RelationKeyPairDeclaration>.Empty;
+
+      var syntax = syntaxReference.GetSyntax();
+      var bodyExpression = GetPropertyBodyExpression(syntax);
+
+      if (bodyExpression is null)
+         return ImmutableArray<RelationKeyPairDeclaration>.Empty;
+
+      var elements = GetCollectionElements(bodyExpression);
+
+      if (elements is null)
+         return ImmutableArray<RelationKeyPairDeclaration>.Empty;
+
+      var semanticModel = compilation.GetSemanticModel(syntax.SyntaxTree);
+      var builder = ImmutableArray.CreateBuilder<RelationKeyPairDeclaration>();
+
+      foreach (var element in elements)
+      {
+         if (element is not InvocationExpressionSyntax { ArgumentList.Arguments.Count: 2 } invocation
+             || semanticModel.GetSymbolInfo(invocation).Symbol is not IMethodSymbol { Name: "Key" })
+         {
+            builder.Add(new RelationKeyPairDeclaration(null, null, element.GetLocation()));
+            continue;
+         }
+
+         var declaringName = ReadColumnReference(invocation.ArgumentList.Arguments[0].Expression, semanticModel);
+         var targetName = ReadColumnReference(invocation.ArgumentList.Arguments[1].Expression, semanticModel);
+
+         builder.Add(new RelationKeyPairDeclaration(declaringName, targetName, invocation.GetLocation()));
+      }
+
+      return builder.ToImmutable();
+   }
+
+   /// <summary>The expression a property's getter returns, however it is written — an arrow body on the property, an arrow-bodied getter, or a getter with a single return statement.</summary>
+   private static ExpressionSyntax? GetPropertyBodyExpression(SyntaxNode syntax)
+   {
+      if (syntax is not PropertyDeclarationSyntax property)
+         return null;
+
+      if (property.ExpressionBody is { Expression: { } arrowExpression })
+         return arrowExpression;
+
+      var getter = property.AccessorList?.Accessors.FirstOrDefault(x => x.IsKind(SyntaxKind.GetAccessorDeclaration));
+
+      if (getter?.ExpressionBody is { Expression: { } getterArrowExpression })
+         return getterArrowExpression;
+
+      return getter?.Body?.Statements.OfType<ReturnStatementSyntax>().FirstOrDefault()?.Expression;
+   }
+
+   /// <summary>The element expressions of a collection literal, an array or list creation, or a plain initializer — whichever shape a <c>Keys</c> override happens to be written as.</summary>
+   private static IEnumerable<ExpressionSyntax>? GetCollectionElements(ExpressionSyntax expression)
+   {
+      return expression switch
+      {
+         CollectionExpressionSyntax collection => collection.Elements.OfType<ExpressionElementSyntax>().Select(x => x.Expression),
+         ArrayCreationExpressionSyntax { Initializer: { } initializer } => initializer.Expressions,
+         ImplicitArrayCreationExpressionSyntax { Initializer: { } initializer } => initializer.Expressions,
+         ObjectCreationExpressionSyntax { Initializer: { } initializer } => initializer.Expressions,
+         ImplicitObjectCreationExpressionSyntax { Initializer: { } initializer } => initializer.Expressions,
+         InitializerExpressionSyntax initializer => initializer.Expressions,
+         _ => null
+      };
+   }
+
+   /// <summary>
+   ///    Whether <paramref name="expression" /> is a single-parameter lambda whose body is a direct property access on
+   ///    that parameter, and if so, the property's name. Anything else — a nested access, a method call, an indexer, a
+   ///    reference to something other than the lambda's own parameter — is not a column reference.
+   /// </summary>
+   private static string? ReadColumnReference(ExpressionSyntax expression, SemanticModel semanticModel)
+   {
+      ParameterSyntax? parameter;
+      ExpressionSyntax? body;
+
+      switch (expression)
+      {
+         case SimpleLambdaExpressionSyntax simple:
+            parameter = simple.Parameter;
+            body = simple.ExpressionBody;
+            break;
+         case ParenthesizedLambdaExpressionSyntax { ParameterList.Parameters.Count: 1 } parenthesized:
+            parameter = parenthesized.ParameterList.Parameters[0];
+            body = parenthesized.ExpressionBody;
+            break;
+         default:
+            return null;
+      }
+
+      if (body is not MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax targetIdentifier } memberAccess)
+         return null;
+
+      var parameterSymbol = semanticModel.GetDeclaredSymbol(parameter);
+      var identifierSymbol = semanticModel.GetSymbolInfo(targetIdentifier).Symbol;
+
+      if (parameterSymbol is null || !SymbolEqualityComparer.Default.Equals(parameterSymbol, identifierSymbol))
+         return null;
+
+      return semanticModel.GetSymbolInfo(memberAccess).Symbol is IPropertySymbol property ? property.Name : null;
    }
 
    /// <summary>
@@ -271,16 +463,35 @@ internal static class TableDefinitionSymbols
       return false;
    }
 
-   private static bool IsTargetCandidate(ITypeSymbol candidate, out INamedTypeSymbol target)
+   private static bool IsTargetCandidate(
+      ITypeSymbol candidate,
+      Compilation compilation,
+      out INamedTypeSymbol target,
+      out INamedTypeSymbol? relationDefinition,
+      out INamedTypeSymbol? declaringTypeArgument
+   )
    {
-      if (candidate is INamedTypeSymbol { TypeKind: TypeKind.Class } named)
+      target = null!;
+      relationDefinition = null;
+      declaringTypeArgument = null;
+
+      if (candidate is not INamedTypeSymbol { TypeKind: TypeKind.Class } named)
+         return false;
+
+      if (TryGetRelationDefinitionBase(named, compilation, out var relationDefinitionBase))
       {
-         target = named;
+         relationDefinition = named;
+         declaringTypeArgument = relationDefinitionBase.TypeArguments[0] as INamedTypeSymbol;
+
+         if (relationDefinitionBase.TypeArguments[1] is not INamedTypeSymbol targetTypeArgument)
+            return false;
+
+         target = targetTypeArgument;
          return true;
       }
 
-      target = null!;
-      return false;
+      target = named;
+      return true;
    }
 
    private static bool IsSequence(ITypeSymbol type)

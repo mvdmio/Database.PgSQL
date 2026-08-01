@@ -181,6 +181,7 @@ internal sealed class RelationDeclarationModel
       string targetClassFullName,
       string targetTypeDisplayName,
       ImmutableArray<string> foreignKeyPropertyNames,
+      ImmutableArray<RelationKeyPairDeclaration>? keyPairs,
       bool isToMany,
       Location? location
    )
@@ -189,6 +190,7 @@ internal sealed class RelationDeclarationModel
       TargetClassFullName = targetClassFullName;
       TargetTypeDisplayName = targetTypeDisplayName;
       ForeignKeyPropertyNames = foreignKeyPropertyNames;
+      KeyPairs = keyPairs;
       IsToMany = isToMany;
       Location = location;
    }
@@ -203,10 +205,46 @@ internal sealed class RelationDeclarationModel
 
    /// <summary>
    ///    The foreign-key property names as declared, in the order they are paired against the target's primary key.
+   ///    Only set for the old attribute-argument form; a relation declared as a <c>RelationDefinition&lt;,&gt;</c>
+   ///    class states its pairs through <see cref="KeyPairs" /> instead.
    /// </summary>
    public ImmutableArray<string> ForeignKeyPropertyNames { get; }
 
+   /// <summary>
+   ///    The column pairs read off a relation definition's <c>Keys</c> override, in the order they are written —
+   ///    <see langword="null" /> for the old attribute-argument form, which pairs its foreign key positionally against
+   ///    the target's primary key instead. <see cref="IsDefinitionForm" /> is what a caller should read rather than
+   ///    checking this for <see langword="null" /> directly.
+   /// </summary>
+   public ImmutableArray<RelationKeyPairDeclaration>? KeyPairs { get; }
+
+   /// <summary>Whether this relation was declared as a class deriving from <c>RelationDefinition&lt;,&gt;</c> rather than through the old attribute-argument form.</summary>
+   public bool IsDefinitionForm => KeyPairs is not null;
+
    public bool IsToMany { get; }
+   public Location? Location { get; }
+}
+
+/// <summary>
+///    One column pair read off a relation definition's <c>Keys</c> override. Either side is <see langword="null" />
+///    when the syntax written there is not a direct reference to a property of the expected parameter — a method
+///    call, an indexer, a nested access, or a reference to something other than the lambda's own parameter.
+/// </summary>
+internal readonly struct RelationKeyPairDeclaration
+{
+   public RelationKeyPairDeclaration(string? declaringPropertyName, string? targetPropertyName, Location? location)
+   {
+      DeclaringPropertyName = declaringPropertyName;
+      TargetPropertyName = targetPropertyName;
+      Location = location;
+   }
+
+   /// <summary>The property named on the declaring side of the pair, or <see langword="null" /> if that side is not a direct property reference.</summary>
+   public string? DeclaringPropertyName { get; }
+
+   /// <summary>The property named on the target side of the pair, or <see langword="null" /> if that side is not a direct property reference.</summary>
+   public string? TargetPropertyName { get; }
+
    public Location? Location { get; }
 }
 

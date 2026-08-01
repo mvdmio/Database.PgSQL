@@ -173,11 +173,11 @@ internal static class TableRepositoryDiagnostics
    public static readonly DiagnosticDescriptor UnsupportedRelationPropertyShape = new(
       id: "PGSQL0017",
       title: "Unsupported relation property shape",
-      messageFormat: "'{0}.{1}' must be a public instance property with a public getter and setter and cannot be an indexer",
+      messageFormat: "'{0}.{1}' must be an instance property with a getter and a setter of any accessibility, and cannot be an indexer",
       category: CATEGORY_GENERATION,
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
-      description: "A relation property follows the same shape rules as a mapped column so that the generated data type can mirror it."
+      description: "A relation property is purely declarative — nothing ever reads or writes it at run time, only its type identifies the relation — so unlike a mapped column, its own accessibility is never checked. A getter and a setter still have to exist so the generator can be sure it is a real property rather than a computed member, and it cannot be an indexer."
    );
 
    public static readonly DiagnosticDescriptor RelationCannotBeAColumn = new(
@@ -319,5 +319,40 @@ internal static class TableRepositoryDiagnostics
       defaultSeverity: DiagnosticSeverity.Warning,
       isEnabledByDefault: true,
       description: "A relation always pairs its foreign key positionally against the other side's primary key. The property paired against a tenancy column must be the other side's own tenancy column, or the join can pull another tenant's related rows — and a tenancy column that sits outside the joined key entirely is paired with nothing, which is the same failure. Reported once per tenancy column that comes out unpinned either way."
+   );
+
+   // The three diagnostics below cover a relation declared as a class deriving from RelationDefinition<,>. Like
+   // every other relation diagnostic, each drops only the relation it describes and lets the rest of the table
+   // generate — abandoning it would suppress the generated data type and bury the one message describing the actual
+   // mistake under type-not-found errors from everything naming that type.
+
+   public static readonly DiagnosticDescriptor RelationDeclaringTableMismatch = new(
+      id: "PGSQL0028",
+      title: "Relation declaring table mismatch",
+      messageFormat: "'{0}.{1}' is declared on '{0}', but its relation definition's TDeclaring type argument is '{2}'",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "A relation definition's TDeclaring type argument must be the table definition the relation property is declared on, so the join is always between the two tables the developer meant."
+   );
+
+   public static readonly DiagnosticDescriptor RelationStatesNoKeys = new(
+      id: "PGSQL0029",
+      title: "Relation states no keys",
+      messageFormat: "'{0}.{1}' declares a relation whose Keys override states no pairs, which would register a cross join",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "A relation definition's Keys override must state at least one column pair. There is no sensible default for zero pairs, because that is a cross join rather than a relation."
+   );
+
+   public static readonly DiagnosticDescriptor RelationKeyIsNotAColumnReference = new(
+      id: "PGSQL0030",
+      title: "Relation key is not a column reference",
+      messageFormat: "'{0}.{1}' declares a relation key pair whose side is not a direct reference to a mapped column",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "Each side of a relation key pair must be a direct property reference on its own table definition — Key(x => x.Column, y => y.Column) — so the generator can turn it into a join condition rather than having to evaluate an arbitrary expression."
    );
 }

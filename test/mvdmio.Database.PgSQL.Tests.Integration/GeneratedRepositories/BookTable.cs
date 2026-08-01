@@ -1,4 +1,5 @@
 using mvdmio.Database.PgSQL.Attributes;
+using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
@@ -20,12 +21,28 @@ public partial class BookTable
 
    public long? EditorId { get; set; }
 
-   [Relation(nameof(AuthorId))]
-   public AuthorTable? Author { get; set; }
+   private AuthorRelation? Author { get; set; }
+   private EditorRelation? Editor { get; set; }
+   private List<BookTagsRelation> BookTags { get; set; } = [];
 
-   [Relation(nameof(EditorId))]
-   public AuthorTable? Editor { get; set; }
+   private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AuthorId, y => y.AuthorId),
+      ];
+   }
 
-   [Relation(nameof(BookTagTable.BookId))]
-   public List<BookTagTable> BookTags { get; set; } = [];
+   private class EditorRelation : RelationDefinition<BookTable, AuthorTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.EditorId, y => y.AuthorId),
+      ];
+   }
+
+   private class BookTagsRelation : RelationDefinition<BookTable, BookTagTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.BookId, y => y.BookId),
+      ];
+   }
 }

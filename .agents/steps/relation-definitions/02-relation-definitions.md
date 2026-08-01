@@ -1,6 +1,6 @@
 # 02 — Declare a relation as a class
 
-Status: pending
+Status: done
 
 ## What to build
 
@@ -117,3 +117,94 @@ two relations at the same target.
       existing tests pass unchanged.
 - [ ] Every relation still declared in the old attribute-argument form still resolves and still works.
 - [ ] `dotnet format --verify-no-changes`, `dotnet build` and `dotnet test` are all green (Docker running).
+
+## Outcome
+
+`RelationDefinition<TDeclaring, TTarget>` and `RelationKey` ship in
+`src/mvdmio.Database.PgSQL/Relations/RelationDefinition.cs`. `Keys` is abstract; `Key(…)` has exactly the two
+overloads the spec's settled decision allows — matching types, and a nullable left side (`where TValue : struct`)
+against a non-nullable right. Both carry `[PublicAPI]` and XML docs. `RelationKey`'s constructor is `internal`, so
+nothing outside the library can construct one; the classes exist purely for the generator to read from source, and
+`Key(…)`'s body is never executed.
+
+The generator's relation-property split is now type-driven, alongside the existing attribute-driven path:
+
+- `TableDefinitionSymbols.IsRelationProperty` treats a property as a relation if its type — or its collection element
+  type, for a relation to many — derives from `RelationDefinition<,>`, in addition to the existing
+  `[Relation]`-attribute check. `TryGetRelationTarget` gained two `out` parameters (`relationDefinition`,
+  `declaringTypeArgument`) so `TableDefinitionParser` can tell which form it is looking at and, for the new form, read
+  `TDeclaring` off the closed base type.
+- `TableDefinitionSymbols.ReadRelationKeyPairDeclarations` reads the `Keys` override's syntax — however it is
+  written (an arrow-bodied property, an arrow-bodied getter, or a getter with a single `return`) and whatever
+  collection literal it returns (`[…]`, `new[] {…}`, `new List<T> {…}`, or a plain initializer) — and resolves each
+  `Key(…)` call's two lambda arguments to the property they name, via the semantic model of whichever file the
+  relation definition class lives in (never assumed to be the same file as the table). Either side is reported back
+  as `null` when it is not a direct, parameter-rooted property access, which is what `PGSQL0030` reports on.
+- `RelationDeclarationModel` carries the new form's pairs in `KeyPairs` (`null` for the old form) alongside the old
+  form's `ForeignKeyPropertyNames`; `IsDefinitionForm` is what a caller reads rather than checking either for
+  `null` directly.
+- `RelationResolver.TryResolveDefinitionForm` resolves each pair's two property names against the declaring and
+  target models' own `DataProperties` directly — no foreign-key/primary-key side to work out from cardinality, since
+  each pair already names both sides itself, unlike the old form's positional-against-the-primary-key scheme.
+  `ResolvedRelation` gained a second constructor taking pre-built `JoinedKeyPair`s for this. Emission is untouched:
+  both forms register through the same predicate overload step 01 settled on.
+- The three new diagnostics fire exactly where the step file describes: `PGSQL0028` when `TDeclaring` is not the
+  table the property is declared on, `PGSQL0029` when `Keys` yields no pairs, `PGSQL0030` when a pair's side is not a
+  direct property reference (checked syntactically for the declaring side and cross-table for the target side, both
+  through the same descriptor). `PGSQL0014` and `PGSQL0015` are reused unchanged, now firing for a definition-typed
+  property too. Each drops only the relation it describes, per ADR 0005's blast radius. All three rows are in
+  `AnalyzerReleases.Unshipped.md` with their titles verbatim.
+
+One shape check had to be relaxed, and it is the one deviation from the letter of the step file: **a relation
+property's own accessibility is no longer checked (`PGSQL0017`'s trigger dropped "must be public"), only that it has
+a getter and a setter.** The step's own example — nesting a relation definition as a `private` class and typing the
+property `public` — does not compile in plain C#: a public member cannot expose a less accessible type (`CS0053`),
+and this is a hard language rule this library cannot suppress. Since a relation property is purely declarative and
+nothing ever reads or writes it at run time (only its type is read, by the generator, at compile time), there is
+nothing lost by not requiring `Public`: the fix is that a privately-nested relation definition needs its carrying
+property to be non-public too, which is ordinary, valid C#, and still exercises every "private is fine" claim the
+step and spec make. `TableDefinitionSymbols.IsSupportedRelationPropertyShape` (no accessibility check) replaces
+`IsSupportedProperty` (which still requires `Public`, unchanged) for relation-property shape validation; column
+validation is untouched. The four integration fixtures below use this — their relation properties are `private` — and
+it has no effect on any existing test, because those tests only ever read the mirrored property on the *generated*
+data type (`AuthorData.Books`, not `AuthorTable.Books`), which the generator always emits `public` regardless of the
+original property's own accessibility.
+
+The generator harness (`GeneratorHarness.RUNTIME_STUBS`) gained matching stubs for `RelationDefinition<,>`,
+`RelationKey` and the two `Key(…)` overloads; `RelationAttribute`'s stub is unchanged (still the params-array
+constructor), since the old form keeps working unchanged until step 06. A new test class,
+`TableRepositoryGeneratorRelationDefinitionTests.cs` (10 tests), covers: a relation to one row and to many rows, a
+definition class nested privately and one declared externally, the nullable-left `Key` overload (exercised through
+`BookTable.AuthorId : long?` against `AuthorTable.AuthorId : long`), pair-order independence (a composite two-pair
+relation asserted with both pair orders, each producing both join clauses), the bare `[Relation]` marker still being
+accepted on a definition-typed property, and each of `PGSQL0028`, `PGSQL0029`, `PGSQL0030`, plus `PGSQL0014` and
+`PGSQL0015` reused for the new form. Every test class carries the "emitted source compiles" companion assertion,
+including two dedicated to the composite-pair-order fixture, per the testing decision that a stub drifting from the
+real type would let a test pass on a shape no real consumer could compile.
+
+The author, book, book-tag and tag fixtures in `test/mvdmio.Database.PgSQL.Tests.Integration/GeneratedRepositories/`
+(nine relations: a relation to one row, a relation to many, a table relating to itself in both directions, and two
+relations at the same target) are converted to the new form with no other change, and their existing tests pass
+unchanged — 256/256, confirming the new form works end to end against a real container, not only in the harness. The
+OData fixtures and the analyzer test sources stay on the old form, per this step's boundaries; steps 04/05/06 move
+them.
+
+Verification, run sequentially in the foreground with Docker running:
+- `dotnet format` — reformatted only the files this step touched (using-directive order); `dotnet format
+  --verify-no-changes` then exits 0.
+- `dotnet build` (whole solution) — 0 warnings, 0 errors.
+- `dotnet test`, run per project (`DOTNET_ROLL_FORWARD=LatestMajor` for the net9.0 projects, the same pre-existing
+  environment quirk step 01 noted): Analyzers.Tests 140/140 (130 pre-existing + 10 new), Tests.Unit 197/197,
+  Tests.Integration 256/256 (Docker/Testcontainers), Tests.Integration.OData 134/134, Tests.Packaging 13/13. All
+  green.
+
+### Deviations
+
+One, covered above: `PGSQL0017`'s trigger no longer requires a relation property to be `public` — only that it has a
+getter and a setter — because the step's own nested-private-class example cannot compile with a `public` property at
+all (`CS0053`), regardless of anything this library's analyzer does. Nothing else deviates from the step file or the
+spec: `RelationAttribute` is untouched, the old attribute-argument form is untouched and its 45 pre-existing
+declarations across the three test projects were not touched by this step (only the nine converted here), and no
+diagnostic outside `PGSQL0028`/`PGSQL0029`/`PGSQL0030` (plus the reused `PGSQL0014`/`PGSQL0015`) was added or
+reshaped — the tenancy-pairing reshape and the condition-carrying diagnostics the spec describes belong to later
+steps and are untouched here.

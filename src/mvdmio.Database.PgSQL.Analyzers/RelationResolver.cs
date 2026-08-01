@@ -76,6 +76,12 @@ internal static class RelationResolver
          return false;
       }
 
+      // A relation declared as a RelationDefinition<,> class already states both sides of each pair itself, so there
+      // is no foreign-key/primary-key side to work out from cardinality — that only applies to the old
+      // attribute-argument form below.
+      if (relation.IsDefinitionForm)
+         return TryResolveDefinitionForm(model, relation, target, diagnostics, out resolved);
+
       // Cardinality decides one thing: which side holds the foreign key and which holds the primary key it joins. A
       // relation to one row is resolved through a foreign key on the declaring type, one to many through a foreign key
       // on the target. The far end is always the other side's primary key, which may have more than one member — and
@@ -170,6 +176,60 @@ internal static class RelationResolver
          targetDataTypeName: QualifyTypeName(target.NamespaceName, target.DataTypeName),
          foreignKeys: resolvedForeignKeys,
          primaryKeys: primaryKeys
+      );
+
+      return true;
+   }
+
+   /// <summary>
+   ///    Resolves a relation declared as a <c>RelationDefinition&lt;,&gt;</c> class. Each pair already names its own
+   ///    declaring-side and target-side property, so there is no foreign-key/primary-key side to work out from
+   ///    cardinality — resolving is just looking each name up on its own table's mapped columns.
+   /// </summary>
+   private static bool TryResolveDefinitionForm(
+      TableDefinitionModel model,
+      RelationDeclarationModel relation,
+      TableDefinitionModel target,
+      ImmutableArray<Diagnostic>.Builder diagnostics,
+      out ResolvedRelation resolved
+   )
+   {
+      resolved = null!;
+
+      var pairs = relation.KeyPairs!.Value;
+      var joinedKeys = ImmutableArray.CreateBuilder<JoinedKeyPair>(pairs.Length);
+      var beforeResolving = diagnostics.Count;
+
+      foreach (var pair in pairs)
+      {
+         var declaringProperty = model.DataProperties.FirstOrDefault(x => string.Equals(x.PropertyName, pair.DeclaringPropertyName, StringComparison.Ordinal));
+         var targetProperty = target.DataProperties.FirstOrDefault(x => string.Equals(x.PropertyName, pair.TargetPropertyName, StringComparison.Ordinal));
+
+         if (declaringProperty is null || targetProperty is null)
+         {
+            diagnostics.Add(
+               Diagnostic.Create(
+                  TableRepositoryDiagnostics.RelationKeyIsNotAColumnReference,
+                  pair.Location ?? relation.Location,
+                  model.TableClassName,
+                  relation.PropertyName
+               )
+            );
+
+            continue;
+         }
+
+         joinedKeys.Add(new JoinedKeyPair(declaringProperty, targetProperty));
+      }
+
+      if (diagnostics.Count != beforeResolving)
+         return false;
+
+      resolved = new ResolvedRelation(
+         propertyName: relation.PropertyName,
+         isToMany: relation.IsToMany,
+         targetDataTypeName: QualifyTypeName(target.NamespaceName, target.DataTypeName),
+         joinedKeys: joinedKeys.ToImmutable()
       );
 
       return true;
@@ -277,6 +337,19 @@ internal sealed class ResolvedRelation
                : new JoinedKeyPair(foreignKeys[position], primaryKey)
          )
          .ToImmutableArray();
+   }
+
+   /// <summary>
+   ///    Builds a resolved relation from pairs that already know their own declaring-side and target-side property —
+   ///    what a relation declared as a <c>RelationDefinition&lt;,&gt;</c> class states directly, with no
+   ///    foreign-key/primary-key side for cardinality to pick out.
+   /// </summary>
+   public ResolvedRelation(string propertyName, bool isToMany, string targetDataTypeName, ImmutableArray<JoinedKeyPair> joinedKeys)
+   {
+      PropertyName = propertyName;
+      IsToMany = isToMany;
+      TargetDataTypeName = targetDataTypeName;
+      JoinedKeys = joinedKeys;
    }
 
    public string PropertyName { get; }

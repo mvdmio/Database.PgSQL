@@ -64,9 +64,12 @@ internal static class TableDefinitionParser
          .OfType<IPropertySymbol>()
          .ToImmutableArray();
 
-      // The relation attribute is the only opt-out from column mapping, and it opts out its own property only.
-      var relationProperties = allProperties.Where(x => TableDefinitionSymbols.HasAttribute(x, TableDefinitionSymbols.RELATION_ATTRIBUTE_FULL_NAME)).ToImmutableArray();
-      var columnCandidates = allProperties.Where(x => !TableDefinitionSymbols.HasAttribute(x, TableDefinitionSymbols.RELATION_ATTRIBUTE_FULL_NAME)).ToImmutableArray();
+      // The relation split is type-driven: a property typed as a class deriving from RelationDefinition<,>, or a
+      // supported collection of one, is a relation on its own. [Relation] still opts a property out of column
+      // mapping too, which is what the old attribute-argument form needs, since its target is the property's own
+      // type with nothing further to read.
+      var relationProperties = allProperties.Where(x => TableDefinitionSymbols.IsRelationProperty(x, context.SemanticModel.Compilation)).ToImmutableArray();
+      var columnCandidates = allProperties.Where(x => !TableDefinitionSymbols.IsRelationProperty(x, context.SemanticModel.Compilation)).ToImmutableArray();
 
       var invalidProperties = columnCandidates
          .Where(TableDefinitionSymbols.ShouldValidateProperty)
@@ -270,7 +273,7 @@ internal static class TableDefinitionParser
       // takes a tenancy column's value.
       var tenancyColumns = properties.Where(x => x.IsTenancy).ToImmutableArray();
 
-      var relations = ParseRelations(classSymbol, relationProperties, diagnostics);
+      var relations = ParseRelations(classSymbol, relationProperties, context.SemanticModel.Compilation, diagnostics);
       var accessibility = classSymbol.DeclaredAccessibility == Accessibility.Public ? "public" : "internal";
       // Named throughout: four of these are same-typed property collections, so a transposition would compile and only
       // show up as wrong generated SQL.
@@ -383,12 +386,14 @@ internal static class TableDefinitionParser
    /// <remarks>
    ///    Only what one table can decide on its own is checked here: the property's shape, its type, and whether it
    ///    contradicts a column attribute. Whether the target is a table definition and whether the named foreign key
-   ///    exists and can join are cross-table questions, answered once every table has been parsed. A relation that
-   ///    fails a check here is dropped and the rest of the table still generates.
+   ///    (or, for the type-driven form, a key pair's target side) resolves to a mapped column are cross-table
+   ///    questions, answered once every table has been parsed. A relation that fails a check here is dropped and the
+   ///    rest of the table still generates.
    /// </remarks>
    private static ImmutableArray<RelationDeclarationModel> ParseRelations(
       INamedTypeSymbol classSymbol,
       ImmutableArray<IPropertySymbol> relationProperties,
+      Compilation compilation,
       ImmutableArray<Diagnostic>.Builder diagnostics
    )
    {
@@ -398,7 +403,7 @@ internal static class TableDefinitionParser
       {
          var location = property.Locations.FirstOrDefault();
 
-         if (!TableDefinitionSymbols.IsSupportedProperty(property))
+         if (!TableDefinitionSymbols.IsSupportedRelationPropertyShape(property))
          {
             diagnostics.Add(Diagnostic.Create(TableRepositoryDiagnostics.UnsupportedRelationPropertyShape, location, classSymbol.Name, property.Name));
             continue;
@@ -410,7 +415,7 @@ internal static class TableDefinitionParser
             continue;
          }
 
-         if (!TableDefinitionSymbols.TryGetRelationTarget(property.Type, out var target, out var isToMany))
+         if (!TableDefinitionSymbols.TryGetRelationTarget(property.Type, compilation, out var target, out var isToMany, out var relationDefinition, out var declaringTypeArgument))
          {
             diagnostics.Add(Diagnostic.Create(TableRepositoryDiagnostics.UnsupportedRelationPropertyType, location, classSymbol.Name, property.Name, property.Type.ToDisplayString()));
             continue;
@@ -424,6 +429,17 @@ internal static class TableDefinitionParser
             continue;
          }
 
+         if (relationDefinition is not null)
+         {
+            if (!TryParseRelationDefinition(classSymbol, property, location, target, isToMany, relationDefinition, declaringTypeArgument, compilation, diagnostics, out var definitionRelation))
+               continue;
+
+            relations.Add(definitionRelation);
+            continue;
+         }
+
+         // The old attribute-argument form: the target is the property's own type (or collection element type),
+         // and the foreign key is named on the [Relation] attribute rather than stated as key pairs.
          var relationAttribute = TableDefinitionSymbols.RelationAttributeOf(property);
 
          relations.Add(
@@ -432,6 +448,7 @@ internal static class TableDefinitionParser
                TableDefinitionSymbols.GetFullName(target),
                target.ToDisplayString(),
                TableDefinitionSymbols.GetForeignKeyPropertyNames(relationAttribute),
+               keyPairs: null,
                isToMany,
                location
             )
@@ -439,5 +456,75 @@ internal static class TableDefinitionParser
       }
 
       return relations.ToImmutable();
+   }
+
+   /// <summary>
+   ///    Parses a relation declared as a class deriving from <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c>:
+   ///    checks that <c>TDeclaring</c> is the table the property is declared on, and reads the pairs off the
+   ///    definition's <c>Keys</c> override.
+   /// </summary>
+   private static bool TryParseRelationDefinition(
+      INamedTypeSymbol classSymbol,
+      IPropertySymbol property,
+      Location? location,
+      INamedTypeSymbol target,
+      bool isToMany,
+      INamedTypeSymbol relationDefinition,
+      INamedTypeSymbol? declaringTypeArgument,
+      Compilation compilation,
+      ImmutableArray<Diagnostic>.Builder diagnostics,
+      out RelationDeclarationModel relation
+   )
+   {
+      relation = null!;
+
+      if (declaringTypeArgument is null || !SymbolEqualityComparer.Default.Equals(declaringTypeArgument, classSymbol))
+      {
+         diagnostics.Add(
+            Diagnostic.Create(
+               TableRepositoryDiagnostics.RelationDeclaringTableMismatch,
+               location,
+               classSymbol.Name,
+               property.Name,
+               declaringTypeArgument?.ToDisplayString() ?? "?"
+            )
+         );
+
+         return false;
+      }
+
+      var keyPairs = TableDefinitionSymbols.ReadRelationKeyPairDeclarations(relationDefinition, compilation);
+
+      if (keyPairs.IsEmpty)
+      {
+         diagnostics.Add(Diagnostic.Create(TableRepositoryDiagnostics.RelationStatesNoKeys, location, classSymbol.Name, property.Name));
+         return false;
+      }
+
+      var invalidPairs = keyPairs.Where(x => x.DeclaringPropertyName is null || x.TargetPropertyName is null).ToImmutableArray();
+
+      if (!invalidPairs.IsEmpty)
+      {
+         foreach (var invalidPair in invalidPairs)
+         {
+            diagnostics.Add(
+               Diagnostic.Create(TableRepositoryDiagnostics.RelationKeyIsNotAColumnReference, invalidPair.Location ?? location, classSymbol.Name, property.Name)
+            );
+         }
+
+         return false;
+      }
+
+      relation = new RelationDeclarationModel(
+         property.Name,
+         TableDefinitionSymbols.GetFullName(target),
+         target.ToDisplayString(),
+         ImmutableArray<string>.Empty,
+         keyPairs,
+         isToMany,
+         location
+      );
+
+      return true;
    }
 }

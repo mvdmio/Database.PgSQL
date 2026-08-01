@@ -1,4 +1,5 @@
 using mvdmio.Database.PgSQL.Attributes;
+using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
@@ -17,9 +18,20 @@ public partial class BookTagTable
 
    public long TagId { get; set; }
 
-   [Relation(nameof(BookId))]
-   public BookTable? Book { get; set; }
+   private BookRelation? Book { get; set; }
+   private TagRelation? Tag { get; set; }
 
-   [Relation(nameof(TagId))]
-   public TagTable? Tag { get; set; }
+   private class BookRelation : RelationDefinition<BookTagTable, BookTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.BookId, y => y.BookId),
+      ];
+   }
+
+   private class TagRelation : RelationDefinition<BookTagTable, TagTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.TagId, y => y.TagId),
+      ];
+   }
 }

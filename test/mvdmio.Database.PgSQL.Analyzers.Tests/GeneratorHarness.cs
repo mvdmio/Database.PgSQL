@@ -55,6 +55,31 @@ internal static class GeneratorHarness
          }
       }
 
+      namespace mvdmio.Database.PgSQL.Relations
+      {
+         public abstract class RelationDefinition<TDeclaring, TTarget>
+            where TDeclaring : class
+            where TTarget : class
+         {
+            public abstract System.Collections.Generic.IReadOnlyList<RelationKey> Keys { get; }
+
+            protected static RelationKey Key<TValue>(
+               System.Linq.Expressions.Expression<System.Func<TDeclaring, TValue>> declaringProperty,
+               System.Linq.Expressions.Expression<System.Func<TTarget, TValue>> targetProperty
+            ) => new RelationKey();
+
+            protected static RelationKey Key<TValue>(
+               System.Linq.Expressions.Expression<System.Func<TDeclaring, TValue?>> declaringProperty,
+               System.Linq.Expressions.Expression<System.Func<TTarget, TValue>> targetProperty
+            ) where TValue : struct => new RelationKey();
+         }
+
+         public sealed class RelationKey
+         {
+            internal RelationKey() { }
+         }
+      }
+
       namespace NpgsqlTypes
       {
          // A subset, with the driver's own values, because the generator resolves a claimed member's name from the
