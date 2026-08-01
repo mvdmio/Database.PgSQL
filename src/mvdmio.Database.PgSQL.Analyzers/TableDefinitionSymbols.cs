@@ -137,9 +137,8 @@ internal static class TableDefinitionSymbols
          isUnique: HasAttribute(property, UNIQUE_ATTRIBUTE_FULL_NAME),
          isGenerated: HasAttribute(property, GENERATED_ATTRIBUTE_FULL_NAME),
          isTenancy: HasNamedFlagSet(columnAttribute, TENANCY_PROPERTY_NAME),
-         isNullable: TypeCanHoldNull(property.Type),
-         isDeclaredNotNull: nullability.IsNotNull,
-         nullabilityContradiction: nullability.Contradiction,
+         typeCanHoldNull: TypeCanHoldNull(property.Type),
+         nullability: nullability,
          requiresNullForgivingInitializer: property.Type.IsReferenceType && property.NullableAnnotation != NullableAnnotation.Annotated,
          storage: ColumnStorage.Read(property.Type, columnAttribute)
       );

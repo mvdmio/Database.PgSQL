@@ -119,7 +119,7 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
       // A key member is already not-null through the key argument, which the builder itself acts on, so saying it twice
       // would only make the emitted call longer. Nullable needs no argument either: it is what the query surface assumes.
       var primaryKeyArgument = property.IsPrimaryKey ? ", isPrimaryKey: true" : string.Empty;
-      var notNullArgument = !property.IsPrimaryKey && property.IsDeclaredNotNull ? ", isNotNull: true" : string.Empty;
+      var notNullArgument = !property.IsPrimaryKey && property.Nullability.IsNotNull ? ", isNotNull: true" : string.Empty;
       var trailingArguments = $"{primaryKeyArgument}{notNullArgument}";
       var columnArguments = $"x => x.{property.PropertyName}, {ToLiteral(property.ColumnName)}";
 
@@ -131,7 +131,7 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
       if (storage.Conversion is not { } conversion)
          return $".Column({columnArguments}, {claim}{trailingArguments})";
 
-      var nullability = property.IsNullable ? "?" : string.Empty;
+      var nullability = property.TypeCanHoldNull ? "?" : string.Empty;
       var (toStored, fromStored) = Conversions(conversion, storage.ValueTypeName, nullability);
 
       return

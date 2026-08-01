@@ -114,14 +114,14 @@ internal static class TableDefinitionParser
 
       // Abandons nothing: the claim has already been dropped, so every generated signature is still well-defined and
       // the consumer reads this one error rather than type-not-found errors from everything naming a missing type.
-      foreach (var property in properties.Where(x => x.NullabilityContradiction is not null))
+      foreach (var property in properties.Where(x => x.Nullability.Contradiction is not null))
       {
          diagnostics.Add(Diagnostic.Create(
             TableRepositoryDiagnostics.ContradictoryColumnNullability,
             TableDefinitionSymbols.PropertyLocation(mappedProperties, property, classSyntax),
             classSymbol.Name,
             property.PropertyName,
-            property.NullabilityContradiction
+            property.Nullability.Contradiction
          ));
       }
 
@@ -139,7 +139,7 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
-      var nullableKeyMembers = primaryKeys.Where(x => x.IsNullable).ToImmutableArray();
+      var nullableKeyMembers = primaryKeys.Where(x => x.TypeCanHoldNull).ToImmutableArray();
       if (!nullableKeyMembers.IsEmpty)
       {
          foreach (var keyMember in nullableKeyMembers)
@@ -176,12 +176,12 @@ internal static class TableDefinitionParser
          return !refused.IsEmpty;
       }
 
-      // A null tenant matches no row, so every generated member would return nothing. IsDeclaredNotNull already folds
-      // the property's type and a Null = true claim into one answer (a dropped contradiction falls back to the type),
-      // so checking it here catches both without checking each separately. A key member that is also nullable is
+      // A null tenant matches no row, so every generated member would return nothing. The Nullability claim already
+      // folds the property's type and a Null = true claim into one answer (a dropped contradiction falls back to the
+      // type), so checking it here catches both without checking each separately. A key member that is also nullable is
       // already caught above and this table already abandoned, so a property malformed both ways reports one clear
       // reason rather than two.
-      if (RefusesTenancyColumns(x => !x.IsDeclaredNotNull, TableRepositoryDiagnostics.NullableTenancyColumn))
+      if (RefusesTenancyColumns(x => !x.Nullability.IsNotNull, TableRepositoryDiagnostics.NullableTenancyColumn))
          return new ParseResult(null, diagnostics.ToImmutable());
 
       // A generated column is on no command type, so there is no property to make required, and the developer would

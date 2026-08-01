@@ -293,9 +293,8 @@ internal sealed class PropertyDefinitionModel
       bool isUnique,
       bool isGenerated,
       bool isTenancy,
-      bool isNullable,
-      bool isDeclaredNotNull,
-      string? nullabilityContradiction,
+      bool typeCanHoldNull,
+      NullabilityClaim nullability,
       bool requiresNullForgivingInitializer,
       ColumnStorage storage
    )
@@ -308,9 +307,8 @@ internal sealed class PropertyDefinitionModel
       IsUnique = isUnique;
       IsGenerated = isGenerated;
       IsTenancy = isTenancy;
-      IsNullable = isNullable;
-      IsDeclaredNotNull = isDeclaredNotNull;
-      NullabilityContradiction = nullabilityContradiction;
+      TypeCanHoldNull = typeCanHoldNull;
+      Nullability = nullability;
       RequiresNullForgivingInitializer = requiresNullForgivingInitializer;
       Storage = storage;
    }
@@ -329,22 +327,24 @@ internal sealed class PropertyDefinitionModel
    /// </summary>
    public bool IsTenancy { get; }
 
-   /// <summary>Whether the property can hold null, which a primary key member may not.</summary>
-   public bool IsNullable { get; }
+   /// <summary>
+   ///    Whether the property's C# type can hold null, which a primary key member's may not. The type-level fact, and
+   ///    deliberately not the negation of <see cref="Nullability" />'s answer: the two disagree wherever a
+   ///    <c>[Column]</c> argument overrides the type, and wherever the type states nothing at all.
+   /// </summary>
+   /// <remarks>
+   ///    Read this only where the C# type is itself the fact — the primary-key rule, and the nullability the generated
+   ///    signatures mirror. Everything that is about what the <em>column</em> holds reads <see cref="Nullability" />
+   ///    instead, which is what the query surface is told. Reading the wrong one of the two is how <c>PGSQL0035</c>
+   ///    came to check something the query provider never sees; see ADR 0011.
+   /// </remarks>
+   public bool TypeCanHoldNull { get; }
 
    /// <summary>
-   ///    Whether the definition claims the column cannot hold null — a separate notion from <see cref="IsNullable" />,
-   ///    which stays the type-level fact the primary-key rule is about. This one also answers for a non-nullable
-   ///    reference type in a nullable-oblivious file, and it is what a <c>[Column]</c> nullability argument overrides.
+   ///    What the definition claims about the column holding null, together with the contradiction that claim earned if
+   ///    it made one. Carried whole rather than split apart, for the reason <see cref="NullabilityClaim" /> gives.
    /// </summary>
-   public bool IsDeclaredNotNull { get; }
-
-   /// <summary>
-   ///    Why the declared nullability cannot be honoured, or <see langword="null" /> when nothing contradicts. A
-   ///    contradiction is reported and then dropped, leaving <see cref="IsDeclaredNotNull" /> at what the property's
-   ///    type and key membership settle on their own.
-   /// </summary>
-   public string? NullabilityContradiction { get; }
+   public NullabilityClaim Nullability { get; }
 
    public bool RequiresNullForgivingInitializer { get; }
 

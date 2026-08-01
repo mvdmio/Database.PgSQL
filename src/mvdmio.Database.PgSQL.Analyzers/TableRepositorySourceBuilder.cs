@@ -401,7 +401,7 @@ internal static class TableRepositorySourceBuilder
    private static string BindingExpression(PropertyDefinitionModel property, string valueExpression)
    {
       var storage = property.Storage;
-      var nullability = property.IsNullable ? "?" : string.Empty;
+      var nullability = property.TypeCanHoldNull ? "?" : string.Empty;
 
       var value = storage.Conversion switch
       {

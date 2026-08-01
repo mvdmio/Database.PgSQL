@@ -157,7 +157,7 @@ internal static class RelationResolver
          // the claim is the only thing that can carry the fact, which is the case the message names. Whether either
          // side is [Unique] plays no part: a not-null foreign key paired against a nullable [Unique] column emits a
          // plain equality join that simply cannot reach a null row.
-         if (pair.ThisKey.IsDeclaredNotNull || pair.TargetKey.IsDeclaredNotNull)
+         if (pair.ThisKey.Nullability.IsNotNull || pair.TargetKey.Nullability.IsNotNull)
             continue;
 
          diagnostics.Add(
