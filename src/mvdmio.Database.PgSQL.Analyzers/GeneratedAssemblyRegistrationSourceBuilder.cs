@@ -173,10 +173,18 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
    ///    key each and their key type parameters are unconstrained, so an anonymous type or a tuple compiles there and
    ///    registers as one key named after its constructor, failing only at the first query. A predicate is checked
    ///    member by member at build time, so that shape is unreachable from here.
+   ///    <para>
+   ///       A relation definition's <c>Condition</c>, when it states one, is appended after the key pairs — its body was
+   ///       already rewritten to this same lambda's parameters when it was read off the developer's source, so it
+   ///       inlines here verbatim.
+   ///    </para>
    /// </remarks>
    private static string RelationCall(ResolvedRelation relation)
    {
       var comparisons = relation.JoinedKeys.Select(x => $"x.{x.ThisKey.PropertyName} == y.{x.TargetKey.PropertyName}");
+
+      if (relation.ConditionBodyText is { } condition)
+         comparisons = comparisons.Append(condition);
 
       return $".Relation<{relation.TargetDataTypeName}>(x => x.{relation.PropertyName}, (x, y) => {string.Join(" && ", comparisons)})";
    }

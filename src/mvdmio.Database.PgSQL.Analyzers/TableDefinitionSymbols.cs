@@ -316,6 +316,154 @@ internal static class TableDefinitionSymbols
       return builder.ToImmutable();
    }
 
+   /// <summary>
+   ///    Reads a relation definition's <c>Condition</c> override off its syntax, if it states one. Returns
+   ///    <see langword="null" /> when the override is absent — an ordinary relation, which is the default the base type
+   ///    gives every relation definition that does not state one.
+   /// </summary>
+   /// <remarks>
+   ///    The override's body is a two-parameter lambda over <c>TDeclaring</c> and <c>TTarget</c>. Its own two parameters
+   ///    are rewritten here to <c>x</c> and <c>y</c> — the names the emitted join lambda uses — so the caller can inline
+   ///    the result verbatim; every other identifier, including a constant such as an enum member, is left exactly as
+   ///    written. Every member accessed directly on either parameter is also collected, for the caller to check against
+   ///    each table's generated data type.
+   /// </remarks>
+   public static RelationConditionDeclaration? ReadRelationCondition(INamedTypeSymbol relationDefinitionType, Compilation compilation)
+   {
+      var conditionProperty = relationDefinitionType.GetMembers("Condition").OfType<IPropertySymbol>().FirstOrDefault(x => x.IsOverride);
+      var syntaxReference = conditionProperty?.DeclaringSyntaxReferences.FirstOrDefault();
+
+      if (syntaxReference is null)
+         return null;
+
+      var syntax = syntaxReference.GetSyntax();
+      var bodyExpression = GetPropertyBodyExpression(syntax);
+
+      if (bodyExpression is null)
+         return null;
+
+      if (GetLambdaParametersAndBody(bodyExpression) is not var (declaringParameter, targetParameter, lambdaBody))
+         return null;
+
+      var semanticModel = compilation.GetSemanticModel(syntax.SyntaxTree);
+      var declaringParameterSymbol = semanticModel.GetDeclaredSymbol(declaringParameter);
+      var targetParameterSymbol = semanticModel.GetDeclaredSymbol(targetParameter);
+
+      var memberAccesses = ImmutableArray.CreateBuilder<RelationConditionMemberAccess>();
+
+      foreach (var memberAccess in lambdaBody.DescendantNodesAndSelf().OfType<MemberAccessExpressionSyntax>())
+      {
+         if (memberAccess.Expression is not IdentifierNameSyntax identifier)
+            continue;
+
+         var symbol = semanticModel.GetSymbolInfo(identifier).Symbol;
+         var isDeclaringSide = SymbolEqualityComparer.Default.Equals(symbol, declaringParameterSymbol);
+         var isTargetSide = !isDeclaringSide && SymbolEqualityComparer.Default.Equals(symbol, targetParameterSymbol);
+
+         if (!isDeclaringSide && !isTargetSide)
+            continue;
+
+         memberAccesses.Add(new RelationConditionMemberAccess(isDeclaringSide, memberAccess.Name.Identifier.Text, memberAccess.GetLocation()));
+      }
+
+      var rewriter = new RelationConditionParameterRewriter(semanticModel, declaringParameterSymbol, targetParameterSymbol);
+      var rewrittenBody = (ExpressionSyntax)rewriter.Visit(lambdaBody)!;
+      var bodyText = $"({rewrittenBody.WithoutTrivia().ToFullString()})";
+
+      return new RelationConditionDeclaration(bodyText, memberAccesses.ToImmutable(), bodyExpression.GetLocation());
+   }
+
+   /// <summary>
+   ///    The two parameters and body expression of a relation condition's lambda, however the body is written — an
+   ///    expression-bodied lambda, or a block with a single return statement.
+   /// </summary>
+   private static (ParameterSyntax Declaring, ParameterSyntax Target, ExpressionSyntax Body)? GetLambdaParametersAndBody(ExpressionSyntax expression)
+   {
+      if (expression is not ParenthesizedLambdaExpressionSyntax { ParameterList.Parameters.Count: 2 } lambda)
+         return null;
+
+      var body = lambda.ExpressionBody
+         ?? lambda.Block?.Statements.OfType<ReturnStatementSyntax>().FirstOrDefault()?.Expression;
+
+      if (body is null)
+         return null;
+
+      return (lambda.ParameterList.Parameters[0], lambda.ParameterList.Parameters[1], body);
+   }
+
+   /// <summary>
+   ///    Rewrites a relation condition's body for inlining into the emitted join: a reference to either of its two
+   ///    lambda parameters becomes the name the emitted join lambda uses ("x" for the declaring side, "y" for the
+   ///    target side); a bare reference to a type — an enum a constant is compared against, for instance — is
+   ///    qualified the way every other generated reference is, because the emitted file carries none of the
+   ///    developer's own <c>using</c> directives; and a compile-time constant subtree — an enum member, a literal —
+   ///    is wrapped in <c>LinqToDB.Sql.Constant</c>, so the query surface inlines it into the join as a literal
+   ///    instead of parameterizing it, and each kind gets its own query plan. Anything else, including a member
+   ///    accessed on either parameter, is left exactly as written: that is what "copies verbatim" means for a mapped
+   ///    column or another relation property, whose name is identical on the generated data type.
+   /// </summary>
+   private sealed class RelationConditionParameterRewriter : CSharpSyntaxRewriter
+   {
+      private readonly SemanticModel _semanticModel;
+      private readonly ISymbol? _declaringParameter;
+      private readonly ISymbol? _targetParameter;
+
+      public RelationConditionParameterRewriter(SemanticModel semanticModel, ISymbol? declaringParameter, ISymbol? targetParameter)
+      {
+         _semanticModel = semanticModel;
+         _declaringParameter = declaringParameter;
+         _targetParameter = targetParameter;
+      }
+
+      /// <remarks>
+      ///    Every recursive descent in this rewriter passes back through this method rather than through the
+      ///    type-specific <c>VisitXxx</c> overrides, which is what lets one override catch every node — a compile-time
+      ///    constant subtree is wrapped here, before either the type-qualifying or the parameter-renaming rule below
+      ///    ever sees it, and the wrap recurses into its own children through this same method to apply those rules
+      ///    inside it.
+      /// </remarks>
+      public override SyntaxNode? Visit(SyntaxNode? node)
+      {
+         // A literal null is left alone: "IS NULL"/"IS NOT NULL" is never parameterized by the query surface in the
+         // first place, and Sql.Constant's type parameter cannot be inferred from a null argument alone.
+         if (node is ExpressionSyntax expression
+             && !(node.Parent is MemberAccessExpressionSyntax memberAccess && ReferenceEquals(memberAccess.Name, node))
+             && _semanticModel.GetConstantValue(expression) is { HasValue: true, Value: not null })
+         {
+            var rewrittenInner = (ExpressionSyntax)base.Visit(node)!;
+
+            return SyntaxFactory.InvocationExpression(
+                  SyntaxFactory.ParseExpression("global::LinqToDB.Sql.Constant"),
+                  SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(rewrittenInner.WithoutTrivia())))
+               )
+               .WithTriviaFrom(node);
+         }
+
+         return base.Visit(node);
+      }
+
+      public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
+      {
+         // The right-hand side of a member access never needs qualifying on its own — whatever sits on its left
+         // already carries, or will carry, everything needed to resolve it.
+         if (node.Parent is MemberAccessExpressionSyntax memberAccess && ReferenceEquals(memberAccess.Name, node))
+            return node;
+
+         var symbol = _semanticModel.GetSymbolInfo(node).Symbol;
+
+         if (SymbolEqualityComparer.Default.Equals(symbol, _declaringParameter))
+            return SyntaxFactory.IdentifierName("x").WithTriviaFrom(node);
+
+         if (SymbolEqualityComparer.Default.Equals(symbol, _targetParameter))
+            return SyntaxFactory.IdentifierName("y").WithTriviaFrom(node);
+
+         if (symbol is ITypeSymbol typeSymbol)
+            return SyntaxFactory.ParseName(TypeDisplayName(typeSymbol)).WithTriviaFrom(node);
+
+         return base.VisitIdentifierName(node);
+      }
+   }
+
    /// <summary>The expression a property's getter returns, however it is written — an arrow body on the property, an arrow-bodied getter, or a getter with a single return statement.</summary>
    private static ExpressionSyntax? GetPropertyBodyExpression(SyntaxNode syntax)
    {

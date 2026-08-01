@@ -355,4 +355,14 @@ internal static class TableRepositoryDiagnostics
       isEnabledByDefault: true,
       description: "Each side of a relation key pair must be a direct property reference on its own table definition — Key(x => x.Column, y => y.Column) — so the generator can turn it into a join condition rather than having to evaluate an arbitrary expression."
    );
+
+   public static readonly DiagnosticDescriptor RelationConditionCannotBeCarried = new(
+      id: "PGSQL0032",
+      title: "Relation condition cannot be carried",
+      messageFormat: "'{0}.{1}' declares a relation condition that touches '{2}.{3}', which has no counterpart on '{2}''s generated data type",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "A relation condition's body is lifted into the emitted join, with its two parameters rewritten from Table definition types to generated data types. A member touched directly on either parameter must exist on that table's generated data type — a mapped column or another relation property — or the lift would fail inside generated source with no line in the developer's own code to fix."
+   );
 }

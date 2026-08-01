@@ -515,6 +515,8 @@ internal static class TableDefinitionParser
          return false;
       }
 
+      var condition = TableDefinitionSymbols.ReadRelationCondition(relationDefinition, compilation);
+
       relation = new RelationDeclarationModel(
          property.Name,
          TableDefinitionSymbols.GetFullName(target),
@@ -522,7 +524,8 @@ internal static class TableDefinitionParser
          ImmutableArray<string>.Empty,
          keyPairs,
          isToMany,
-         location
+         location,
+         condition
       );
 
       return true;

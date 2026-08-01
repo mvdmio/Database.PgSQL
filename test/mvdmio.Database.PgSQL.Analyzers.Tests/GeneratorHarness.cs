@@ -72,11 +72,23 @@ internal static class GeneratorHarness
                System.Linq.Expressions.Expression<System.Func<TDeclaring, TValue?>> declaringProperty,
                System.Linq.Expressions.Expression<System.Func<TTarget, TValue>> targetProperty
             ) where TValue : struct => new RelationKey();
+
+            public virtual System.Linq.Expressions.Expression<System.Func<TDeclaring, TTarget, bool>>? Condition => null;
          }
 
          public sealed class RelationKey
          {
             internal RelationKey() { }
+         }
+      }
+
+      namespace LinqToDB
+      {
+         // A relation condition's constant subtrees are wrapped in this, so the query surface inlines them into the
+         // join as a literal rather than parameterizing them — the stub is the shape emitted source binds against.
+         public static class Sql
+         {
+            public static T Constant<T>(T value) => value;
          }
       }
 

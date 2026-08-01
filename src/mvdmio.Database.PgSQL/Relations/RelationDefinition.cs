@@ -60,6 +60,23 @@ public abstract class RelationDefinition<TDeclaring, TTarget>
    {
       return new RelationKey();
    }
+
+   /// <summary>
+   ///    An extra condition this Relation carries beyond its <see cref="Keys" /> — an ordinary expression over the two
+   ///    rows, checked by the compiler where it is written. Virtual and defaulting to <see langword="null" />, so an
+   ///    ordinary Relation costs nothing extra and a Relation definition stays valid as this base type gains members
+   ///    later.
+   /// </summary>
+   /// <remarks>
+   ///    An <see cref="Expression{TDelegate}" /> rather than a <see cref="Func{T1,T2,TResult}" />, because that states
+   ///    honestly that this is a tree a source generator reads from source rather than a delegate anything calls. The
+   ///    generator lifts its body into the join condition alongside the key pairs, joined with <c>&amp;&amp;</c>, with
+   ///    the two parameters rewritten from these Table definition types to the two generated data types — member names
+   ///    are identical between the two, so the body otherwise copies verbatim. This is what lets two Relations that pair
+   ///    the same columns reach different rows: a column naming a kind is compared against a different value in each
+   ///    Relation's condition.
+   /// </remarks>
+   public virtual Expression<Func<TDeclaring, TTarget, bool>>? Condition => null;
 }
 
 /// <summary>

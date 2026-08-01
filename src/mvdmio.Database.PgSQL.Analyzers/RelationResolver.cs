@@ -225,14 +225,77 @@ internal static class RelationResolver
       if (diagnostics.Count != beforeResolving)
          return false;
 
+      if (!TryCheckCondition(model, relation, target, diagnostics))
+         return false;
+
       resolved = new ResolvedRelation(
          propertyName: relation.PropertyName,
          isToMany: relation.IsToMany,
          targetDataTypeName: QualifyTypeName(target.NamespaceName, target.DataTypeName),
-         joinedKeys: joinedKeys.ToImmutable()
+         joinedKeys: joinedKeys.ToImmutable(),
+         conditionBodyText: relation.Condition?.BodyText
       );
 
       return true;
+   }
+
+   /// <summary>
+   ///    Checks a relation definition's <c>Condition</c> against both tables' generated data types: a member touched
+   ///    directly on either parameter must exist there — a mapped column, or another relation property — or the lift
+   ///    into generated source would fail with no line in the developer's own code to fix. Reports every offending
+   ///    member rather than only the first, because each is a separate mistake.
+   /// </summary>
+   private static bool TryCheckCondition(
+      TableDefinitionModel model,
+      RelationDeclarationModel relation,
+      TableDefinitionModel target,
+      ImmutableArray<Diagnostic>.Builder diagnostics
+   )
+   {
+      var condition = relation.Condition;
+
+      if (condition is null)
+         return true;
+
+      var declaringMembers = MemberNames(model);
+      var targetMembers = MemberNames(target);
+      var beforeChecking = diagnostics.Count;
+
+      foreach (var memberAccess in condition.MemberAccesses)
+      {
+         var owner = memberAccess.IsDeclaringSide ? model : target;
+         var members = memberAccess.IsDeclaringSide ? declaringMembers : targetMembers;
+
+         if (members.Contains(memberAccess.MemberName))
+            continue;
+
+         diagnostics.Add(
+            Diagnostic.Create(
+               TableRepositoryDiagnostics.RelationConditionCannotBeCarried,
+               memberAccess.Location ?? relation.Location,
+               model.TableClassName,
+               relation.PropertyName,
+               owner.TableClassName,
+               memberAccess.MemberName
+            )
+         );
+      }
+
+      return diagnostics.Count == beforeChecking;
+   }
+
+   /// <summary>Every member a table's generated data type mirrors: a mapped column, or another relation property.</summary>
+   private static HashSet<string> MemberNames(TableDefinitionModel model)
+   {
+      var names = new HashSet<string>(StringComparer.Ordinal);
+
+      foreach (var property in model.DataProperties)
+         names.Add(property.PropertyName);
+
+      foreach (var declaredRelation in model.Relations)
+         names.Add(declaredRelation.PropertyName);
+
+      return names;
    }
 
    /// <summary>
@@ -326,6 +389,7 @@ internal sealed class ResolvedRelation
       PropertyName = propertyName;
       IsToMany = isToMany;
       TargetDataTypeName = targetDataTypeName;
+      ConditionBodyText = null;
 
       // A relation always joins its foreign key to a primary key. Which of the two is on the declaring side is the
       // whole of what the cardinality decides, so it is decided here and nowhere else — and the two sides are zipped
@@ -344,12 +408,19 @@ internal sealed class ResolvedRelation
    ///    what a relation declared as a <c>RelationDefinition&lt;,&gt;</c> class states directly, with no
    ///    foreign-key/primary-key side for cardinality to pick out.
    /// </summary>
-   public ResolvedRelation(string propertyName, bool isToMany, string targetDataTypeName, ImmutableArray<JoinedKeyPair> joinedKeys)
+   public ResolvedRelation(
+      string propertyName,
+      bool isToMany,
+      string targetDataTypeName,
+      ImmutableArray<JoinedKeyPair> joinedKeys,
+      string? conditionBodyText = null
+   )
    {
       PropertyName = propertyName;
       IsToMany = isToMany;
       TargetDataTypeName = targetDataTypeName;
       JoinedKeys = joinedKeys;
+      ConditionBodyText = conditionBodyText;
    }
 
    public string PropertyName { get; }
@@ -360,6 +431,12 @@ internal sealed class ResolvedRelation
 
    /// <summary>The column pairs the relation joins on, in key order.</summary>
    public ImmutableArray<JoinedKeyPair> JoinedKeys { get; }
+
+   /// <summary>
+   ///    The relation definition's <c>Condition</c>, already lifted to the emitted join lambda's own parameters —
+   ///    <see langword="null" /> for an ordinary relation, which states none.
+   /// </summary>
+   public string? ConditionBodyText { get; }
 }
 
 /// <summary>

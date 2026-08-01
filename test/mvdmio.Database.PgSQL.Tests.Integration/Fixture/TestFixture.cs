@@ -90,6 +90,36 @@ public sealed class TestFixture : IAsyncLifetime
          """
       );
 
+      // The polymorphic-link table set: a link table carrying a kind column beside an identifier, reaching two
+      // different targets through that same pair, condition-narrowed rather than through a generated column per kind.
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_link_people (
+            person_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            name      TEXT NOT NULL
+         )
+         """
+      );
+
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_link_assets (
+            asset_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            name     TEXT NOT NULL
+         )
+         """
+      );
+
+      await connection.Dapper.ExecuteAsync(
+         """
+         CREATE TABLE IF NOT EXISTS public.generated_polymorphic_links (
+            link_id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            kind      TEXT NOT NULL,
+            target_id BIGINT NOT NULL
+         )
+         """
+      );
+
       // Both text columns permit null while the definition over them claims otherwise, which is what makes the failure
       // mode of an unverified nullability claim observable.
       await connection.Dapper.ExecuteAsync(

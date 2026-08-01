@@ -183,7 +183,8 @@ internal sealed class RelationDeclarationModel
       ImmutableArray<string> foreignKeyPropertyNames,
       ImmutableArray<RelationKeyPairDeclaration>? keyPairs,
       bool isToMany,
-      Location? location
+      Location? location,
+      RelationConditionDeclaration? condition = null
    )
    {
       PropertyName = propertyName;
@@ -193,6 +194,7 @@ internal sealed class RelationDeclarationModel
       KeyPairs = keyPairs;
       IsToMany = isToMany;
       Location = location;
+      Condition = condition;
    }
 
    public string PropertyName { get; }
@@ -223,6 +225,56 @@ internal sealed class RelationDeclarationModel
 
    public bool IsToMany { get; }
    public Location? Location { get; }
+
+   /// <summary>
+   ///    The relation definition's <c>Condition</c> override, read off its syntax — <see langword="null" /> when the
+   ///    override is absent (an ordinary relation) or when the old attribute-argument form declared this relation,
+   ///    which has no condition to state.
+   /// </summary>
+   public RelationConditionDeclaration? Condition { get; }
+}
+
+/// <summary>
+///    A relation definition's <c>Condition</c> override, read off its syntax: the lambda body with its two parameters
+///    already rewritten to the names the emitted join lambda uses, and every member touched directly on either
+///    parameter, for <c>PGSQL0032</c> to check against that table's generated data type.
+/// </summary>
+internal sealed class RelationConditionDeclaration
+{
+   public RelationConditionDeclaration(string bodyText, ImmutableArray<RelationConditionMemberAccess> memberAccesses, Location location)
+   {
+      BodyText = bodyText;
+      MemberAccesses = memberAccesses;
+      Location = location;
+   }
+
+   /// <summary>
+   ///    The condition's body, already rewritten to reference the emitted join lambda's own parameters ("x" and "y")
+   ///    rather than the names the developer wrote — ready to be inlined into the join verbatim.
+   /// </summary>
+   public string BodyText { get; }
+
+   /// <summary>Every member accessed directly on either of the condition's two parameters.</summary>
+   public ImmutableArray<RelationConditionMemberAccess> MemberAccesses { get; }
+
+   public Location Location { get; }
+}
+
+/// <summary>One member accessed directly on a relation condition's declaring-side or target-side parameter.</summary>
+internal readonly struct RelationConditionMemberAccess
+{
+   public RelationConditionMemberAccess(bool isDeclaringSide, string memberName, Location location)
+   {
+      IsDeclaringSide = isDeclaringSide;
+      MemberName = memberName;
+      Location = location;
+   }
+
+   /// <summary>Whether this member was accessed on the declaring-side parameter rather than the target-side one.</summary>
+   public bool IsDeclaringSide { get; }
+
+   public string MemberName { get; }
+   public Location Location { get; }
 }
 
 /// <summary>
