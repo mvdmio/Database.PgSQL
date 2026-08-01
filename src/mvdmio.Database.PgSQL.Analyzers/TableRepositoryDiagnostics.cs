@@ -379,13 +379,13 @@ internal static class TableRepositoryDiagnostics
       description: "Two relations on the same table can pair the same columns and still reach different rows, each narrowed by its own condition. Where one of them declares no condition at all, it silently returns every kind the conditioned ones distinguish between — a forgotten condition rather than a deliberate, unconditioned relation."
    );
 
-   public static readonly DiagnosticDescriptor RelationKeyPairsAgainstNullableUniqueColumn = new(
+   public static readonly DiagnosticDescriptor RelationKeyPairBothNullable = new(
       id: "PGSQL0035",
-      title: "Relation pairs against a nullable unique column",
-      messageFormat: "'{0}.{1}' pairs against '{2}.{3}', which is [Unique] but nullable — it matches at most one row but may match none for reasons the relation cannot see",
+      title: "Relation key pair can both hold null",
+      messageFormat: "'{0}.{1}' pairs '{2}' against '{3}.{4}', and both can hold null; claim one side [Column(NotNull = true)], or pair a column that cannot",
       category: CATEGORY_GENERATION,
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
-      description: "A nullable [Unique] column is refused as a relation key's target side. On the target side a primary-key column can never be nullable, so this can only happen against a [Unique] column — and it is the one case that would otherwise need a third Key(...) overload, for a nullable target side. There is no such overload; the pairing is refused instead."
+      description: "A Relation key pair whose two columns can both hold null widens the join the query provider emits into 'equal, or both are null', which joins every null on one side to every null on the other and loses the index behind either column. The rule reads the Nullability claim each side registers — the same claim the query provider is told — rather than the property's C# type, so a [Column(NotNull = true)] claim on either side is a real answer to it even where the type cannot carry the fact. Whether either column is [Unique] does not matter: a not-null foreign key paired against a nullable [Unique] column is left alone, because the equality join it emits simply cannot reach a row whose unique column is null."
    );
 }

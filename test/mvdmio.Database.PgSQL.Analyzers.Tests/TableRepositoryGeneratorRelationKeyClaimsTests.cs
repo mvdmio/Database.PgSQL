@@ -5,10 +5,11 @@ namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
 /// <summary>
 ///    Covers what a relation's resolved key pairs have to claim, replacing the old foreign-key-arity check: that a
-///    relation to one row pairs against something the target claims unique (<c>PGSQL0031</c>), that it never pairs
-///    against a nullable <c>[Unique]</c> column (<c>PGSQL0035</c>), and that a conditioned relation and an
-///    unconditioned one sharing the same key pairs are flagged as a forgotten condition (<c>PGSQL0034</c>). These
-///    checks read the pairs the resolver produced, so each is exercised through the definition form.
+///    relation to one row pairs against something the target claims unique (<c>PGSQL0031</c>), that a pair whose two
+///    columns can both hold null is refused wherever it appears, unique target or not (<c>PGSQL0035</c>), and that a
+///    conditioned relation and an unconditioned one sharing the same key pairs are flagged as a forgotten condition
+///    (<c>PGSQL0034</c>). These checks read the pairs the resolver produced, so each is exercised through the
+///    definition form.
 /// </summary>
 public class TableRepositoryGeneratorRelationKeyClaimsTests
 {
@@ -288,11 +289,16 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
       result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0031");
    }
 
-   // PGSQL0035 — a relation pairing against a target column marked [Unique] that is nullable.
+   // PGSQL0035 — a Relation key pair whose two columns can both hold null. Uniqueness of the target no longer takes
+   // part: a not-null foreign key against a nullable [Unique] target column is left alone below, and a pair of two
+   // nullable columns is refused whether or not either side is [Unique].
 
    [Fact]
-   public void RelationPairedAgainstANullableUniqueColumn_ReportsPGSQL0035_AndDropsOnlyThatRelation()
+   public void RelationPairedAgainstANullableUniqueColumn_ReportsNoPGSQL0035_AndRegistersTheRelation()
    {
+      // A not-null foreign key against a nullable [Unique] target column: the equality join it emits simply cannot
+      // reach a row whose unique column is null, which is well-defined and costs nothing. The relation reaches the
+      // assembly registration like any ordinary relation, rather than being dropped.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -306,7 +312,7 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
             [PrimaryKey]
             public long BookId { get; set; }
 
-            public string? AuthorCode { get; set; }
+            public string AuthorCode { get; set; } = string.Empty;
 
             private AuthorRelation? Author { get; set; }
 
@@ -331,16 +337,14 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
          }
          """);
 
-      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0035").Subject;
+      result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0035");
 
-      diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
-      diagnostic.GetMessage().Should().Contain("AuthorTable").And.Contain("Code");
-
-      // The relation is dropped, but the rest of the table still generates.
-      result.GeneratedSources.Should().NotBeEmpty();
+      // A nullable [Unique] column still satisfies the uniqueness claim, so a relation to one row against it warns
+      // about nothing.
+      result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0031");
 
       var registration = GeneratorHarness.RegistrationSource(result);
-      registration.Should().NotContain(".Relation<global::Demo.AuthorData>");
+      registration.Should().Contain(".Relation<global::Demo.AuthorData>");
    }
 
    [Fact]
@@ -385,6 +389,304 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
          """);
 
       result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0035");
+   }
+
+   [Fact]
+   public void RelationPairedAgainstTwoColumnsThatCanBothHoldNull_ReportsPGSQL0035_AndDropsOnlyThatRelation()
+   {
+      // Neither side is [Unique] — the case that is silent today — and both can hold null, via a [Column(Null = true)]
+      // claim over an otherwise non-nullable string. Widened to "equal, or both are null" by the query provider,
+      // which is the shape the rule now exists to refuse.
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            [Column(Null = true)]
+            public string AuthorCode { get; set; } = string.Empty;
+
+            private AuthorRelation? Author { get; set; }
+
+            private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorCode, y => y.Code),
+               ];
+            }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            [Column(Null = true)]
+            public string Code { get; set; } = string.Empty;
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """);
+
+      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0035").Subject;
+
+      diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
+      diagnostic.GetMessage().Should().Contain("AuthorCode").And.Contain("AuthorTable").And.Contain("Code");
+
+      // The relation is dropped, but the rest of the table still generates.
+      result.GeneratedSources.Should().NotBeEmpty();
+
+      var registration = GeneratorHarness.RegistrationSource(result);
+      registration.Should().NotContain(".Relation<global::Demo.AuthorData>");
+   }
+
+   [Fact]
+   public void RelationPairedAgainstTwoColumnsThatCanBothHoldNull_WithNotNullClaimedOnOneSide_ReportsNoPGSQL0035()
+   {
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            [Column(NotNull = true)]
+            public string AuthorCode { get; set; } = string.Empty;
+
+            private AuthorRelation? Author { get; set; }
+
+            private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorCode, y => y.Code),
+               ];
+            }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            [Column(Null = true)]
+            public string Code { get; set; } = string.Empty;
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """);
+
+      result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0035");
+   }
+
+   [Fact]
+   public void RelationPairedAgainstTwoUnannotatedStringsInANullableObliviousFile_ReportsPGSQL0035_AndClearsWithNotNullClaim()
+   {
+      // An unannotated string in a nullable-oblivious file counts as able to hold null, because the annotation that
+      // would carry the fact cannot be written there at all — the rule reads the Nullability claim, which defaults
+      // to nullable exactly where the type states nothing.
+      var offending = GeneratorHarness.RunGenerator(
+         """
+         using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            public string AuthorCode { get; set; } = string.Empty;
+
+            private AuthorRelation? Author { get; set; }
+
+            private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorCode, y => y.Code),
+               ];
+            }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            public string Code { get; set; } = string.Empty;
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """,
+         NullableContextOptions.Disable
+      );
+
+      offending.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0035");
+
+      var cleared = GeneratorHarness.RunGenerator(
+         """
+         using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            [Column(NotNull = true)]
+            public string AuthorCode { get; set; } = string.Empty;
+
+            private AuthorRelation? Author { get; set; }
+
+            private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorCode, y => y.Code),
+               ];
+            }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            public string Code { get; set; } = string.Empty;
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """,
+         NullableContextOptions.Disable
+      );
+
+      cleared.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0035");
+   }
+
+   [Fact]
+   public void RelationWithTwoOffendingPairs_ReportsPGSQL0035Twice()
+   {
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            [Column(Null = true)]
+            public string AuthorCode { get; set; } = string.Empty;
+
+            [Column(Null = true)]
+            public string Genre { get; set; } = string.Empty;
+
+            private AuthorRelation? Author { get; set; }
+
+            private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorCode, y => y.Code),
+                  Key(x => x.Genre, y => y.PrimaryGenre),
+               ];
+            }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            [Column(Null = true)]
+            public string Code { get; set; } = string.Empty;
+
+            [Column(Null = true)]
+            public string PrimaryGenre { get; set; } = string.Empty;
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """);
+
+      result.Diagnostics.Where(x => x.Id == "PGSQL0035").Should().HaveCount(2);
+   }
+
+   [Fact]
+   public void RelationPairedAgainstTwoColumnsThatCanBothHoldNull_WithARelationConditionExcludingNulls_StillReportsPGSQL0035()
+   {
+      // A Relation condition recovers the rows a widened join would wrongly match, but not the lost index, so it
+      // cannot rescue a refused pair — unlike PGSQL0031, which a condition can rescue outright.
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System;
+         using System.Collections.Generic;
+         using System.Linq.Expressions;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            [Column(Null = true)]
+            public string AuthorCode { get; set; } = string.Empty;
+
+            private AuthorRelation? Author { get; set; }
+
+            private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorCode, y => y.Code),
+               ];
+
+               public override Expression<Func<BookTable, AuthorTable, bool>> Condition
+                  => (book, author) => author.Code != null;
+            }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            [Column(Null = true)]
+            public string Code { get; set; } = string.Empty;
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """);
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0035");
    }
 
    // PGSQL0034 — a conditioned relation and an unconditioned one over the same key pairs, declared on one table.
@@ -871,6 +1173,78 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
          {
             [PrimaryKey]
             public long AuthorId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """);
+   }
+
+   [Fact]
+   public void EveryValueTypeNullabilityCombination_BindsAgainstTheOneKeyOverload_AndCompiles()
+   {
+      // The one same-type Key(...) overload infers its type argument from both lambdas together, so it accepts every
+      // combination of nullability on the two sides — including a non-nullable value type paired against a nullable
+      // one either way round. Proven by compiling rather than assumed, so the analyzer is the only thing that could
+      // ever refuse a shape here, not the compiler. Whichever pairs the analyzer refuses as both-nullable are simply
+      // dropped from the emitted registration, which still has to compile with the rest of the table intact.
+      GeneratorHarness.AssertGeneratedSourcesCompile("""
+         using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            public long AuthorIdNotNull { get; set; }
+            public long? AuthorIdNullable { get; set; }
+
+            private NotNullToNotNullRelation? NotNullToNotNull { get; set; }
+            private NullableToNotNullRelation? NullableToNotNull { get; set; }
+            private NotNullToNullableRelation? NotNullToNullable { get; set; }
+            private NullableToNullableRelation? NullableToNullable { get; set; }
+
+            private class NotNullToNotNullRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorIdNotNull, y => y.KeyNotNull),
+               ];
+            }
+
+            private class NullableToNotNullRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorIdNullable, y => y.KeyNotNull),
+               ];
+            }
+
+            private class NotNullToNullableRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorIdNotNull, y => y.KeyNullable),
+               ];
+            }
+
+            private class NullableToNullableRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorIdNullable, y => y.KeyNullable),
+               ];
+            }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            public long KeyNotNull { get; set; }
+            public long? KeyNullable { get; set; }
 
             public string Name { get; set; } = string.Empty;
          }

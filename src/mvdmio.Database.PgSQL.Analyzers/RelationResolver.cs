@@ -141,8 +141,8 @@ internal static class RelationResolver
 
    /// <summary>
    ///    Checks a relation's resolved key pairs against the target's uniqueness claim and both tables' tenancy
-   ///    claims. Returns <see langword="false" />, dropping the relation, only when a pair reaches a nullable
-   ///    <c>[Unique]</c> target column (<c>PGSQL0035</c>) — the rest are warnings that report and keep the relation.
+   ///    claims. Returns <see langword="false" />, dropping the relation, only when a pair's two columns can both
+   ///    hold null (<c>PGSQL0035</c>) — the rest are warnings that report and keep the relation.
    /// </summary>
    private static bool CheckKeyPairClaims(RelationCandidate candidate, ImmutableArray<Diagnostic>.Builder diagnostics)
    {
@@ -151,15 +151,20 @@ internal static class RelationResolver
 
       foreach (var pair in candidate.JoinedKeys)
       {
-         if (!pair.TargetKey.IsUnique || !pair.TargetKey.IsNullable)
+         // Reads the Nullability claim each side registers, not the property's C# type — the claim is what the
+         // query provider is told, and it is what a [Column(NotNull = true)] claim can override even where the type
+         // cannot carry the fact. Whether either side is [Unique] plays no part: a not-null foreign key paired
+         // against a nullable [Unique] column emits a plain equality join that simply cannot reach a null row.
+         if (pair.ThisKey.IsDeclaredNotNull || pair.TargetKey.IsDeclaredNotNull)
             continue;
 
          diagnostics.Add(
             Diagnostic.Create(
-               TableRepositoryDiagnostics.RelationKeyPairsAgainstNullableUniqueColumn,
+               TableRepositoryDiagnostics.RelationKeyPairBothNullable,
                relation.Location,
                candidate.Model.TableClassName,
                relation.PropertyName,
+               pair.ThisKey.PropertyName,
                candidate.Target.TableClassName,
                pair.TargetKey.PropertyName
             )

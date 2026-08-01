@@ -59,7 +59,7 @@ PGSQL0031 | Generation | Warning | Relation to one row may reach several
 PGSQL0032 | Generation | Error | Relation condition cannot be carried
 PGSQL0033 | Generation | Error | Relation attribute on a non-relation property
 PGSQL0034 | Generation | Warning | Relation may resolve every kind
-PGSQL0035 | Generation | Error | Relation pairs against a nullable unique column
+PGSQL0035 | Generation | Error | Relation key pair can both hold null
 
 ### Removed Rules
 
