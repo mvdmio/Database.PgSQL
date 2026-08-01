@@ -306,4 +306,18 @@ internal static class TableRepositoryDiagnostics
       isEnabledByDefault: true,
       description: "A generated column is on no command type, so there is no property to make required — the developer would learn that at run time instead of build time."
    );
+
+   // Unlike the two diagnostics above, this one abandons nothing at all — not the relation, not the table — because a
+   // relation to a shared, untenanted table can be legitimate, and per ADR 0005 a relation-level problem drops the
+   // relation rather than the table.
+
+   public static readonly DiagnosticDescriptor RelationCouldReachAcrossTenants = new(
+      id: "PGSQL0027",
+      title: "Relation could reach across tenants",
+      messageFormat: "'{0}.{1}' does not pin tenancy column '{2}' across the join, so the relation can reach another tenant's rows",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Warning,
+      isEnabledByDefault: true,
+      description: "A relation always pairs its foreign key positionally against the other side's primary key. The property paired against a tenancy column must be the other side's own tenancy column, or the join can pull another tenant's related rows — and a tenancy column that sits outside the joined key entirely is paired with nothing, which is the same failure. Reported once per tenancy column that comes out unpinned either way."
+   );
 }

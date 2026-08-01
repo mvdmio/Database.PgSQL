@@ -545,4 +545,377 @@ public class TableRepositoryGeneratorTenancyTests
       insideKey.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0025" || x.Id == "PGSQL0026");
       outsideKey.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0025" || x.Id == "PGSQL0026");
    }
+
+   // PGSQL0027 — a relation whose join could reach across tenants. RelationResolver is the only stage that sees two
+   // tables at once, so every shape below declares both ends of the relation it exercises.
+
+   [Fact]
+   public void RelationToOneRow_PinnedByTheDeclaringTablesOwnTenancyColumn_ReportsNoWarning()
+   {
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.accounts")]
+         public partial class AccountTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+
+         [Table("public.documents")]
+         public partial class DocumentTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
+            [PrimaryKey]
+            [Generated]
+            public long DocumentId { get; set; }
+
+            public string Title { get; set; } = string.Empty;
+
+            [Relation(nameof(AccountId))]
+            public AccountTable? Account { get; set; }
+         }
+         """);
+
+      result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0027");
+   }
+
+   [Fact]
+   public void RelationToOneRow_PairedAgainstAnUnrelatedProperty_ReportsPGSQL0027_TheStrictForm()
+   {
+      // The declaring table does carry a tenancy column, but the relation's foreign key is a different property
+      // entirely. The loose reading — warn only when nothing at all is paired against the target's tenancy column —
+      // would pass this, because something is paired. The strict form must warn anyway.
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.accounts")]
+         public partial class AccountTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+
+         [Table("public.documents")]
+         public partial class DocumentTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
+            [PrimaryKey]
+            [Generated]
+            public long DocumentId { get; set; }
+
+            public long OwnerId { get; set; }
+
+            [Relation(nameof(OwnerId))]
+            public AccountTable? Owner { get; set; }
+         }
+         """);
+
+      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0027").Subject;
+
+      diagnostic.Severity.Should().Be(DiagnosticSeverity.Warning);
+      diagnostic.GetMessage().Should().Contain("Owner").And.Contain("AccountId");
+   }
+
+   [Fact]
+   public void RelationToOneRow_DeclaringTableWithNoTenancyColumnAtAll_ReportsPGSQL0027()
+   {
+      // No property on the declaring table carries Tenancy = true, so whatever is paired against the target's
+      // tenancy column falls out of the rule automatically: it cannot be the declaring table's own tenancy column.
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.accounts")]
+         public partial class AccountTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+
+         [Table("public.documents")]
+         public partial class DocumentTable
+         {
+            [PrimaryKey]
+            [Generated]
+            public long DocumentId { get; set; }
+
+            public long AccountId { get; set; }
+
+            [Relation(nameof(AccountId))]
+            public AccountTable? Account { get; set; }
+         }
+         """);
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0027");
+   }
+
+   [Fact]
+   public void RelationToAnUntenantedTarget_ReportsNoWarning()
+   {
+      // The target declares no tenancy column at all, so there is nothing to pin and nothing to warn about — a
+      // relation to a shared, untenanted table is a legitimate shape.
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.categories")]
+         public partial class CategoryTable
+         {
+            [PrimaryKey]
+            [Generated]
+            public long CategoryId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+
+         [Table("public.documents")]
+         public partial class DocumentTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
+            [PrimaryKey]
+            [Generated]
+            public long DocumentId { get; set; }
+
+            public long? CategoryId { get; set; }
+
+            [Relation(nameof(CategoryId))]
+            public CategoryTable? Category { get; set; }
+         }
+         """);
+
+      result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0027");
+   }
+
+   [Fact]
+   public void RelationToMany_PinnedByTheTargetsOwnTenancyColumn_ReportsNoWarning()
+   {
+      // The sides swap for a relation to many: the foreign key lives on the target, so the check reads the target's
+      // paired property against the declaring table's own tenancy column.
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         [Table("public.documents")]
+         public partial class DocumentTable
+         {
+            [PrimaryKey]
+            [Generated]
+            public long DocumentId { get; set; }
+
+            [Column(Tenancy = true)]
+            public long AccountId { get; set; }
+
+            public string Title { get; set; } = string.Empty;
+         }
+
+         [Table("public.accounts")]
+         public partial class AccountTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+
+            [Relation(nameof(DocumentTable.AccountId))]
+            public List<DocumentTable> Documents { get; set; } = new();
+         }
+         """);
+
+      result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0027");
+   }
+
+   [Fact]
+   public void RelationToMany_PairedAgainstAnUnrelatedProperty_ReportsPGSQL0027()
+   {
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         [Table("public.documents")]
+         public partial class DocumentTable
+         {
+            [PrimaryKey]
+            [Generated]
+            public long DocumentId { get; set; }
+
+            public long OwnerAccountId { get; set; }
+
+            public string Title { get; set; } = string.Empty;
+         }
+
+         [Table("public.accounts")]
+         public partial class AccountTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+
+            [Relation(nameof(DocumentTable.OwnerAccountId))]
+            public List<DocumentTable> Documents { get; set; } = new();
+         }
+         """);
+
+      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0027").Subject;
+
+      diagnostic.Severity.Should().Be(DiagnosticSeverity.Warning);
+      diagnostic.GetMessage().Should().Contain("Documents").And.Contain("AccountId");
+   }
+
+   [Fact]
+   public void RelationTenancyColumn_OutsideTheJoinedKey_ReportsExactlyOnePGSQL0027()
+   {
+      // The target's tenancy column is not part of the primary key the relation joins on, so nothing is paired
+      // against it at all — which is the same failure as pairing the wrong property, and warns exactly once.
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.tenants")]
+         public partial class TenantTable
+         {
+            [PrimaryKey]
+            [Generated]
+            public long TenantId { get; set; }
+
+            [Column(Tenancy = true)]
+            public long AccountId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+
+         [Table("public.widgets")]
+         public partial class WidgetTable
+         {
+            [PrimaryKey]
+            [Generated]
+            public long WidgetId { get; set; }
+
+            public long TenantId { get; set; }
+
+            [Relation(nameof(TenantId))]
+            public TenantTable? Tenant { get; set; }
+         }
+         """);
+
+      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0027").Subject;
+
+      diagnostic.GetMessage().Should().Contain("Tenant").And.Contain("AccountId");
+   }
+
+   [Fact]
+   public void RelationThatWarns_IsStillMirroredOntoTheDataTypeAndStillRegistered()
+   {
+      // PGSQL0027 drops nothing at all — not the relation, not the table — unlike every other relation diagnostic,
+      // which drops the relation, and unlike PGSQL0025/26, which drop the table.
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.accounts")]
+         public partial class AccountTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+
+         [Table("public.documents")]
+         public partial class DocumentTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
+            [PrimaryKey]
+            [Generated]
+            public long DocumentId { get; set; }
+
+            public long OwnerId { get; set; }
+
+            [Relation(nameof(OwnerId))]
+            public AccountTable? Owner { get; set; }
+         }
+         """);
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0027");
+
+      var documentRelations = GeneratorHarness.GeneratedSource(result, "Demo_DocumentTable.Relations.g.cs");
+      var registration = GeneratorHarness.RegistrationSource(result);
+
+      documentRelations.Should().Contain("public global::Demo.AccountData? Owner { get; set; }");
+      registration.Should().Contain("x => x.Owner");
+   }
+
+   [Fact]
+   public void EveryPGSQL0027Shape_EmitsSourceThatCompiles()
+   {
+      GeneratorHarness.AssertGeneratedSourcesCompile("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.accounts")]
+         public partial class AccountTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+
+         [Table("public.documents")]
+         public partial class DocumentTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
+            [PrimaryKey]
+            [Generated]
+            public long DocumentId { get; set; }
+
+            public long OwnerId { get; set; }
+
+            [Relation(nameof(OwnerId))]
+            public AccountTable? Owner { get; set; }
+         }
+         """);
+   }
 }

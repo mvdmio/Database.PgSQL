@@ -158,15 +158,66 @@ internal static class RelationResolver
       if (diagnostics.Count != beforeTypeChecking)
          return false;
 
+      // Tenancy is checked last and never drops the relation: a relation to a shared, untenanted table can be
+      // legitimate, and per ADR 0005 a relation-level problem drops the relation rather than the table. This drops
+      // nothing at all — PGSQL0027 is a warning, reported alongside the relation it describes.
+      var resolvedForeignKeys = foreignKeys.ToImmutable();
+      CheckTenancyPairing(model, relation, primaryKeyOwner, primaryKeys, resolvedForeignKeys, diagnostics);
+
       resolved = new ResolvedRelation(
          propertyName: relation.PropertyName,
          isToMany: relation.IsToMany,
          targetDataTypeName: QualifyTypeName(target.NamespaceName, target.DataTypeName),
-         foreignKeys: foreignKeys.ToImmutable(),
+         foreignKeys: resolvedForeignKeys,
          primaryKeys: primaryKeys
       );
 
       return true;
+   }
+
+   /// <summary>
+   ///    Warns on every tenancy column of <paramref name="primaryKeyOwner" /> that the join does not pin to a tenancy
+   ///    column on the foreign-key side. The caller has already zipped <paramref name="foreignKeys" /> positionally
+   ///    against <paramref name="primaryKeys" /> by cardinality — the foreign-key side is the declaring table for a
+   ///    relation to one row, and the target for a relation to many — so checking "the paired property's own tenancy
+   ///    claim" reads the same regardless of cardinality. A tenancy column outside the joined key warns too: the join
+   ///    never touches it at all, which pins the tenant even less than pairing it against the wrong property would.
+   /// </summary>
+   private static void CheckTenancyPairing(
+      TableDefinitionModel model,
+      RelationDeclarationModel relation,
+      TableDefinitionModel primaryKeyOwner,
+      ImmutableArray<PropertyDefinitionModel> primaryKeys,
+      ImmutableArray<PropertyDefinitionModel> foreignKeys,
+      ImmutableArray<Diagnostic>.Builder diagnostics
+   )
+   {
+      foreach (var tenancyColumn in primaryKeyOwner.TenancyColumns)
+      {
+         var position = -1;
+
+         for (var i = 0; i < primaryKeys.Length; i++)
+         {
+            if (string.Equals(primaryKeys[i].PropertyName, tenancyColumn.PropertyName, StringComparison.Ordinal))
+            {
+               position = i;
+               break;
+            }
+         }
+
+         if (position >= 0 && foreignKeys[position].IsTenancy)
+            continue;
+
+         diagnostics.Add(
+            Diagnostic.Create(
+               TableRepositoryDiagnostics.RelationCouldReachAcrossTenants,
+               relation.Location,
+               model.TableClassName,
+               relation.PropertyName,
+               tenancyColumn.PropertyName
+            )
+         );
+      }
    }
 
    private static string DescribeNames(ImmutableArray<string> names)
