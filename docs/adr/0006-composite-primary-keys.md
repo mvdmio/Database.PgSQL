@@ -4,6 +4,14 @@ status: accepted
 
 # Admit composite primary keys, and register a composite relation with a predicate rather than a key API
 
+> **The composite-relation declaration story below is absorbed into [ADR 0010](0010-relation-definitions.md).** A
+> relation now states one `Key(…)` pair per column on a `RelationDefinition<,>` class regardless of whether the key it
+> joins is single-column or composite, so a composite relation no longer reads any differently from a simple one and
+> the variadic foreign-key-name parameter this ADR introduced is gone with the attribute it lived on. This ADR stays in
+> place, pointing forward. Everything below about *why* composite keys were admitted, how the primary-key lookup is
+> named, and the nullable-key-member consequences is untouched by ADR 0010 and still describes what ships — only the
+> declaration syntax for a composite relation moved.
+
 A **Table definition** had to declare exactly one primary-key property. A consuming application could not declare a single one of its keyed tables: fifty-three of its fifty-nine have a two-column key, every one shaped `(account_id, <entity>_id)`, and the generator abandoned each table outright — no data type, no repository, no query mapping, no **Relations**. The whole **Query surface** the library exists to expose, and the OData front-end built over it, was unreachable for the application that asked for it. That composite key is the application's tenancy guarantee rather than an incidental shape: `account_id` is in every key and every foreign key, so no query can reach another tenant's row through a **Relation** by accident, and demoting it to a filtered column would trade a structural guarantee for a call-site convention.
 
 We decided to admit two or more primary-key properties per Table definition, in source declaration order as the **Key order**; to let a **Relation property** name one foreign-key property per member of the target's key, paired positionally; to give every repository one fixed-named primary-key lookup and delete instead of per-property ones; and to refuse a nullable key member.

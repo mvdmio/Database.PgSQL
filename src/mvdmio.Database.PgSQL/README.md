@@ -388,8 +388,9 @@ connection has open.
 ### Composite Primary Keys
 
 Mark two or more properties `[PrimaryKey]` and the key is composite. The order you declare them in is the key order, and
-it is contract: it fixes the parameter order of the generated lookup and delete, and the order a relation's foreign keys
-are matched against the target's key.
+it is contract: it fixes the parameter order of the generated lookup and delete. It says nothing about how a
+[relation](#relations) matches columns — a relation states each pair itself, so reordering a key's properties never
+changes what a relation resolves.
 
 ```csharp
 [Table("public.projects")]
@@ -586,8 +587,9 @@ is yours to do.
 
 ### Relations
 
-A query spans tables along a relation you declared. A relation lives on the table definition, next to the columns, as a
-property typed as the *other* table definition and annotated with the name of the foreign-key property that resolves it:
+A query spans tables along a relation you declared. A relation is declared by a class deriving from
+`RelationDefinition<TDeclaring, TTarget>`, naming both table definitions in its type arguments. The relation property
+on the table definition is typed as that class — or as a list of it, for a relation to many rows:
 
 ```csharp
 [Table("public.books")]
@@ -596,13 +598,15 @@ public partial class BookTable
    [PrimaryKey] [Generated] public long BookId { get; set; }
    public string Title { get; set; } = string.Empty;
    public long? AuthorId { get; set; }
-   public long? EditorId { get; set; }
 
-   [Relation(nameof(AuthorId))]
-   public AuthorTable? Author { get; set; }
+   private AuthorRelation? Author { get; set; }
 
-   [Relation(nameof(EditorId))]
-   public AuthorTable? Editor { get; set; }
+   private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AuthorId, y => y.AuthorId),
+      ];
+   }
 }
 
 [Table("public.authors")]
@@ -611,28 +615,49 @@ public partial class AuthorTable
    [PrimaryKey] [Generated] public long AuthorId { get; set; }
    public string Name { get; set; } = string.Empty;
 
-   [Relation(nameof(BookTable.AuthorId))]
-   public List<BookTable> Books { get; set; } = [];
+   private BooksRelation? Books { get; set; }
+
+   private class BooksRelation : RelationDefinition<AuthorTable, BookTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AuthorId, y => y.AuthorId),
+      ];
+   }
 }
 ```
 
-The property's type says everything except the foreign key:
+**Upgrading from the attribute form.** Every `[Relation(nameof(...))]` declaration stops compiling — there is one way
+to declare a relation now, not two. Converting one is mechanical: fold the property's old target type and the
+attribute's foreign-key name(s) into a nested class, and pair each one against the same target member the attribute
+used to name positionally. The old and new forms of the pair above:
 
-- Typed as the other table definition, it is a relation to **one** row, and the foreign key is the property you named on
-  *this* model. It must be nullable, because a relation is always an outer join.
-- Typed as a collection of the other table definition, it is a relation to **many** rows, and the foreign key is the
-  property you named on the *target* model. `List<T>`, `IList<T>`, `ICollection<T>`, `IEnumerable<T>`,
-  `IReadOnlyList<T>` and `IReadOnlyCollection<T>` are accepted; the generated data type always mirrors it as a
-  `List<T>` initialized to empty.
+```csharp
+// Before: the property's type named the target, the attribute named the foreign key.
+[Relation(nameof(AuthorId))]
+public AuthorTable? Author { get; set; }
 
-The other end is always the target's primary key, so there is nothing else to state. Use `nameof` so renaming the
-foreign-key property is a build error rather than a wrong join. Each direction is declared on its own: a relation to a
-parent does not oblige the parent to declare the collection back. Two relations may point at the same target — a
-`CreatedByUserId` and an `UpdatedByUserId` both reaching the user table — and a relation may target its own table, in
-either direction, which is how a hierarchy works. Many-to-many needs no new concept: declare a relation to the join
-table, which is a table definition like any other, and a relation from there to the far side.
+// After: a class names both tables and states the pair itself.
+private AuthorRelation? Author { get; set; }
 
-When the target's primary key is composite, name one foreign-key property per key member, in the key's declaration order:
+private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+{
+   public override IReadOnlyList<RelationKey> Keys => [
+      Key(x => x.AuthorId, y => y.AuthorId),
+   ];
+}
+```
+
+A relation property no longer has to be `public` — only that it has a getter and a setter — because a nested
+definition class more naturally stays `private`, and a `public` property cannot be typed as a less accessible nested
+class (`CS0053`). Keep the property and its nested definition class at matching accessibility.
+
+**Stating the pairs.** `Keys` states one `Key(declaringProperty, targetProperty)` pair per joined column, built from a
+`protected static` helper on the base class. Each side is a direct property reference — `x => x.Column` — so a rename
+is a build error rather than a silently wrong join, and a pair whose two sides hold different types does not compile.
+`Key` has two overloads: matching types on both sides, and a nullable left side against a non-nullable right — the
+ordinary outer-join shape, where a foreign key may hold null but the key it targets never does. The order the pairs
+are listed in carries no meaning; they are combined with `&&`, so reordering them changes nothing. A composite key
+needs no different shape from a single-column one — one `Key(…)` per column, in any order:
 
 ```csharp
 [Table("public.tasks")]
@@ -642,26 +667,111 @@ public partial class TaskTable
    [PrimaryKey] public long TaskId { get; set; }
    public long ProjectId { get; set; }
 
-   // Paired positionally against ProjectTable's (AccountId, ProjectId).
-   [Relation(nameof(AccountId), nameof(ProjectId))]
-   public ProjectTable? Project { get; set; }
+   private ProjectRelation? Project { get; set; }
+
+   private class ProjectRelation : RelationDefinition<TaskTable, ProjectTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AccountId, y => y.AccountId),
+         Key(x => x.ProjectId, y => y.ProjectId),
+      ];
+   }
 }
 ```
 
-Naming a different number of foreign keys than the target's key has members is a build error, `PGSQL0019`, and a pair
-whose types cannot match is `PGSQL0013`, which names the position as well as both properties. A foreign key does not have
-to be part of the declaring table's own key, and it is fine for it to overlap: a tenancy column appearing on both sides
-of the join is the ordinary case. A foreign key may be nullable against a non-nullable key member — that is what makes
-the relation an outer join, and it still renders as plain equality.
+A foreign key does not have to be part of the declaring table's own key, and it is fine for it to overlap: a tenancy
+column appearing on both sides of the join is the ordinary case. Stating no pairs at all is a build error, `PGSQL0029`
+— it would register a cross join, and there is no sensible default. Either side of a pair not being a direct property
+reference on its own table is `PGSQL0030`.
 
-Everything else costs nothing extra. Filtering, ordering, existence predicates and `Include` all read exactly as they do
-through a single-column relation, and the generated join constrains every key column so the database can use a composite
-index on it.
+**The cardinality and uniqueness claim.** Typed as the definition class itself, a relation reaches one row, and the
+property must be nullable — a relation is always an outer join. Typed as a collection of it — `List<T>`, `IList<T>`,
+`ICollection<T>`, `IEnumerable<T>`, `IReadOnlyList<T>` and `IReadOnlyCollection<T>` are accepted — it reaches many
+rows; the generated data type always mirrors it as a `List<T>` initialized to empty. A relation to one row is a claim
+that its pairs reach at most one target row, exactly like every other claim a table definition makes: the target-side
+columns must contain something the target claims unique — its primary key, or a `[Unique]` column; a superset of a
+unique set still counts. Pairing against nothing the target claims unique is a build *warning*, `PGSQL0031`, not an
+error — a relation whose condition happens to make the pairing unique still builds, because the check reads the pairs
+and cannot see the condition.
+
+Each direction is declared on its own: a relation to a parent does not oblige the parent to declare the collection
+back. Two relations may point at the same target — a `CreatedByUserId` and an `UpdatedByUserId` both reaching the user
+table — and a relation may target its own table, in either direction, which is how a hierarchy works. Many-to-many
+needs no new concept: declare a relation to the join table, which is a table definition like any other, and a relation
+from there to the far side.
+
+**The condition.** A definition class may override `Condition` — an ordinary `Expression<Func<TDeclaring, TTarget,
+bool>>` over the two rows, checked by the compiler exactly where it is written. It narrows both filtering and
+materializing, because it belongs to the relation itself rather than to any one query. This is what lets two relations
+pair the *same* columns and still reach different rows — the shape a table holding a kind column beside an identifier
+needs, without a real column per kind:
+
+```csharp
+public enum LinkTargetKind { Person, Asset }
+
+[Table("public.links")]
+public partial class LinkTable
+{
+   [PrimaryKey] [Generated] public long LinkId { get; set; }
+   public LinkTargetKind Kind { get; set; }
+   public long TargetId { get; set; }
+
+   private PersonRelation? Person { get; set; }
+   private AssetRelation? Asset { get; set; }
+
+   private class PersonRelation : RelationDefinition<LinkTable, PersonTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.TargetId, y => y.PersonId),
+      ];
+
+      public override Expression<Func<LinkTable, PersonTable, bool>> Condition
+         => (link, person) => link.Kind == LinkTargetKind.Person;
+   }
+
+   private class AssetRelation : RelationDefinition<LinkTable, AssetTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.TargetId, y => y.AssetId),
+      ];
+
+      public override Expression<Func<LinkTable, AssetTable, bool>> Condition
+         => (link, asset) => link.Kind == LinkTargetKind.Asset;
+   }
+}
+```
+
+`Person` and `Asset` both pair the same `TargetId` column, and each resolves only the rows its own condition matches
+— reaching through one never returns the other kind's row. Omitting `Condition` costs nothing extra: it defaults to
+no condition, so an ordinary relation is unaffected. A condition may reach through another relation property — it is
+a member like any other — but it is policed only at the two parameters themselves: a member touched directly on
+either one must exist on that table's generated data type, or the build fails on your own line (`PGSQL0032`), rather
+than on a compile error inside generated source you never wrote. Anything beyond a direct member access — a method
+call the query surface may not translate, for instance — passes through unchecked, because refusing it here would
+reject expressions the library has no test for.
+
+If one relation on a table pairs the same columns as another that carries a condition, but states no condition of its
+own, that is a build warning, `PGSQL0034` — it may silently resolve every kind the conditioned ones distinguish
+between, which usually means a condition was forgotten rather than genuinely meant to be absent.
+
+Both directions of a polymorphic relation are declared the same way: `PersonTable` and `AssetTable` each get their own
+relation back to `LinkTable`, with the matching condition, exactly as any other reverse relation is declared.
+
+`[Relation]` may still be written on a relation property, purely to spell the intent out — it changes nothing and is
+never required. Writing it on a property whose type is not a relation definition (or a supported collection of one)
+is a build error, `PGSQL0033`, so the attribute can never say something untrue.
+
+Everything else costs nothing extra. Filtering, ordering, existence predicates and `Include` all read exactly as they
+did before, and the generated join constrains every key column plus the condition, joined with `&&`, so the database
+can use a composite index on the columns.
 
 A relation is not a column. It gets no column mapping, no `GetBy…`/`DeleteBy…` pair, and no place in the create and
-update commands, which stay as flat as the table they write to. It changes no SQL on `db.Dapper`, and it emits no DDL:
-the annotation is a claim about a foreign-key column that already exists, and nothing checks it against the real
-schema — name the wrong property and you get a wrong join at runtime, exactly as with a wrong `[Column]` name.
+update commands, which stay as flat as the table they write to. It changes no SQL on `db.Dapper`, and **it emits no
+DDL**: a relation definition is a claim about columns that already exist, and nothing checks it against the real
+schema — pair against the wrong property and you get a wrong join at runtime, exactly as with a wrong `[Column]` name.
+If you want the database itself to refuse a link pointing at a row that does not exist, you still write the generated
+column and its foreign key constraint in a migration by hand; this feature is about traversal in C#, not about what
+exists in PostgreSQL.
 
 #### Filtering and ordering across a relation
 
@@ -757,7 +867,7 @@ fake, for instance — they throw `NotSupportedException` rather than quietly lo
 | `[Unique]`      | Adds a `GetBy…`/`DeleteBy…` pair for that property                                                     |
 | `[Column("…")]` | States facts about the column: its name, whether it can hold null (`Null`, `NotNull`), how it is stored (`StoredAs`), and whether it is a tenancy column (`Tenancy`). Without a name, the property name is converted to `snake_case` |
 | `[Generated]`   | The database produces the value (identity, computed, or defaulted): it is read back but never written   |
-| `[Relation("…")]` | Marks the property as a relation to another table definition rather than a column, naming one foreign-key property per member of the target's primary key |
+| `[Relation]` | Optional: spells out that a property typed as a `RelationDefinition<,>` (or a collection of one) is a relation. Writing it on any other property fails the build |
 
 The `snake_case` conversion inserts an underscore before every uppercase letter, so `UserId` becomes `user_id` but
 `UserID` becomes `user_i_d` — name the column explicitly with `[Column]` when the property contains an acronym.
@@ -933,10 +1043,14 @@ Two diagnostics abandon the table when the declaration cannot be honoured, the w
 
 A third warns rather than refusing anything:
 
-- **`PGSQL0027`** — a relation could reach across tenants. It fires unless the foreign-key property paired against the
-  target's tenancy column is the declaring table's own tenancy column — which also covers a declaring table with no
-  tenancy column at all. It drops nothing: the relation still generates, one warning per unpaired tenancy column,
-  naming the relation property.
+- **`PGSQL0027`** — a relation could reach across tenants. Checked pair by pair and direction-free: a tenancy column on
+  either table's side of a joined pair must be paired with a tenancy column on the other side, and a tenancy column
+  that sits outside every pair entirely is paired with nothing, which is the same failure. This covers both directions
+  — a relation whose target is wholly untenanted still warns for the *declaring* table's own unpinned tenancy column.
+  It drops nothing: the relation still generates, one warning per unpaired tenancy column, naming the relation
+  property. A conditioned relation pairing the tenancy column on both sides reports nothing, and so does a relation
+  whose target's whole primary key is the tenancy column, reached by that one pair plus a condition — the per-tenant
+  singleton shape.
 
 ### Requirements
 
@@ -954,9 +1068,10 @@ The generator reports a build error when a table definition does not satisfy the
 - No `[Column]` states a storage claim that cannot be honoured for the property's type
 - No two properties map to the same column, no two `[Unique]` properties yield the same method name, and no `[Unique]`
   property is named so that its lookup would collide with `GetByPrimaryKeyAsync`
-- A `[Relation]` property is a table definition or a supported collection of one, is nullable when it points at one row,
-  carries no `[Column]`, and names as many foreign-key properties as the target's primary key has members, each of which
-  exists and can join the member it is paired with
+- A relation property is a class deriving `RelationDefinition<,>` or a supported collection of one, is nullable when it
+  points at one row, carries no `[Column]`, states at least one key pair, and each pair is a direct property reference
+  on both sides. The definition class's `TDeclaring` type argument must be the table definition the property is
+  declared on, and its `TTarget` must be a `[Table]` class in the same compilation
 
 A tenancy column's `required` property lands in the consumer's own compilation, not this package's, so a project
 declaring one needs **C# 11 or newer**. Every framework this package targets defaults above that, but a consumer
@@ -1216,14 +1331,11 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0009` | Error    | A property is not a public instance property with a public getter and a setter of any accessibility |
 | `PGSQL0010` | Error    | A generated name is already taken — by a non-partial type in the same namespace, or by the primary key's own lookup |
 | `PGSQL0011` | Warning  | A property type cannot be mapped by the query surface — register a conversion       |
-| `PGSQL0012` | Error    | A `[Relation]` names a foreign-key property that does not exist — once per name       |
-| `PGSQL0013` | Error    | A `[Relation]` foreign key cannot match the key member it is paired with, at a named position |
-| `PGSQL0014` | Error    | A `[Relation]` target is not a `[Table]` class in the same compilation               |
-| `PGSQL0015` | Error    | A `[Relation]` to one row is not nullable                                            |
-| `PGSQL0016` | Error    | A `[Relation]` property type is neither a table definition nor a supported collection of one |
-| `PGSQL0017` | Error    | A `[Relation]` property is not a public instance property with a public getter and setter |
+| `PGSQL0014` | Error    | A relation's target is not a `[Table]` class in the same compilation                |
+| `PGSQL0015` | Error    | A relation to one row is not nullable                                                |
+| `PGSQL0016` | Error    | A relation property's type is neither a relation definition nor a supported collection of one |
+| `PGSQL0017` | Error    | A relation property is not an instance property with a getter and a setter, or is an indexer |
 | `PGSQL0018` | Error    | A property carries both `[Relation]` and `[Column]`                                  |
-| `PGSQL0019` | Error    | A `[Relation]` names a different number of foreign keys than the target's primary key has members |
 | `PGSQL0020` | Error    | A `[PrimaryKey]` property is nullable                                                |
 | `PGSQL0021` | Error    | A `[Column]` states a nullability that contradicts the property's type, its key membership, or itself |
 | `PGSQL0022` | Error    | A `[Column]` states a `StoredAs` that cannot be honoured for the property's type      |
@@ -1231,20 +1343,32 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0024` | Warning  | A `[Column]`'s `StoredAs` has no query surface equivalent — commands use it, `Query()` does not |
 | `PGSQL0025` | Error    | A tenancy column is nullable                                                          |
 | `PGSQL0026` | Error    | A tenancy column is `[Generated]`                                                     |
-| `PGSQL0027` | Warning  | A `[Relation]` could reach across tenants                                            |
+| `PGSQL0027` | Warning  | A relation could reach across tenants                                                |
+| `PGSQL0028` | Error    | A relation definition's `TDeclaring` type argument is not the table the property is declared on |
+| `PGSQL0029` | Error    | A relation's `Keys` override states no pairs                                          |
+| `PGSQL0030` | Error    | Either side of a relation key pair is not a direct property reference                 |
+| `PGSQL0031` | Warning  | A relation to one row pairs against nothing the target claims unique                  |
+| `PGSQL0032` | Error    | A relation condition touches a member with no counterpart on the generated data type   |
+| `PGSQL0033` | Error    | `[Relation]` sits on a property whose type is not a relation definition               |
+| `PGSQL0034` | Warning  | A relation pairs the same columns as another that carries a condition, but states none itself |
+| `PGSQL0035` | Error    | A relation pairs against a target column that is `[Unique]` but nullable              |
 
 `PGSQL0001` is a warning rather than an error because you can implement `Identifier` and `Name` yourself instead of
 following the naming convention. If you do neither, a misnamed migration class throws the moment those properties are
 read. `PGSQL0011` is a warning because the rest of the repository still works — only `Query()` cannot handle that
 column until a conversion is registered. `PGSQL0024` is a warning for the same reason, one surface down: commands honour
-the claim and only `Query()` cannot. `PGSQL0027` is a warning too, and drops nothing at all — the relation it names
-still generates; it flags a hole in the tenancy guarantee rather than a malformed declaration. `PGSQL0012` through `PGSQL0019` drop only
+the claim and only `Query()` cannot. `PGSQL0027`, `PGSQL0031` and `PGSQL0034` are warnings too, and drop nothing at
+all — the relation they name still generates; each flags something worth a second look rather than a malformed
+declaration. `PGSQL0014` through `PGSQL0018` and `PGSQL0028` through `PGSQL0035` drop only
 the relation they describe and let the rest of the table generate, so the message you read is the mistake you made
 rather than a wall of type-not-found errors from everything that names the missing data type. `PGSQL0021` through
 `PGSQL0024` abandon nothing at all either: a contradictory nullability claim, a refused storage claim and an
 unwritable property type all leave every generated signature well-defined. Everything else — including `PGSQL0020`,
 `PGSQL0025` and `PGSQL0026` — abandons the table, because a malformed key or a malformed tenancy declaration leaves
 every generated signature undefined rather than one relation.
+
+`PGSQL0012`, `PGSQL0013` and `PGSQL0019` — the old attribute-argument form's foreign-key-name and arity checks — are
+retired along with that form. Their ids are not reused.
 
 `PGSQL0023` exists rather than being folded into `PGSQL0011` because that warning's advice — register a conversion —
 cannot help: there is no PostgreSQL type to convert to.

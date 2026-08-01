@@ -4,6 +4,14 @@ status: accepted
 
 # Declare table relations on a relation property and compose eager loading at execution time
 
+> **The declaration half of this decision is superseded by [ADR 0010](0010-relation-definitions.md).** A relation's
+> target, cardinality and foreign key are no longer stated by a property's type plus an attribute argument — they are
+> stated by a class deriving `RelationDefinition<TDeclaring, TTarget>`. This ADR stays in place, pointing forward, the
+> same way it kept ADR 0004's superseded consequence in place: the record that a relation property annotated with a
+> foreign-key name was reasoned, not accidental, is worth keeping. Everything below this decided about how relations
+> pair, how eager loading composes and executes, and the blast radius of an invalid relation is untouched by ADR 0010
+> and still describes what ships.
+
 A **Table definition** described one table in isolation, so the **Query surface** could not span tables and ADR 0004 recorded that as a deliberate deferral: the provider expresses joins perfectly well, but the generator had no **Relation** model to generate them from. We decided to introduce that model as a **Relation property** — a member on the Table definition typed as the *other* Table definition, annotated with the name of the foreign-key property that resolves it — and to expose it on the Query surface twice over: reaching through it in a predicate needs no new API at all, while materializing the related rows is an explicit, opt-in operator. That operator records its intent as the library's own expression nodes and is translated into provider calls at execution time rather than being forwarded to the provider when it is composed.
 
 Two facts constrained the design before any preference could apply. A source generator analyses the pre-generation compilation and cannot see its own output, so a Relation property can only be typed as the other Table definition and never as that table's generated data type. And the far end of every Relation is always the target's declared primary key, so the foreign key is the only thing a declaration ever needs to state — one property per member of that key, which for a single-column key is one name and is what the provider's key-expression association overloads take. [ADR 0006](0006-composite-primary-keys.md) admits composite keys and registers those relations through the provider's predicate overload instead; the declaration model here is unchanged by it.
