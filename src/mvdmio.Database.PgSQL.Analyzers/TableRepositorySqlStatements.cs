@@ -31,28 +31,23 @@ internal static class TableRepositorySqlStatements
    /// </summary>
    public static string BuildGetAllSql(TableDefinitionModel model)
    {
-      if (model.TenancyColumns.IsEmpty)
+      var constraint = model.TenancyConstraint;
+      if (constraint.IsEmpty)
          return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}";
 
-      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildTenancyPredicate(model)}";
-   }
-
-   /// <summary>Every tenancy column constrained, bound by the parameter name the caller supplies it under.</summary>
-   private static string BuildTenancyPredicate(TableDefinitionModel model)
-   {
-      return string.Join(" AND ", model.TenancyColumns.Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{x.ParameterName}"));
+      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildPredicate(constraint, x => x.ParameterName)}";
    }
 
    /// <summary>The select the lookup named after <paramref name="property" /> issues.</summary>
    public static string BuildGetBySql(TableDefinitionModel model, PropertyDefinitionModel property)
    {
-      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildLookupPredicate(model, property)}";
+      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildPredicate(model.LookupConstraint(property), x => x.ParameterName)}";
    }
 
    /// <summary>The select <c>GetByPrimaryKeyAsync</c> issues.</summary>
    public static string BuildGetByPrimaryKeySql(TableDefinitionModel model)
    {
-      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildKeyAndTenancyPredicate(model, x => x.ParameterName)}";
+      return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildPredicate(model.PrimaryKeyConstraint, x => x.ParameterName)}";
    }
 
    /// <summary>
@@ -63,50 +58,35 @@ internal static class TableRepositorySqlStatements
    public static string BuildUpdateSql(TableDefinitionModel model)
    {
       var assignments = string.Join(", ", model.MutableUpdateProperties.Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{x.PropertyName}"));
-      return $"UPDATE {FullyQualifiedTableName(model)}\nSET {assignments}\nWHERE {BuildKeyAndTenancyPredicate(model, x => x.PropertyName)}\nRETURNING {BuildReturningList(model)}";
+      return $"UPDATE {FullyQualifiedTableName(model)}\nSET {assignments}\nWHERE {BuildPredicate(model.PrimaryKeyConstraint, x => x.PropertyName)}\nRETURNING {BuildReturningList(model)}";
    }
 
    /// <summary>The delete named after <paramref name="property" />, which addresses its row the way that lookup does.</summary>
    public static string BuildDeleteBySql(TableDefinitionModel model, PropertyDefinitionModel property)
    {
-      return $"DELETE FROM {FullyQualifiedTableName(model)}\nWHERE {BuildLookupPredicate(model, property)}";
+      return $"DELETE FROM {FullyQualifiedTableName(model)}\nWHERE {BuildPredicate(model.LookupConstraint(property), x => x.ParameterName)}";
    }
 
    /// <summary>The delete <c>DeleteByPrimaryKeyAsync</c> issues.</summary>
    public static string BuildDeleteByPrimaryKeySql(TableDefinitionModel model)
    {
-      return $"DELETE FROM {FullyQualifiedTableName(model)}\nWHERE {BuildKeyAndTenancyPredicate(model, x => x.ParameterName)}";
+      return $"DELETE FROM {FullyQualifiedTableName(model)}\nWHERE {BuildPredicate(model.PrimaryKeyConstraint, x => x.ParameterName)}";
    }
 
    /// <summary>
-   ///    Every key member constrained, plus every tenancy column not already a key member — used by the two members
-   ///    that address a row by its primary key alone, and by the update statement's <c>WHERE</c> clause. Where every
-   ///    tenancy column is already a key member, this constrains exactly the key, so a table safe by construction gains
-   ///    no predicate here.
+   ///    Every column <paramref name="constraint" /> names, constrained and joined with <c>AND</c>, in the order the
+   ///    statement names them: what the member addresses its row by first, then the tenancy columns it adds. Which
+   ///    columns those are is the model's question, so no statement here restates it.
    /// </summary>
    /// <remarks>
-   ///    <paramref name="bindingName" /> is which name the statement binds each member by. A lookup and a delete take
+   ///    <paramref name="bindingName" /> is which name the statement binds each column by. A lookup and a delete take
    ///    their values as method parameters and so bind by <see cref="PropertyDefinitionModel.ParameterName" />; an update
    ///    takes them off a command object alongside its other columns and binds by
    ///    <see cref="PropertyDefinitionModel.PropertyName" /> like the rest of that statement.
    /// </remarks>
-   private static string BuildKeyAndTenancyPredicate(TableDefinitionModel model, Func<PropertyDefinitionModel, string> bindingName)
+   private static string BuildPredicate(ConstrainedColumns constraint, Func<PropertyDefinitionModel, string> bindingName)
    {
-      var predicates = model.PrimaryKeys.Concat(model.TenancyColumnsOutsideKey).Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{bindingName(x)}");
-      return string.Join(" AND ", predicates);
-   }
-
-   /// <summary>
-   ///    A <c>[Unique]</c> column constrained, plus every tenancy column other than the one being looked up — the
-   ///    lookup and delete a <c>[Unique]</c> property gets. Where the property itself carries <c>Tenancy = true</c>,
-   ///    it is excluded from the tenancy half so its value is constrained once rather than twice.
-   /// </summary>
-   private static string BuildLookupPredicate(TableDefinitionModel model, PropertyDefinitionModel property)
-   {
-      var predicates = new[] { $"{QuoteIdentifier(property.ColumnName)} = :{property.ParameterName}" }
-         .Concat(model.TenancyColumnsExcept(property).Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{x.ParameterName}"));
-
-      return string.Join(" AND ", predicates);
+      return string.Join(" AND ", constraint.InStatementOrder.Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{bindingName(x)}"));
    }
 
    private static string BuildSelectList(TableDefinitionModel model)

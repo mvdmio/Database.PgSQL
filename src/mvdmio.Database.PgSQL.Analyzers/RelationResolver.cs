@@ -194,16 +194,9 @@ internal static class RelationResolver
    {
       foreach (var tenancyColumn in primaryKeyOwner.TenancyColumns)
       {
-         var position = -1;
-
-         for (var i = 0; i < primaryKeys.Length; i++)
-         {
-            if (string.Equals(primaryKeys[i].PropertyName, tenancyColumn.PropertyName, StringComparison.Ordinal))
-            {
-               position = i;
-               break;
-            }
-         }
+         // Both sequences are filtered from the one property list the parser built for this table, so the same column
+         // is the same instance in each and the key position falls out of an identity search.
+         var position = primaryKeys.IndexOf(tenancyColumn);
 
          if (position >= 0 && foreignKeys[position].IsTenancy)
             continue;

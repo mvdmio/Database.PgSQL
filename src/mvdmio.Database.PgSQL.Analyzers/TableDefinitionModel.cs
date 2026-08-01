@@ -78,7 +78,7 @@ internal sealed class TableDefinitionModel
    ///    columns the statement only addresses its row by — the <c>WHERE</c> clause needs their values as much as the
    ///    <c>SET</c> list needs the rest.
    /// </summary>
-   public ImmutableArray<PropertyDefinitionModel> UpdateProperties => PrimaryKeys.AddRange(TenancyColumnsOutsideKey).AddRange(MutableUpdateProperties);
+   public ImmutableArray<PropertyDefinitionModel> UpdateProperties => PrimaryKeyConstraint.InStatementOrder.Concat(MutableUpdateProperties).ToImmutableArray();
 
    /// <summary>
    ///    The <c>[Unique]</c> properties, each of which gets a lookup and a delete named after itself. The primary key is
@@ -94,30 +94,81 @@ internal sealed class TableDefinitionModel
    public ImmutableArray<PropertyDefinitionModel> TenancyColumns { get; }
 
    /// <summary>
-   ///    The tenancy columns not already a primary-key member, in declaration order. Empty where every tenancy column
-   ///    is part of the key, which is what leaves a table safe by construction with the surface it has today.
+   ///    What <c>GetByPrimaryKeyAsync</c>, <c>DeleteByPrimaryKeyAsync</c> and the update statement's <c>WHERE</c>
+   ///    clause constrain: the key, plus every tenancy column not already among it. Where every tenancy column is a key
+   ///    member the tenancy half is empty, which is what leaves a table safe by construction with the surface it has
+   ///    today.
    /// </summary>
-   /// <remarks>
-   ///    One home for a question the generated parameter list and the generated SQL both ask. Two answers could drift,
-   ///    and a signature taking a tenant the statement never constrains would compile.
-   /// </remarks>
-   public IEnumerable<PropertyDefinitionModel> TenancyColumnsOutsideKey => TenancyColumns.Where(x => !PrimaryKeys.Any(key => ReferenceEquals(key, x)));
+   public ConstrainedColumns PrimaryKeyConstraint => new(PrimaryKeys, TenancyColumnsOutsideKey);
 
    /// <summary>
-   ///    The tenancy columns other than <paramref name="property" />, in declaration order — what a <c>[Unique]</c>
-   ///    lookup or delete constrains on top of the property it is named after. Where that property carries
-   ///    <c>Tenancy = true</c> itself, this drops it, so its value is taken and constrained once rather than twice.
+   ///    What the <c>[Unique]</c> lookup and delete named after <paramref name="property" /> constrain: that property,
+   ///    plus every tenancy column other than it. Where the property carries <c>Tenancy = true</c> itself the tenancy
+   ///    half drops it, so its value is taken and constrained once rather than twice.
    /// </summary>
-   public IEnumerable<PropertyDefinitionModel> TenancyColumnsExcept(PropertyDefinitionModel property)
+   public ConstrainedColumns LookupConstraint(PropertyDefinitionModel property)
    {
-      return TenancyColumns.Where(x => !ReferenceEquals(x, property));
+      return new ConstrainedColumns([property], TenancyColumns.Where(x => !ReferenceEquals(x, property)));
    }
+
+   /// <summary>
+   ///    What <c>GetAllAsync</c> and <c>Query</c> constrain: the tenancy columns and nothing else. Empty on a table
+   ///    that declares none, which is the one member that used to have no predicate to forget.
+   /// </summary>
+   public ConstrainedColumns TenancyConstraint => new([], TenancyColumns);
+
+   /// <summary>
+   ///    The tenancy columns not already a primary-key member, in declaration order. Kept private: what the rest of the
+   ///    generator asks for is a whole <see cref="ConstrainedColumns" />, not the ingredient it is mixed from.
+   /// </summary>
+   private IEnumerable<PropertyDefinitionModel> TenancyColumnsOutsideKey => TenancyColumns.Where(x => !PrimaryKeys.Any(key => ReferenceEquals(key, x)));
 
    /// <summary>
    ///    The relations declared on this table, as declared. Whether each one resolves is decided once every table has
    ///    been parsed — see <see cref="RelationResolver" />.
    /// </summary>
    public ImmutableArray<RelationDeclarationModel> Relations { get; }
+}
+
+/// <summary>
+///    The columns one generated member constrains, split into the columns it addresses its row by and the tenancy
+///    columns it adds on top of them.
+/// </summary>
+/// <remarks>
+///    One answer to a question the generated signature, the generated SQL and the generated parameter dictionary all
+///    ask, so the three cannot come to disagree — a signature taking a tenant the statement never constrains would
+///    otherwise compile. They read that answer in two orders, and the difference is deliberate: a caller sees the
+///    tenancy half first on every member, while the statement names what it addresses the row by first. Both orders
+///    come off the same pair of sequences, so only membership has to be decided once.
+/// </remarks>
+internal sealed class ConstrainedColumns
+{
+   public ConstrainedColumns(IEnumerable<PropertyDefinitionModel> subject, IEnumerable<PropertyDefinitionModel> tenancy)
+   {
+      Subject = subject.ToImmutableArray();
+      Tenancy = tenancy.ToImmutableArray();
+   }
+
+   /// <summary>
+   ///    What the member addresses its row by: the primary key, the <c>[Unique]</c> column it is named after, or
+   ///    nothing at all for the two members that constrain only the tenant.
+   /// </summary>
+   public ImmutableArray<PropertyDefinitionModel> Subject { get; }
+
+   /// <summary>The tenancy columns constrained on top of <see cref="Subject" />, in declaration order.</summary>
+   public ImmutableArray<PropertyDefinitionModel> Tenancy { get; }
+
+   /// <summary>Whether the member constrains nothing, which only an untenanted table's <c>GetAllAsync</c> and <c>Query</c> do.</summary>
+   public bool IsEmpty => Subject.IsEmpty && Tenancy.IsEmpty;
+
+   /// <summary>Tenancy first and then the subject — the order every generated signature takes these values in.</summary>
+   public IEnumerable<PropertyDefinitionModel> InParameterOrder => Tenancy.Concat(Subject);
+
+   /// <summary>
+   ///    The subject first and then tenancy — the order the generated statement names them in, which its parameter
+   ///    dictionary follows so the two read alike.
+   /// </summary>
+   public IEnumerable<PropertyDefinitionModel> InStatementOrder => Subject.Concat(Tenancy);
 }
 
 /// <summary>

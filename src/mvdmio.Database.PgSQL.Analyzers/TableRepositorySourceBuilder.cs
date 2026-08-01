@@ -44,11 +44,11 @@ internal static class TableRepositorySourceBuilder
       }
 
       builder.AppendLine();
-      AppendDto(builder, model.Accessibility, model.DataTypeName, model.DataProperties, keepsGeneratedColumnsReadOnly: true, mirrorsTenancyAsRequired: false);
+      AppendDto(builder, model.Accessibility, model.DataTypeName, model.DataProperties, DtoKind.Data);
       builder.AppendLine();
-      AppendDto(builder, model.Accessibility, model.CreateCommandTypeName, model.CreateProperties, keepsGeneratedColumnsReadOnly: false, mirrorsTenancyAsRequired: true);
+      AppendDto(builder, model.Accessibility, model.CreateCommandTypeName, model.CreateProperties, DtoKind.Command);
       builder.AppendLine();
-      AppendDto(builder, model.Accessibility, model.UpdateCommandTypeName, model.UpdateProperties, keepsGeneratedColumnsReadOnly: false, mirrorsTenancyAsRequired: true);
+      AppendDto(builder, model.Accessibility, model.UpdateCommandTypeName, model.UpdateProperties, DtoKind.Command);
       builder.AppendLine();
       AppendRepositoryInterface(builder, model);
       builder.AppendLine();
@@ -57,25 +57,38 @@ internal static class TableRepositorySourceBuilder
       return builder.ToString();
    }
 
+   /// <summary>
+   ///    Which of the three generated types is being emitted, which is the whole of what differs between them. The two
+   ///    rules below both read off it, so a type cannot be given one half of a kind's behaviour and not the other.
+   /// </summary>
+   private enum DtoKind
+   {
+      /// <summary>
+      ///    The type Dapper materializes a row into, replacing a hand-written row record. A caller may not assign a
+      ///    column the database populates, and nothing on it can be <c>required</c>, because Dapper builds it through a
+      ///    parameterless constructor.
+      /// </summary>
+      Data,
+
+      /// <summary>
+      ///    A create or update command a caller builds by hand. Every column stays assignable — an update addresses its
+      ///    row by a primary key that may itself be generated, so the caller has to be able to supply it — and the
+      ///    tenancy columns are <c>required</c>.
+      /// </summary>
+      Command
+   }
+
    /// <remarks>
-   ///    <paramref name="keepsGeneratedColumnsReadOnly" /> is what tells the data type from the command types. The data
-   ///    type sets it, so the type replacing a hand-written row record does not let a caller assign a column the database
-   ///    populates. A command type does not: an update addresses its row by a primary key that may itself be generated, so
-   ///    a caller has to be able to supply it.
+   ///    <c>required</c> and <c>init</c> are never mirrored, whatever the table definition declares — these types have
+   ///    no constructor that could satisfy <c>required</c>, and every column but a generated one has to stay assignable
+   ///    for a command to be built. A definition pairing <c>required … { get; init; }</c> with
+   ///    <c>{ get; private set; }</c> therefore keeps the half that guards a database-populated column and loses the
+   ///    other.
    ///    <para>
-   ///       <c>required</c> and <c>init</c> are never mirrored, whatever the table definition declares — these types have
-   ///       no constructor that could satisfy <c>required</c>, and every column but a generated one has to stay assignable
-   ///       for a command to be built. A definition pairing <c>required … { get; init; }</c> with
-   ///       <c>{ get; private set; }</c> therefore keeps the half that guards a database-populated column and loses the
-   ///       other.
-   ///    </para>
-   ///    <para>
-   ///       The one exception is a tenancy column, on <paramref name="mirrorsTenancyAsRequired" />. It is not mirrored
-   ///       from anything the table definition declares about the column itself — <c>[Column(Tenancy = true)]</c> carries
-   ///       no <c>required</c> or <c>init</c> claim of its own — but added, so a construction site that omits the tenant
-   ///       fails to build rather than writing a row under a default value. Only the create and update command types set
-   ///       it; the data type never does, because Dapper materializes it through a parameterless constructor that cannot
-   ///       satisfy <c>required</c>.
+   ///       The one exception is a tenancy column on a <see cref="DtoKind.Command" />. It is not mirrored from anything
+   ///       the table definition declares about the column itself — <c>[Column(Tenancy = true)]</c> carries no
+   ///       <c>required</c> or <c>init</c> claim of its own — but added, so a construction site that omits the tenant
+   ///       fails to build rather than writing a row under a default value.
    ///    </para>
    /// </remarks>
    private static void AppendDto(
@@ -83,8 +96,7 @@ internal static class TableRepositorySourceBuilder
       string accessibility,
       string typeName,
       ImmutableArray<PropertyDefinitionModel> properties,
-      bool keepsGeneratedColumnsReadOnly,
-      bool mirrorsTenancyAsRequired
+      DtoKind kind
    )
    {
       builder.AppendLine($"{accessibility} partial class {typeName}");
@@ -92,8 +104,8 @@ internal static class TableRepositorySourceBuilder
 
       foreach (var property in properties)
       {
-         var setter = keepsGeneratedColumnsReadOnly && property.IsGenerated ? "private set;" : "set;";
-         var requiredKeyword = mirrorsTenancyAsRequired && property.IsTenancy ? "required " : string.Empty;
+         var setter = kind is DtoKind.Data && property.IsGenerated ? "private set;" : "set;";
+         var requiredKeyword = kind is DtoKind.Command && property.IsTenancy ? "required " : string.Empty;
 
          builder.Append("   public ")
             .Append(requiredKeyword)
@@ -118,23 +130,23 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine($"{model.Accessibility} partial interface {model.RepositoryInterfaceTypeName}");
       builder.AppendLine("{");
       builder.AppendLine($"   Task<{model.DataTypeName}> CreateAsync({model.CreateCommandTypeName} data, CancellationToken ct = default);");
-      builder.AppendLine($"   Task<IEnumerable<{model.DataTypeName}>> GetAllAsync({GetAllParameterList(model)});");
-      builder.AppendLine($"   Task<{model.DataTypeName}?> {PRIMARY_KEY_LOOKUP_METHOD_NAME}({KeyAndTenancyParameterList(model)}, CancellationToken ct = default);");
+      builder.AppendLine($"   Task<IEnumerable<{model.DataTypeName}>> GetAllAsync({ParameterListPrefix(model.TenancyConstraint)}CancellationToken ct = default);");
+      builder.AppendLine($"   Task<{model.DataTypeName}?> {PRIMARY_KEY_LOOKUP_METHOD_NAME}({ParameterListPrefix(model.PrimaryKeyConstraint)}CancellationToken ct = default);");
 
       foreach (var property in model.LookupProperties)
       {
-         builder.AppendLine($"   Task<{model.DataTypeName}?> {LookupMethodName(property)}({LookupParameterList(model, property)}, CancellationToken ct = default);");
+         builder.AppendLine($"   Task<{model.DataTypeName}?> {LookupMethodName(property)}({ParameterListPrefix(model.LookupConstraint(property))}CancellationToken ct = default);");
       }
 
       builder.AppendLine($"   Task<{model.DataTypeName}> UpdateAsync({model.UpdateCommandTypeName} data, CancellationToken ct = default);");
-      builder.AppendLine($"   Task<bool> {PRIMARY_KEY_DELETE_METHOD_NAME}({KeyAndTenancyParameterList(model)}, CancellationToken ct = default);");
+      builder.AppendLine($"   Task<bool> {PRIMARY_KEY_DELETE_METHOD_NAME}({ParameterListPrefix(model.PrimaryKeyConstraint)}CancellationToken ct = default);");
 
       foreach (var property in model.LookupProperties)
       {
-         builder.AppendLine($"   Task<bool> {DeleteMethodName(property)}({LookupParameterList(model, property)}, CancellationToken ct = default);");
+         builder.AppendLine($"   Task<bool> {DeleteMethodName(property)}({ParameterListPrefix(model.LookupConstraint(property))}CancellationToken ct = default);");
       }
 
-      builder.AppendLine($"   IQueryable<{model.DataTypeName}> Query({QueryParameterList(model)});");
+      builder.AppendLine($"   IQueryable<{model.DataTypeName}> Query({ParameterListPrefix(model.TenancyConstraint)}TimeSpan? commandTimeout = null);");
       builder.AppendLine("}");
    }
 
@@ -182,16 +194,17 @@ internal static class TableRepositorySourceBuilder
 
    private static void AppendQueryMethod(StringBuilder builder, TableDefinitionModel model)
    {
-      builder.AppendLine($"   public IQueryable<{model.DataTypeName}> Query({QueryParameterList(model)})");
+      var constraint = model.TenancyConstraint;
+      builder.AppendLine($"   public IQueryable<{model.DataTypeName}> Query({ParameterListPrefix(constraint)}TimeSpan? commandTimeout = null)");
       builder.AppendLine("   {");
 
-      if (model.TenancyColumns.Length == 0)
+      if (constraint.IsEmpty)
       {
          builder.AppendLine($"      return _db.Linq.Query<{model.DataTypeName}>(commandTimeout);");
       }
       else
       {
-         var predicate = string.Join(" && ", model.TenancyColumns.Select(x => $"x.{x.PropertyName} == {x.ParameterName}"));
+         var predicate = string.Join(" && ", constraint.InStatementOrder.Select(x => $"x.{x.PropertyName} == {x.ParameterName}"));
          builder.AppendLine($"      return _db.Linq.Query<{model.DataTypeName}>(commandTimeout).Where(x => {predicate});");
       }
 
@@ -226,19 +239,20 @@ internal static class TableRepositorySourceBuilder
 
    private static void AppendGetAllMethod(StringBuilder builder, TableDefinitionModel model)
    {
-      builder.AppendLine($"   public async Task<IEnumerable<{model.DataTypeName}>> GetAllAsync({GetAllParameterList(model)})");
+      var constraint = model.TenancyConstraint;
+      builder.AppendLine($"   public async Task<IEnumerable<{model.DataTypeName}>> GetAllAsync({ParameterListPrefix(constraint)}CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine($"      return await _db.Dapper.QueryAsync<{model.DataTypeName}>(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildGetAllSql(model));
       builder.AppendLine(",");
 
-      if (model.TenancyColumns.Length == 0)
+      if (constraint.IsEmpty)
       {
          builder.AppendLine("         ct: ct");
       }
       else
       {
-         AppendParameterDictionary(builder, ParameterBindings(model.TenancyColumns), 9);
+         AppendParameterDictionary(builder, ParameterBindings(constraint.InStatementOrder), 9);
          builder.AppendLine(",");
          builder.AppendLine("         ct: ct");
       }
@@ -249,12 +263,12 @@ internal static class TableRepositorySourceBuilder
 
    private static void AppendGetByPrimaryKeyMethod(StringBuilder builder, TableDefinitionModel model)
    {
-      builder.AppendLine($"   public async Task<{model.DataTypeName}?> {PRIMARY_KEY_LOOKUP_METHOD_NAME}({KeyAndTenancyParameterList(model)}, CancellationToken ct = default)");
+      builder.AppendLine($"   public async Task<{model.DataTypeName}?> {PRIMARY_KEY_LOOKUP_METHOD_NAME}({ParameterListPrefix(model.PrimaryKeyConstraint)}CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine($"      return await _db.Dapper.QuerySingleOrDefaultAsync<{model.DataTypeName}>(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildGetByPrimaryKeySql(model));
       builder.AppendLine(",");
-      AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeys.Concat(model.TenancyColumnsOutsideKey)), 9);
+      AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeyConstraint.InStatementOrder), 9);
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -263,12 +277,12 @@ internal static class TableRepositorySourceBuilder
 
    private static void AppendDeleteByPrimaryKeyMethod(StringBuilder builder, TableDefinitionModel model)
    {
-      builder.AppendLine($"   public async Task<bool> {PRIMARY_KEY_DELETE_METHOD_NAME}({KeyAndTenancyParameterList(model)}, CancellationToken ct = default)");
+      builder.AppendLine($"   public async Task<bool> {PRIMARY_KEY_DELETE_METHOD_NAME}({ParameterListPrefix(model.PrimaryKeyConstraint)}CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine("      var affectedRows = await _db.Dapper.ExecuteAsync(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildDeleteByPrimaryKeySql(model));
       builder.AppendLine(",");
-      AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeys.Concat(model.TenancyColumnsOutsideKey)), 9);
+      AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeyConstraint.InStatementOrder), 9);
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -279,12 +293,12 @@ internal static class TableRepositorySourceBuilder
 
    private static void AppendGetByMethod(StringBuilder builder, TableDefinitionModel model, PropertyDefinitionModel property)
    {
-      builder.AppendLine($"   public async Task<{model.DataTypeName}?> {LookupMethodName(property)}({LookupParameterList(model, property)}, CancellationToken ct = default)");
+      builder.AppendLine($"   public async Task<{model.DataTypeName}?> {LookupMethodName(property)}({ParameterListPrefix(model.LookupConstraint(property))}CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine($"      return await _db.Dapper.QuerySingleOrDefaultAsync<{model.DataTypeName}>(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildGetBySql(model, property));
       builder.AppendLine(",");
-      AppendParameterDictionary(builder, ParameterBindings([property]).Concat(ParameterBindings(model.TenancyColumnsExcept(property))), 9);
+      AppendParameterDictionary(builder, ParameterBindings(model.LookupConstraint(property).InStatementOrder), 9);
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -309,12 +323,12 @@ internal static class TableRepositorySourceBuilder
 
    private static void AppendDeleteByMethod(StringBuilder builder, TableDefinitionModel model, PropertyDefinitionModel property)
    {
-      builder.AppendLine($"   public async Task<bool> {DeleteMethodName(property)}({LookupParameterList(model, property)}, CancellationToken ct = default)");
+      builder.AppendLine($"   public async Task<bool> {DeleteMethodName(property)}({ParameterListPrefix(model.LookupConstraint(property))}CancellationToken ct = default)");
       builder.AppendLine("   {");
       builder.AppendLine("      var affectedRows = await _db.Dapper.ExecuteAsync(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildDeleteBySql(model, property));
       builder.AppendLine(",");
-      AppendParameterDictionary(builder, ParameterBindings([property]).Concat(ParameterBindings(model.TenancyColumnsExcept(property))), 9);
+      AppendParameterDictionary(builder, ParameterBindings(model.LookupConstraint(property).InStatementOrder), 9);
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -323,61 +337,19 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine("   }");
    }
 
-   /// <summary>One parameter per key member, in key order, which is the order they were declared in.</summary>
-   private static string KeyParameterList(TableDefinitionModel model)
-   {
-      return string.Join(", ", model.PrimaryKeys.Select(x => $"{x.TypeName} {x.ParameterName}"));
-   }
-
    /// <summary>
-   ///    <see cref="AppendGetByPrimaryKeyMethod" /> and <see cref="AppendDeleteByPrimaryKeyMethod" />'s parameter list:
-   ///    every tenancy column that is not already a key member, first and in declaration order, then the key
-   ///    parameters. Identical to <see cref="KeyParameterList" /> where every tenancy column is already a key member —
-   ///    a table safe by construction gains no parameter here.
+   ///    One parameter per column <paramref name="constraint" /> names, in the order a signature takes them — every
+   ///    tenancy column first and in declaration order, then whatever the member addresses its row by — each with the
+   ///    trailing comma the optional parameter after it needs. Empty when the constraint is, so a member that
+   ///    constrains nothing keeps the signature it has today.
    /// </summary>
-   private static string KeyAndTenancyParameterList(TableDefinitionModel model)
+   /// <remarks>
+   ///    Every generated signature is built here, so all four read alike and none of them can disagree with the
+   ///    statement it issues about which columns are constrained. Which columns those are is the model's question.
+   /// </remarks>
+   private static string ParameterListPrefix(ConstrainedColumns constraint)
    {
-      return $"{TenancyParameterListPrefix(model.TenancyColumnsOutsideKey)}{KeyParameterList(model)}";
-   }
-
-   /// <summary>
-   ///    <see cref="AppendGetByMethod" /> and <see cref="AppendDeleteByMethod" />'s parameter list: every tenancy
-   ///    column other than <paramref name="property" /> itself, first and in declaration order, then the looked-up
-   ///    property's own value. Where <paramref name="property" /> carries <c>Tenancy = true</c>, its own lookup takes
-   ///    that value once rather than twice.
-   /// </summary>
-   private static string LookupParameterList(TableDefinitionModel model, PropertyDefinitionModel property)
-   {
-      return $"{TenancyParameterListPrefix(model.TenancyColumnsExcept(property))}{property.TypeName} {property.ParameterName}";
-   }
-
-   /// <summary>
-   ///    One parameter per column in <paramref name="tenancyColumns" />, in declaration order, with the trailing comma
-   ///    a parameter list after it needs — empty when the sequence is, so a member that takes nothing else stays
-   ///    untouched. Every generated signature builds its tenancy half here, so all four read alike; which columns
-   ///    belong in that half is the caller's question, and differs by member.
-   /// </summary>
-   private static string TenancyParameterListPrefix(IEnumerable<PropertyDefinitionModel> tenancyColumns)
-   {
-      return string.Join(string.Empty, tenancyColumns.Select(x => $"{x.TypeName} {x.ParameterName}, "));
-   }
-
-   /// <summary>
-   ///    <see cref="AppendQueryMethod" />'s parameter list: every tenancy column first, in declaration order, with
-   ///    <c>commandTimeout</c> staying last and optional.
-   /// </summary>
-   private static string QueryParameterList(TableDefinitionModel model)
-   {
-      return $"{TenancyParameterListPrefix(model.TenancyColumns)}TimeSpan? commandTimeout = null";
-   }
-
-   /// <summary>
-   ///    <see cref="AppendGetAllMethod" />'s parameter list: every tenancy column first, in declaration order, with
-   ///    <c>ct</c> staying last and optional.
-   /// </summary>
-   private static string GetAllParameterList(TableDefinitionModel model)
-   {
-      return $"{TenancyParameterListPrefix(model.TenancyColumns)}CancellationToken ct = default";
+      return string.Join(string.Empty, constraint.InParameterOrder.Select(x => $"{x.TypeName} {x.ParameterName}, "));
    }
 
    /// <summary>
