@@ -371,18 +371,26 @@ broadest evidence the feature works, because those declarations are already exer
 - **Evaluating a relation definition at run time.** The generator reads it from source. Nothing constructs one.
 - **Ordering or paging inside a relation to many rows.** The provider's associations do not carry it.
 
-## Open Question
+## Settled: the nullable target side
 
-One decision is not made. `Key(…)` needs a second overload for the ordinary case of a nullable column joining a
-non-nullable one, and the spec assumes that only ever happens on the left. On the target side a primary-key column can
-never be nullable, so the assumption holds for every relation possible today. It stops holding the moment a relation
-may pair against a `[Unique]` column instead, because nothing in the library refuses a nullable one — the nullability
-rules cover primary keys and tenancy columns only.
+`Key(…)` needs a second overload for the ordinary case of a nullable column joining a non-nullable one, and the spec
+assumes that only ever happens on the left. On the target side a primary-key column can never be nullable, so the
+assumption holds for every relation possible today. It stops holding the moment a relation may pair against a
+`[Unique]` column instead, because nothing in the library refuses a nullable one — the nullability rules cover primary
+keys and tenancy columns only.
 
-So either `Key(…)` gains a third overload for a nullable right side, or the build refuses a relation pairing against a
-column that is both `[Unique]` and nullable. The second is arguably right on its own merits, since a nullable unique
-column matches at most one row but may match none for reasons the relation cannot see. It is a new refusal on a shape
-that builds today, which makes it a scope decision rather than a detail.
+**Decision: the build refuses a relation pairing against a column that is both `[Unique]` and nullable.** A nullable
+unique column matches at most one row but may match none for reasons the relation cannot see, so the refusal is right
+on its own merits. `Key(…)` therefore keeps exactly two overloads — matching types, and a nullable left against a
+non-nullable right. There is no third overload for a nullable right side.
+
+This adds one diagnostic to the New-ids table below, continuing the same sequence:
+
+| Rule | Severity | Trigger |
+| --- | --- | --- |
+| Relation pairs against a nullable unique column | Error | A relation pairs against a target column marked `[Unique]` that is nullable |
+
+It is a new refusal on a shape that builds today, and it is deliberate.
 
 ## Further Notes
 
