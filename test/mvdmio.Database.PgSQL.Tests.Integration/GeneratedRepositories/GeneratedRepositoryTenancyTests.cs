@@ -6,10 +6,10 @@ using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
 /// <summary>
-///    What a declared tenancy column buys on <c>Query</c> and <c>GetAllAsync</c>, over a real PostgreSQL container —
-///    the two members this step of the spec touches. Covered on both shapes ADR 0009 distinguishes: the tenancy column
-///    as part of the primary key (<see cref="TenancyDocumentTable" />) and outside a surrogate key
-///    (<see cref="TenancySettingTable" />).
+///    What a declared tenancy column buys over a real PostgreSQL container: which rows the generated reads return,
+///    which rows the generated deletes leave in place, and what the generated writes put in the column. Covered on
+///    both shapes ADR 0009 distinguishes — the tenancy column as part of the primary key
+///    (<see cref="TenancyDocumentTable" />) and outside a surrogate key (<see cref="TenancySettingTable" />).
 /// </summary>
 public class GeneratedRepositoryTenancyTests : TestBase
 {

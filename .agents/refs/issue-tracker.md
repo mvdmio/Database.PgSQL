@@ -6,6 +6,7 @@ Issues, specs and ideas for this repo live as markdown files in `.agents/`.
 
 - Specs, plans and PRDs are `.agents/specs/<slug>.md` — one file per feature
 - Ideas awaiting a grilling session are `.agents/ideas/<slug>.md`
+- A spec being implemented step by step keeps its step records in `.agents/steps/<slug>/<NN>-<slug>.md` — working notes that go when the branch lands, not tracked issues
 - Reference docs that support the skills are `.agents/refs/<slug>.md`
 - ADRs are `docs/adr/<NNNN>-<slug>.md`
 - Triage state is recorded as a `Status:` line near the top of each spec or idea file (see `triage-labels.md` for the role strings)

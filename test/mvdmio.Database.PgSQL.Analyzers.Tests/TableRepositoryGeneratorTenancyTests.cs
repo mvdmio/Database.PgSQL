@@ -4,10 +4,11 @@ using Microsoft.CodeAnalysis;
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
 /// <summary>
-///    What a table definition's <c>[Column(Tenancy = true)]</c> claim buys on the generated read and delete surface:
-///    <c>Query</c>, <c>GetAllAsync</c> (pinned by the sibling step-02 assertions below), every <c>GetBy{Unique}Async</c>
-///    and <c>DeleteBy{Unique}Async</c>, and <c>GetByPrimaryKeyAsync</c>/<c>DeleteByPrimaryKeyAsync</c>. Pinned alongside
-///    the composite-key, nullability and storage classes that cover the other three <c>[Column]</c> claims the same way.
+///    What a table definition's <c>[Column(Tenancy = true)]</c> claim buys across the whole generated surface:
+///    <c>Query</c>, <c>GetAllAsync</c>, every <c>GetBy{Unique}Async</c> and <c>DeleteBy{Unique}Async</c>,
+///    <c>GetByPrimaryKeyAsync</c>/<c>DeleteByPrimaryKeyAsync</c>, and the two command types the write path takes.
+///    Pinned alongside the composite-key, nullability and storage classes that cover the other three <c>[Column]</c>
+///    claims the same way.
 /// </summary>
 public class TableRepositoryGeneratorTenancyTests
 {
@@ -375,10 +376,50 @@ public class TableRepositoryGeneratorTenancyTests
    {
       var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY));
 
-      repository.Should().Contain("public required long AccountId { get; set; }");
+      // Asserted against each type's own body: all three carry the column, and an assertion over the whole file would
+      // pass on one command type making it required and the other not.
+      TypeBody(repository, "CreateRowCommand").Should().Contain("public required long AccountId { get; set; }");
+      TypeBody(repository, "UpdateRowCommand").Should().Contain("public required long AccountId { get; set; }");
 
-      // The data type still materializes the column through a parameterless constructor, so it stays plain.
-      repository.Should().Contain("public long AccountId { get; set; }");
+      // The data type still materializes the column through a parameterless constructor, which cannot satisfy
+      // required, so it stays plain.
+      var dataType = TypeBody(repository, "RowData");
+      dataType.Should().Contain("public long AccountId { get; set; }");
+      dataType.Should().NotContain("required");
+   }
+
+   [Fact]
+   public void CreateAsyncAndUpdateAsync_KeepTheirSingleCommandParameter_OnEitherShape()
+   {
+      // The two rows of the member table that gain nothing. The tenant reaches the write path as a required property
+      // on the command type, so both signatures read exactly as they do on a table declaring no tenancy column.
+      var insideKey = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_INSIDE_KEY));
+
+      insideKey.Should().Contain("Task<ProjectData> CreateAsync(CreateProjectCommand data, CancellationToken ct = default);");
+      insideKey.Should().Contain("Task<ProjectData> UpdateAsync(UpdateProjectCommand data, CancellationToken ct = default);");
+
+      var outsideKey = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY));
+
+      outsideKey.Should().Contain("Task<RowData> CreateAsync(CreateRowCommand data, CancellationToken ct = default);");
+      outsideKey.Should().Contain("Task<RowData> UpdateAsync(UpdateRowCommand data, CancellationToken ct = default);");
+   }
+
+   /// <summary>
+   ///    The body of one emitted type, so an assertion about a property lands on the type declaring it. The tenancy
+   ///    column appears on the data type and both command types, and only the command types make it <c>required</c>.
+   /// </summary>
+   private static string TypeBody(string source, string typeName)
+   {
+      var normalized = source.Replace("\r\n", "\n");
+      var declaration = $"public partial class {typeName}\n{{\n";
+      var start = normalized.IndexOf(declaration, StringComparison.Ordinal);
+
+      start.Should().BeGreaterThanOrEqualTo(0, "the generated source declares {0}", typeName);
+
+      var bodyStart = start + declaration.Length;
+      var bodyEnd = normalized.IndexOf("\n}", bodyStart, StringComparison.Ordinal);
+
+      return normalized.Substring(bodyStart, bodyEnd - bodyStart);
    }
 
    [Fact]

@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace mvdmio.Database.PgSQL.Analyzers;
 
 /// <summary>
@@ -11,6 +7,10 @@ namespace mvdmio.Database.PgSQL.Analyzers;
 /// </summary>
 internal static class TableRepositorySqlStatements
 {
+   /// <summary>
+   ///    The insert <c>CreateAsync</c> issues. A table whose every column is database-generated has nothing to supply,
+   ///    so it inserts default values rather than an empty column list, which is not valid PostgreSQL.
+   /// </summary>
    public static string BuildCreateSql(TableDefinitionModel model)
    {
       var tableName = FullyQualifiedTableName(model);
@@ -24,6 +24,11 @@ internal static class TableRepositorySqlStatements
       return $"INSERT INTO {tableName} ({columns})\nVALUES ({values})\nRETURNING {BuildReturningList(model)}";
    }
 
+   /// <summary>
+   ///    The select <c>GetAllAsync</c> issues: every row, narrowed to the tenant where the table declares one. Without
+   ///    a tenancy column it carries no <c>WHERE</c> clause at all, which is the one member that used to have no
+   ///    predicate to forget.
+   /// </summary>
    public static string BuildGetAllSql(TableDefinitionModel model)
    {
       if (model.TenancyColumns.IsEmpty)
@@ -38,27 +43,36 @@ internal static class TableRepositorySqlStatements
       return string.Join(" AND ", model.TenancyColumns.Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{x.ParameterName}"));
    }
 
+   /// <summary>The select the lookup named after <paramref name="property" /> issues.</summary>
    public static string BuildGetBySql(TableDefinitionModel model, PropertyDefinitionModel property)
    {
       return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildLookupPredicate(model, property)}";
    }
 
+   /// <summary>The select <c>GetByPrimaryKeyAsync</c> issues.</summary>
    public static string BuildGetByPrimaryKeySql(TableDefinitionModel model)
    {
       return $"SELECT {BuildSelectList(model)}\nFROM {FullyQualifiedTableName(model)}\nWHERE {BuildKeyAndTenancyPredicate(model, x => x.ParameterName)}";
    }
 
+   /// <summary>
+   ///    The update <c>UpdateAsync</c> issues. A tenancy column is never assigned, so a row cannot change tenant here;
+   ///    where it sits outside the key it joins the <c>WHERE</c> clause instead, and an update aimed at another
+   ///    tenant's row matches nothing.
+   /// </summary>
    public static string BuildUpdateSql(TableDefinitionModel model)
    {
       var assignments = string.Join(", ", model.MutableUpdateProperties.Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{x.PropertyName}"));
       return $"UPDATE {FullyQualifiedTableName(model)}\nSET {assignments}\nWHERE {BuildKeyAndTenancyPredicate(model, x => x.PropertyName)}\nRETURNING {BuildReturningList(model)}";
    }
 
+   /// <summary>The delete named after <paramref name="property" />, which addresses its row the way that lookup does.</summary>
    public static string BuildDeleteBySql(TableDefinitionModel model, PropertyDefinitionModel property)
    {
       return $"DELETE FROM {FullyQualifiedTableName(model)}\nWHERE {BuildLookupPredicate(model, property)}";
    }
 
+   /// <summary>The delete <c>DeleteByPrimaryKeyAsync</c> issues.</summary>
    public static string BuildDeleteByPrimaryKeySql(TableDefinitionModel model)
    {
       return $"DELETE FROM {FullyQualifiedTableName(model)}\nWHERE {BuildKeyAndTenancyPredicate(model, x => x.ParameterName)}";
@@ -76,9 +90,9 @@ internal static class TableRepositorySqlStatements
    ///    takes them off a command object alongside its other columns and binds by
    ///    <see cref="PropertyDefinitionModel.PropertyName" /> like the rest of that statement.
    /// </remarks>
-   public static string BuildKeyAndTenancyPredicate(TableDefinitionModel model, Func<PropertyDefinitionModel, string> bindingName)
+   private static string BuildKeyAndTenancyPredicate(TableDefinitionModel model, Func<PropertyDefinitionModel, string> bindingName)
    {
-      var predicates = model.PrimaryKeys.Concat(TenancyColumnsOutsideKey(model)).Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{bindingName(x)}");
+      var predicates = model.PrimaryKeys.Concat(model.TenancyColumnsOutsideKey).Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{bindingName(x)}");
       return string.Join(" AND ", predicates);
    }
 
@@ -90,39 +104,27 @@ internal static class TableRepositorySqlStatements
    private static string BuildLookupPredicate(TableDefinitionModel model, PropertyDefinitionModel property)
    {
       var predicates = new[] { $"{QuoteIdentifier(property.ColumnName)} = :{property.ParameterName}" }
-         .Concat(TenancyColumnsExcept(model, property).Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{x.ParameterName}"));
+         .Concat(model.TenancyColumnsExcept(property).Select(x => $"{QuoteIdentifier(x.ColumnName)} = :{x.ParameterName}"));
 
       return string.Join(" AND ", predicates);
    }
 
-   /// <summary>The tenancy columns not already a primary-key member, in declaration order.</summary>
-   private static IEnumerable<PropertyDefinitionModel> TenancyColumnsOutsideKey(TableDefinitionModel model)
-   {
-      return model.TenancyColumns.Where(x => !model.PrimaryKeys.Contains(x));
-   }
-
-   /// <summary>The tenancy columns other than <paramref name="property" />, in declaration order.</summary>
-   private static IEnumerable<PropertyDefinitionModel> TenancyColumnsExcept(TableDefinitionModel model, PropertyDefinitionModel property)
-   {
-      return model.TenancyColumns.Where(x => !ReferenceEquals(x, property));
-   }
-
-   public static string BuildSelectList(TableDefinitionModel model)
+   private static string BuildSelectList(TableDefinitionModel model)
    {
       return string.Join(", ", model.DataProperties.Select(x => $"{QuoteIdentifier(x.ColumnName)} AS {QuoteIdentifier(x.PropertyName)}"));
    }
 
-   public static string BuildReturningList(TableDefinitionModel model)
+   private static string BuildReturningList(TableDefinitionModel model)
    {
       return string.Join(", ", model.DataProperties.Select(x => $"{QuoteIdentifier(x.ColumnName)} AS {QuoteIdentifier(x.PropertyName)}"));
    }
 
-   public static string FullyQualifiedTableName(TableDefinitionModel model)
+   private static string FullyQualifiedTableName(TableDefinitionModel model)
    {
       return $"{QuoteIdentifier(model.SchemaName)}.{QuoteIdentifier(model.TableName)}";
    }
 
-   public static string QuoteIdentifier(string value)
+   private static string QuoteIdentifier(string value)
    {
       return $"\"{value.Replace("\"", "\"\"")}\"";
    }

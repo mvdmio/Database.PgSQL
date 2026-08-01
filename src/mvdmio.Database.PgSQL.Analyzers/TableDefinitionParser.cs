@@ -140,44 +140,38 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
-      // Abandons the table, the same as a nullable key member: a null tenant matches no row, so every generated member
-      // would return nothing. IsDeclaredNotNull already folds the property's type and a Null = true claim into one
-      // answer (a dropped contradiction falls back to the type), so checking it here catches both without checking
-      // each separately. A key member that is also nullable is already caught above and this table already abandoned,
-      // so a property malformed both ways reports one clear reason rather than two.
-      var nullableTenancyColumns = properties.Where(x => x.IsTenancy && !x.IsDeclaredNotNull).ToImmutableArray();
-      if (!nullableTenancyColumns.IsEmpty)
+      // Reports every tenancy column matching isRefused, and answers whether the table has to be abandoned. Both
+      // refusals below abandon it, the same as a nullable key member does: generating the table anyway would emit
+      // precisely the unguarded surface a tenancy column exists to remove.
+      bool RefusesTenancyColumns(Func<PropertyDefinitionModel, bool> isRefused, DiagnosticDescriptor descriptor)
       {
-         foreach (var tenancyColumn in nullableTenancyColumns)
+         var refused = properties.Where(x => x.IsTenancy && isRefused(x)).ToImmutableArray();
+
+         foreach (var tenancyColumn in refused)
          {
             diagnostics.Add(Diagnostic.Create(
-               TableRepositoryDiagnostics.NullableTenancyColumn,
+               descriptor,
                TableDefinitionSymbols.PropertyLocation(mappedProperties, tenancyColumn, classSyntax),
                classSymbol.Name,
                tenancyColumn.PropertyName
             ));
          }
 
-         return new ParseResult(null, diagnostics.ToImmutable());
+         return !refused.IsEmpty;
       }
 
-      // Abandons the table for the same reason: a generated column is on no command type, so there is no property to
-      // make required, and the developer would learn that at run time instead of build time.
-      var generatedTenancyColumns = properties.Where(x => x.IsTenancy && x.IsGenerated).ToImmutableArray();
-      if (!generatedTenancyColumns.IsEmpty)
-      {
-         foreach (var tenancyColumn in generatedTenancyColumns)
-         {
-            diagnostics.Add(Diagnostic.Create(
-               TableRepositoryDiagnostics.GeneratedTenancyColumn,
-               TableDefinitionSymbols.PropertyLocation(mappedProperties, tenancyColumn, classSyntax),
-               classSymbol.Name,
-               tenancyColumn.PropertyName
-            ));
-         }
-
+      // A null tenant matches no row, so every generated member would return nothing. IsDeclaredNotNull already folds
+      // the property's type and a Null = true claim into one answer (a dropped contradiction falls back to the type),
+      // so checking it here catches both without checking each separately. A key member that is also nullable is
+      // already caught above and this table already abandoned, so a property malformed both ways reports one clear
+      // reason rather than two.
+      if (RefusesTenancyColumns(x => !x.IsDeclaredNotNull, TableRepositoryDiagnostics.NullableTenancyColumn))
          return new ParseResult(null, diagnostics.ToImmutable());
-      }
+
+      // A generated column is on no command type, so there is no property to make required, and the developer would
+      // learn that at run time instead of build time.
+      if (RefusesTenancyColumns(x => x.IsGenerated, TableRepositoryDiagnostics.GeneratedTenancyColumn))
+         return new ParseResult(null, diagnostics.ToImmutable());
 
       var duplicateColumn = properties
          .GroupBy(x => x.ColumnName, StringComparer.OrdinalIgnoreCase)
@@ -233,9 +227,9 @@ internal static class TableDefinitionParser
       }
 
       // A tenancy column is excluded here whether or not it is a key member: the generated update never assigns it, so a
-      // row cannot change tenant through the generated surface. It still reaches the update command type below, via
-      // primaryKeys where it is a key member and appended explicitly where it is not — the WHERE clause needs its value
-      // even though the SET list never does.
+      // row cannot change tenant through the generated surface. It still reaches the update command type — the model
+      // derives TableDefinitionModel.UpdateProperties by widening this set back out with the key and the tenancy
+      // columns outside it, because the WHERE clause needs their values even though the SET list never does.
       var mutableUpdateProperties = properties.Where(x => !x.IsPrimaryKey && !x.IsGenerated && !x.IsTenancy).ToImmutableArray();
       if (mutableUpdateProperties.Length == 0)
       {
@@ -278,7 +272,7 @@ internal static class TableDefinitionParser
 
       var relations = ParseRelations(classSymbol, relationProperties, diagnostics);
       var accessibility = classSymbol.DeclaredAccessibility == Accessibility.Public ? "public" : "internal";
-      // Named throughout: five of these are same-typed property collections, so a transposition would compile and only
+      // Named throughout: four of these are same-typed property collections, so a transposition would compile and only
       // show up as wrong generated SQL.
       var model = new TableDefinitionModel(
          namespaceName: classSymbol.ContainingNamespace.IsGlobalNamespace ? string.Empty : classSymbol.ContainingNamespace.ToDisplayString(),
@@ -296,7 +290,6 @@ internal static class TableDefinitionParser
          primaryKeys: primaryKeys,
          dataProperties: properties,
          createProperties: properties.Where(x => !x.IsGenerated).ToImmutableArray(),
-         updateProperties: primaryKeys.AddRange(tenancyColumns.Where(x => !primaryKeys.Contains(x))).AddRange(mutableUpdateProperties),
          lookupProperties: lookupProperties,
          mutableUpdateProperties: mutableUpdateProperties,
          tenancyColumns: tenancyColumns,

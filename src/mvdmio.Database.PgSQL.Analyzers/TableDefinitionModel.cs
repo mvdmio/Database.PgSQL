@@ -21,7 +21,6 @@ internal sealed class TableDefinitionModel
       ImmutableArray<PropertyDefinitionModel> primaryKeys,
       ImmutableArray<PropertyDefinitionModel> dataProperties,
       ImmutableArray<PropertyDefinitionModel> createProperties,
-      ImmutableArray<PropertyDefinitionModel> updateProperties,
       ImmutableArray<PropertyDefinitionModel> lookupProperties,
       ImmutableArray<PropertyDefinitionModel> mutableUpdateProperties,
       ImmutableArray<PropertyDefinitionModel> tenancyColumns,
@@ -43,7 +42,6 @@ internal sealed class TableDefinitionModel
       PrimaryKeys = primaryKeys;
       DataProperties = dataProperties;
       CreateProperties = createProperties;
-      UpdateProperties = updateProperties;
       LookupProperties = lookupProperties;
       MutableUpdateProperties = mutableUpdateProperties;
       TenancyColumns = tenancyColumns;
@@ -73,7 +71,14 @@ internal sealed class TableDefinitionModel
 
    public ImmutableArray<PropertyDefinitionModel> DataProperties { get; }
    public ImmutableArray<PropertyDefinitionModel> CreateProperties { get; }
-   public ImmutableArray<PropertyDefinitionModel> UpdateProperties { get; }
+
+   /// <summary>
+   ///    What the update command type carries: every key member, then every tenancy column not already among them,
+   ///    then every column the update actually assigns. Wider than <see cref="MutableUpdateProperties" /> by the
+   ///    columns the statement only addresses its row by — the <c>WHERE</c> clause needs their values as much as the
+   ///    <c>SET</c> list needs the rest.
+   /// </summary>
+   public ImmutableArray<PropertyDefinitionModel> UpdateProperties => PrimaryKeys.AddRange(TenancyColumnsOutsideKey).AddRange(MutableUpdateProperties);
 
    /// <summary>
    ///    The <c>[Unique]</c> properties, each of which gets a lookup and a delete named after itself. The primary key is
@@ -87,6 +92,26 @@ internal sealed class TableDefinitionModel
    ///    constrains them in, and the order their parameters are added in.
    /// </summary>
    public ImmutableArray<PropertyDefinitionModel> TenancyColumns { get; }
+
+   /// <summary>
+   ///    The tenancy columns not already a primary-key member, in declaration order. Empty where every tenancy column
+   ///    is part of the key, which is what leaves a table safe by construction with the surface it has today.
+   /// </summary>
+   /// <remarks>
+   ///    One home for a question the generated parameter list and the generated SQL both ask. Two answers could drift,
+   ///    and a signature taking a tenant the statement never constrains would compile.
+   /// </remarks>
+   public IEnumerable<PropertyDefinitionModel> TenancyColumnsOutsideKey => TenancyColumns.Where(x => !PrimaryKeys.Any(key => ReferenceEquals(key, x)));
+
+   /// <summary>
+   ///    The tenancy columns other than <paramref name="property" />, in declaration order — what a <c>[Unique]</c>
+   ///    lookup or delete constrains on top of the property it is named after. Where that property carries
+   ///    <c>Tenancy = true</c> itself, this drops it, so its value is taken and constrained once rather than twice.
+   /// </summary>
+   public IEnumerable<PropertyDefinitionModel> TenancyColumnsExcept(PropertyDefinitionModel property)
+   {
+      return TenancyColumns.Where(x => !ReferenceEquals(x, property));
+   }
 
    /// <summary>
    ///    The relations declared on this table, as declared. Whether each one resolves is decided once every table has

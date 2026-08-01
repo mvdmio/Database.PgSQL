@@ -254,7 +254,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine($"      return await _db.Dapper.QuerySingleOrDefaultAsync<{model.DataTypeName}>(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildGetByPrimaryKeySql(model));
       builder.AppendLine(",");
-      AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeys.Concat(TenancyColumnsOutsideKey(model))), 9);
+      AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeys.Concat(model.TenancyColumnsOutsideKey)), 9);
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -268,7 +268,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine("      var affectedRows = await _db.Dapper.ExecuteAsync(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildDeleteByPrimaryKeySql(model));
       builder.AppendLine(",");
-      AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeys.Concat(TenancyColumnsOutsideKey(model))), 9);
+      AppendParameterDictionary(builder, ParameterBindings(model.PrimaryKeys.Concat(model.TenancyColumnsOutsideKey)), 9);
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -284,7 +284,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine($"      return await _db.Dapper.QuerySingleOrDefaultAsync<{model.DataTypeName}>(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildGetBySql(model, property));
       builder.AppendLine(",");
-      AppendParameterDictionary(builder, ParameterBindings([property]).Concat(ParameterBindings(TenancyColumnsExcept(model, property))), 9);
+      AppendParameterDictionary(builder, ParameterBindings([property]).Concat(ParameterBindings(model.TenancyColumnsExcept(property))), 9);
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -314,7 +314,7 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine("      var affectedRows = await _db.Dapper.ExecuteAsync(");
       AppendSqlLiteral(builder, 9, TableRepositorySqlStatements.BuildDeleteBySql(model, property));
       builder.AppendLine(",");
-      AppendParameterDictionary(builder, ParameterBindings([property]).Concat(ParameterBindings(TenancyColumnsExcept(model, property))), 9);
+      AppendParameterDictionary(builder, ParameterBindings([property]).Concat(ParameterBindings(model.TenancyColumnsExcept(property))), 9);
       builder.AppendLine(",");
       builder.AppendLine("         ct: ct");
       builder.AppendLine("      );");
@@ -337,8 +337,7 @@ internal static class TableRepositorySourceBuilder
    /// </summary>
    private static string KeyAndTenancyParameterList(TableDefinitionModel model)
    {
-      var tenancyPrefix = string.Join(string.Empty, TenancyColumnsOutsideKey(model).Select(x => $"{x.TypeName} {x.ParameterName}, "));
-      return $"{tenancyPrefix}{KeyParameterList(model)}";
+      return $"{TenancyParameterListPrefix(model.TenancyColumnsOutsideKey)}{KeyParameterList(model)}";
    }
 
    /// <summary>
@@ -349,32 +348,18 @@ internal static class TableRepositorySourceBuilder
    /// </summary>
    private static string LookupParameterList(TableDefinitionModel model, PropertyDefinitionModel property)
    {
-      var tenancyPrefix = string.Join(string.Empty, TenancyColumnsExcept(model, property).Select(x => $"{x.TypeName} {x.ParameterName}, "));
-      return $"{tenancyPrefix}{property.TypeName} {property.ParameterName}";
-   }
-
-   /// <summary>The tenancy columns not already a primary-key member, in declaration order.</summary>
-   private static IEnumerable<PropertyDefinitionModel> TenancyColumnsOutsideKey(TableDefinitionModel model)
-   {
-      return model.TenancyColumns.Where(x => !model.PrimaryKeys.Contains(x));
-   }
-
-   /// <summary>The tenancy columns other than <paramref name="property" />, in declaration order.</summary>
-   private static IEnumerable<PropertyDefinitionModel> TenancyColumnsExcept(TableDefinitionModel model, PropertyDefinitionModel property)
-   {
-      return model.TenancyColumns.Where(x => !ReferenceEquals(x, property));
+      return $"{TenancyParameterListPrefix(model.TenancyColumnsExcept(property))}{property.TypeName} {property.ParameterName}";
    }
 
    /// <summary>
-   ///    One parameter per tenancy column, in declaration order, with the trailing comma a parameter list after it needs
-   ///    — empty when the table declares none, so a member that takes nothing else stays untouched.
+   ///    One parameter per column in <paramref name="tenancyColumns" />, in declaration order, with the trailing comma
+   ///    a parameter list after it needs — empty when the sequence is, so a member that takes nothing else stays
+   ///    untouched. Every generated signature builds its tenancy half here, so all four read alike; which columns
+   ///    belong in that half is the caller's question, and differs by member.
    /// </summary>
-   private static string TenancyParameterListPrefix(TableDefinitionModel model)
+   private static string TenancyParameterListPrefix(IEnumerable<PropertyDefinitionModel> tenancyColumns)
    {
-      if (model.TenancyColumns.Length == 0)
-         return string.Empty;
-
-      return string.Join(string.Empty, model.TenancyColumns.Select(x => $"{x.TypeName} {x.ParameterName}, "));
+      return string.Join(string.Empty, tenancyColumns.Select(x => $"{x.TypeName} {x.ParameterName}, "));
    }
 
    /// <summary>
@@ -383,7 +368,7 @@ internal static class TableRepositorySourceBuilder
    /// </summary>
    private static string QueryParameterList(TableDefinitionModel model)
    {
-      return $"{TenancyParameterListPrefix(model)}TimeSpan? commandTimeout = null";
+      return $"{TenancyParameterListPrefix(model.TenancyColumns)}TimeSpan? commandTimeout = null";
    }
 
    /// <summary>
@@ -392,7 +377,7 @@ internal static class TableRepositorySourceBuilder
    /// </summary>
    private static string GetAllParameterList(TableDefinitionModel model)
    {
-      return $"{TenancyParameterListPrefix(model)}CancellationToken ct = default";
+      return $"{TenancyParameterListPrefix(model.TenancyColumns)}CancellationToken ct = default";
    }
 
    /// <summary>

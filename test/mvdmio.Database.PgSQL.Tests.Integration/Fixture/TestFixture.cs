@@ -186,7 +186,7 @@ public sealed class TestFixture : IAsyncLifetime
       );
       // The tenancy column table set: one table where it is part of the primary key, one where it sits outside a
       // surrogate key — the two shapes ADR 0009 covers. Each carries a UNIQUE column and two assignable non-tenancy
-      // columns, so the write path later steps touch stays generable.
+      // columns, so the generated update has something left to assign once the tenancy column leaves its SET list.
       await connection.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.generated_tenancy_documents (
