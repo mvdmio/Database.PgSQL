@@ -655,12 +655,9 @@ class (`CS0053`). Keep the property and its nested definition class at matching 
 `protected static` helper on the base class. Each side is a direct property reference — `x => x.Column` — so a rename
 is a build error rather than a silently wrong join, and a pair whose two sides hold different types does not compile.
 `Key` has two overloads: matching types on both sides, and a nullable left side against a non-nullable right — the
-ordinary outer-join shape, where a foreign key may hold null but the key it targets never does. The same-type overload
-alone already accepts every nullability combination, because its type argument is inferred from both lambdas at once
-and settles on whichever type the other converts to — a `long` column paired against a `long?` column infers `long?`
-and compiles. What a pair may *not* do is have both sides able to hold null at once: see `PGSQL0035` under Relations,
-below. The order the pairs are listed in carries no meaning; they are combined with `&&`, so reordering them changes
-nothing. A composite key needs no different shape from a single-column one — one `Key(…)` per column, in any order:
+ordinary outer-join shape, where a foreign key may hold null but the key it targets never does. The order the pairs are
+listed in carries no meaning; they are combined with `&&`, so reordering them changes nothing. A composite key needs no
+different shape from a single-column one — one `Key(…)` per column, in any order:
 
 ```csharp
 [Table("public.tasks")]
@@ -923,8 +920,8 @@ that does hold null is not caught when the row is read — the null arrives in a
 is rows: an inequality over that column omits the ones where it is null. Claim not-null because the table says
 `NOT NULL`, not because the value is usually present.
 
-A relation key reads this same claim on both of its columns, not their C# type — see `PGSQL0035` under Relations,
-below.
+A relation key reads this same claim on both of its columns rather than their C# types, and refuses a pair whose two
+columns can both hold null — `PGSQL0035`, under Build-Time Diagnostics below.
 
 ### Column Storage
 

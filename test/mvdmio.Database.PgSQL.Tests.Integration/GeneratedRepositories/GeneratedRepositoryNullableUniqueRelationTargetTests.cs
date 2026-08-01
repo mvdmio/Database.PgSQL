@@ -1,7 +1,6 @@
 using AwesomeAssertions;
 using mvdmio.Database.PgSQL.Connectors.Linq;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
-using System.Text.RegularExpressions;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
@@ -10,7 +9,8 @@ namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 ///    <c>UNIQUE</c> constraint admits any number of nulls, the emitted join stays plain equality rather than widening
 ///    into "equal, or both are null", and materializing the relation reaches exactly the rows equality actually
 ///    matches. <see cref="GeneratedRepositoryCompositeKeyTests" /> pins the same concern for a composite key; this
-///    class is the single-column sibling for the shape this ADR 0006 measurement is about.
+///    class is the single-column sibling, covering the shape ADR 0011 admits — a not-null foreign key against a
+///    nullable <c>[Unique]</c> target.
 /// </summary>
 public class GeneratedRepositoryNullableUniqueRelationTargetTests : TestBase
 {
@@ -42,19 +42,19 @@ public class GeneratedRepositoryNullableUniqueRelationTargetTests : TestBase
    [Fact]
    public void Query_ReachingTheNullableUniqueRelationTarget_ConstrainsWithPlainEquality()
    {
-      var sql = RenderSql(_items.Query().Where(x => x.Entry!.Sku == "widget-1"));
+      var sql = QueryDiagnostics.RenderSql(_items.Query().Where(x => x.Entry!.Sku == "widget-1"));
 
-      sql.Should().MatchRegex(CrossTableEquality("sku", "sku"));
+      sql.Should().MatchRegex(SqlShape.CrossTableEquality("sku", "sku"));
       sql.Should().NotContain("IS NULL", "a widened join condition is what would cost the unique index behind the column");
    }
 
    [Fact]
    public void Query_ReachingTheNullableUniqueRelationTargetWithoutFilteringIt_RendersAnOuterJoin()
    {
-      var sql = RenderSql(_items.Query().Where(x => x.ItemId > 0).Select(x => x.Entry!.Sku));
+      var sql = QueryDiagnostics.RenderSql(_items.Query().Where(x => x.ItemId > 0).Select(x => x.Entry!.Sku));
 
       sql.Should().Contain("LEFT JOIN");
-      sql.Should().MatchRegex(CrossTableEquality("sku", "sku"));
+      sql.Should().MatchRegex(SqlShape.CrossTableEquality("sku", "sku"));
    }
 
    [Fact]
@@ -82,25 +82,6 @@ public class GeneratedRepositoryNullableUniqueRelationTargetTests : TestBase
          .ToListAsync(CancellationToken);
 
       items.Should().NotContain(x => x.Entry != null && x.Entry.EntryId == _nullSkuEntryId);
-   }
-
-   /// <summary>
-   ///    An equality between two qualified columns, whichever table aliases the provider chose and whether or not it
-   ///    quoted them.
-   /// </summary>
-   private static string CrossTableEquality(string foreignKeyColumn, string keyColumn)
-   {
-      return $"{QualifiedColumn(foreignKeyColumn)}\\s*=\\s*{QualifiedColumn(keyColumn)}";
-   }
-
-   private static string QualifiedColumn(string columnName)
-   {
-      return $@"(?:""[^""]+""|\w+)\.""?{Regex.Escape(columnName)}""?";
-   }
-
-   private static string RenderSql<TEntity>(IQueryable<TEntity> query)
-   {
-      return QueryDiagnostics.RenderSql(query);
    }
 
    private async Task<long> CreateEntryAsync(string? sku)

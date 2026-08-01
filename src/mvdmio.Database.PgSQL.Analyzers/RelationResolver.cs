@@ -152,9 +152,11 @@ internal static class RelationResolver
       foreach (var pair in candidate.JoinedKeys)
       {
          // Reads the Nullability claim each side registers, not the property's C# type — the claim is what the
-         // query provider is told, and it is what a [Column(NotNull = true)] claim can override even where the type
-         // cannot carry the fact. Whether either side is [Unique] plays no part: a not-null foreign key paired
-         // against a nullable [Unique] column emits a plain equality join that simply cannot reach a null row.
+         // query provider is told. Where the type can hold null the claim follows it, because [Column(NotNull =
+         // true)] over such a type contradicts it and is dropped as PGSQL0021; where the type says nothing at all,
+         // the claim is the only thing that can carry the fact, which is the case the message names. Whether either
+         // side is [Unique] plays no part: a not-null foreign key paired against a nullable [Unique] column emits a
+         // plain equality join that simply cannot reach a null row.
          if (pair.ThisKey.IsDeclaredNotNull || pair.TargetKey.IsDeclaredNotNull)
             continue;
 

@@ -41,6 +41,16 @@ type instead of the claim is how the retired rule came to check something the qu
 also the only way `[Column(NotNull = true)]` can clear the failure in a nullable-oblivious file, where the C# type
 carries nothing to read.
 
+Which fix clears a given pair therefore depends on what its sides' types already say, and the message says so rather
+than naming one fix for every shape. Where a side's type can hold null — a `string?`, a `long?` — the type is the fix,
+because `[Column(NotNull = true)]` over such a type contradicts it: `PGSQL0021` reports the contradiction, the claim is
+dropped, and the column stays nullable, so the attribute would leave the developer with two errors instead of none.
+Where the type says nothing at all — an unannotated reference type in a file with nullable annotations switched off —
+or where the column is claimed `[Column(Null = true)]` over a type that cannot hold null, the claim is the only thing
+that can carry the fact and `[Column(NotNull = true)]` clears the failure outright. `PGSQL0021`'s contradiction rule is
+deliberately not relaxed to make the attribute win over a nullable type: that rule is older than this one, it governs
+every column rather than only relation keys, and re-deciding it is a separate decision.
+
 `PGSQL0035` keeps its id, its `Error` severity and its blast radius — it drops only the relation it names, leaving the
 rest of the table to generate, exactly as ADR 0010 recorded. Its title, message and description change, because
 nothing in production depends on the retired meaning. It reports once per offending pair, since each pair is a
@@ -69,8 +79,8 @@ is the fact there rather than a claim about it.
 ## Consequences
 
 - **`PGSQL0035` keeps its id**, with `Error` severity and relation-only blast radius unchanged; its title, message and
-  description now state the shape and the fix — claim one side `[Column(NotNull = true)]`, or pair a column that
-  cannot hold null.
+  description now state the shape and every fix that actually clears it — give one side a type that cannot hold null,
+  claim `[Column(NotNull = true)]` on a side whose type cannot say it, or pair a column that cannot hold null.
 - **`PGSQL0020` still reads the property's C# type**, unaffected by this decision.
 - **`RelationDefinition<,>` is untouched.** No new `Key(…)` overload, no signature change; the shape this ADR admits
   already compiled.

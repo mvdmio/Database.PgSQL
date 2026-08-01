@@ -59,7 +59,7 @@ PGSQL0031 | Generation | Warning | Relation to one row may reach several
 PGSQL0032 | Generation | Error | Relation condition cannot be carried
 PGSQL0033 | Generation | Error | Relation attribute on a non-relation property
 PGSQL0034 | Generation | Warning | Relation may resolve every kind
-PGSQL0035 | Generation | Error | Relation key pair can both hold null
+PGSQL0035 | Generation | Error | Relation pairs against a nullable unique column
 
 ### Removed Rules
 
@@ -68,3 +68,12 @@ Rule ID | Category | Severity | Notes
 PGSQL0012 | Generation | Error | Relation foreign key property not found
 PGSQL0013 | Generation | Error | Relation foreign key type cannot match the primary key
 PGSQL0019 | Generation | Error | Relation foreign key does not match the target's primary key arity
+
+## Release 0.38
+
+; PGSQL0035 keeps its id, its category and its severity, and changes only its title, message and description: it now
+; reads whether both of a Relation key pair's columns can hold null, instead of whether the pair's target column is
+; [Unique] and nullable. This format tracks the id, the category and the severity, none of which moved, so there is no
+; table row that can state a retitle — a Changed Rules entry claiming one is rejected as an invalid entry (RS2007).
+; The 0.37 entry above therefore stays as 0.37 shipped it, and the reasoning lives in
+; docs/adr/0011-relation-key-pairs-refused-by-nullability-not-uniqueness.md.

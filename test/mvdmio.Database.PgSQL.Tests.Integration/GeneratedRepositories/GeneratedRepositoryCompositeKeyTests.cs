@@ -2,7 +2,6 @@ using AwesomeAssertions;
 using mvdmio.Database.PgSQL.Connectors.Linq;
 using mvdmio.Database.PgSQL.Exceptions;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
-using System.Text.RegularExpressions;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
@@ -293,16 +292,16 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
       // The second case is the nullable foreign key against a non-nullable key member — the generated-column shape — and
       // it renders the same plain equality as the first.
       var sql = foreignKeyColumn == keyColumn
-         ? RenderSql(_tasks.Query().Where(x => x.Project!.Name == "Apollo"))
-         : RenderSql(_links.Query().Where(x => x.Project!.Name == "Apollo"));
+         ? QueryDiagnostics.RenderSql(_tasks.Query().Where(x => x.Project!.Name == "Apollo"))
+         : QueryDiagnostics.RenderSql(_links.Query().Where(x => x.Project!.Name == "Apollo"));
 
       // An inner join, even though the relation is an outer one by contract: the filter is an equality on a column that
       // cannot hold null, so no null-extended row could satisfy it and the provider collapses the join. That is a plan
       // improvement rather than a change of meaning — the outer-join behaviour itself is pinned by
       // Query_AcrossACompositeRelationOnAStoredGeneratedColumn_ReachesTheRelatedRow, which filters nothing.
       sql.Should().Contain("INNER JOIN");
-      sql.Should().MatchRegex(CrossTableEquality("account_id", "account_id"));
-      sql.Should().MatchRegex(CrossTableEquality(foreignKeyColumn, keyColumn));
+      sql.Should().MatchRegex(SqlShape.CrossTableEquality("account_id", "account_id"));
+      sql.Should().MatchRegex(SqlShape.CrossTableEquality(foreignKeyColumn, keyColumn));
       sql.Should().NotContain("IS NULL", "a widened join condition is what costs the second key column its index");
    }
 
@@ -314,11 +313,11 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
    [Fact]
    public void Query_ReachingACompositeRelationWithoutFilteringIt_RendersAnOuterJoin()
    {
-      var sql = RenderSql(_links.Query().Where(x => x.AccountId == FIRST_ACCOUNT).Select(x => x.Project!.Name));
+      var sql = QueryDiagnostics.RenderSql(_links.Query().Where(x => x.AccountId == FIRST_ACCOUNT).Select(x => x.Project!.Name));
 
       sql.Should().Contain("LEFT JOIN");
-      sql.Should().MatchRegex(CrossTableEquality("account_id", "account_id"));
-      sql.Should().MatchRegex(CrossTableEquality("project_ref", "project_id"));
+      sql.Should().MatchRegex(SqlShape.CrossTableEquality("account_id", "account_id"));
+      sql.Should().MatchRegex(SqlShape.CrossTableEquality("project_ref", "project_id"));
    }
 
    /// <remarks>
@@ -331,9 +330,9 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
    [Fact]
    public void Query_WithInequalityOnAStringKeyMember_RendersNoNullAlternative()
    {
-      var sql = RenderSql(_links.Query().Where(x => x.Kind != "user" && x.Project!.Name == "Apollo"));
+      var sql = QueryDiagnostics.RenderSql(_links.Query().Where(x => x.Kind != "user" && x.Project!.Name == "Apollo"));
 
-      sql.Should().MatchRegex($"{QualifiedColumn("kind")}\\s*<>");
+      sql.Should().MatchRegex($"{SqlShape.QualifiedColumn("kind")}\\s*<>");
       sql.Should().NotContain("IS NULL", "the null alternative can never match a column that cannot hold null");
    }
 
@@ -414,25 +413,6 @@ public class GeneratedRepositoryCompositeKeyTests : TestBase
    private static bool IsUntranslatable(string value)
    {
       return value.GetHashCode(StringComparison.Ordinal) > 0;
-   }
-
-   /// <summary>
-   ///    An equality between two qualified columns, whichever table aliases the provider chose and whether or not it
-   ///    quoted them.
-   /// </summary>
-   private static string CrossTableEquality(string foreignKeyColumn, string keyColumn)
-   {
-      return $"{QualifiedColumn(foreignKeyColumn)}\\s*=\\s*{QualifiedColumn(keyColumn)}";
-   }
-
-   private static string QualifiedColumn(string columnName)
-   {
-      return $@"(?:""[^""]+""|\w+)\.""?{Regex.Escape(columnName)}""?";
-   }
-
-   private static string RenderSql<TEntity>(IQueryable<TEntity> query)
-   {
-      return QueryDiagnostics.RenderSql(query);
    }
 
    /// <remarks>
