@@ -750,9 +750,11 @@ than on a compile error inside generated source you never wrote. Anything beyond
 call the query surface may not translate, for instance — passes through unchecked, because refusing it here would
 reject expressions the library has no test for.
 
-If one relation on a table pairs the same columns as another that carries a condition, but states no condition of its
-own, that is a build warning, `PGSQL0034` — it may silently resolve every kind the conditioned ones distinguish
-between, which usually means a condition was forgotten rather than genuinely meant to be absent.
+If one relation reads through the same columns of its own table as another that carries a condition, but states no
+condition itself, that is a build warning, `PGSQL0034` — it may silently resolve every kind the conditioned ones
+distinguish between, which usually means a condition was forgotten rather than genuinely meant to be absent. Only the
+declaring side is compared, because relations reaching different targets necessarily name different columns over
+there.
 
 Both directions of a polymorphic relation are declared the same way: `PersonTable` and `AssetTable` each get their own
 relation back to `LinkTable`, with the matching condition, exactly as any other reverse relation is declared.
@@ -1043,10 +1045,11 @@ Two diagnostics abandon the table when the declaration cannot be honoured, the w
 
 A third warns rather than refusing anything:
 
-- **`PGSQL0027`** — a relation could reach across tenants. Checked pair by pair and direction-free: a tenancy column on
-  either table's side of a joined pair must be paired with a tenancy column on the other side, and a tenancy column
-  that sits outside every pair entirely is paired with nothing, which is the same failure. This covers both directions
-  — a relation whose target is wholly untenanted still warns for the *declaring* table's own unpinned tenancy column.
+- **`PGSQL0027`** — a relation could reach across tenants. Checked pair by pair and direction-free, on both tables
+  rather than only the one holding the primary key: a tenancy column on either side of a joined pair must be paired
+  with a tenancy column on the other side. A tenancy column that sits outside every pair entirely is pinned by
+  nothing, and warns too — but only when the table on the other side is tenanted as well, since a relation reaching a
+  wholly untenanted table cannot reach another tenant's rows and has no column over there to pair with anyway.
   It drops nothing: the relation still generates, one warning per unpaired tenancy column, naming the relation
   property. A conditioned relation pairing the tenancy column on both sides reports nothing, and so does a relation
   whose target's whole primary key is the tenancy column, reached by that one pair plus a condition — the per-tenant
@@ -1350,7 +1353,7 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0031` | Warning  | A relation to one row pairs against nothing the target claims unique                  |
 | `PGSQL0032` | Error    | A relation condition touches a member with no counterpart on the generated data type   |
 | `PGSQL0033` | Error    | `[Relation]` sits on a property whose type is not a relation definition               |
-| `PGSQL0034` | Warning  | A relation pairs the same columns as another that carries a condition, but states none itself |
+| `PGSQL0034` | Warning  | A relation reads the same columns of its own table as another that carries a condition, but states none itself |
 | `PGSQL0035` | Error    | A relation pairs against a target column that is `[Unique]` but nullable              |
 
 `PGSQL0001` is a warning rather than an error because you can implement `Identifier` and `Name` yourself instead of
@@ -1366,9 +1369,6 @@ rather than a wall of type-not-found errors from everything that names the missi
 unwritable property type all leave every generated signature well-defined. Everything else — including `PGSQL0020`,
 `PGSQL0025` and `PGSQL0026` — abandons the table, because a malformed key or a malformed tenancy declaration leaves
 every generated signature undefined rather than one relation.
-
-`PGSQL0012`, `PGSQL0013` and `PGSQL0019` — the old attribute-argument form's foreign-key-name and arity checks — are
-retired along with that form. Their ids are not reused.
 
 `PGSQL0023` exists rather than being folded into `PGSQL0011` because that warning's advice — register a conversion —
 cannot help: there is no PostgreSQL type to convert to.

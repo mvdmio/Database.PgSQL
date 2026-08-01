@@ -6,6 +6,7 @@
 mvdmio.Database.PgSQL/
 ├── src/
 │   ├── mvdmio.Database.PgSQL/              # Main library (NuGet package)
+│   │   ├── Attributes/                     # Table-definition attributes: [Table], [PrimaryKey], [Column], [Relation], …
 │   │   ├── Connectors/
 │   │   │   ├── Bulk/                       # Bulk ops: Copy, InsertOrUpdate, InsertOrSkip
 │   │   │   ├── Linq/                       # Query surface: linq2db adapter, mapping schema, queryable decorator
@@ -22,6 +23,7 @@ mvdmio.Database.PgSQL/
 │   │   │   ├── DatabaseMigrator.cs         # Migration runner
 │   │   │   ├── EmbeddedSchemaDiscovery.cs  # Finds embedded schema.sql resources
 │   │   │   └── SchemaFileParser.cs         # Parses schema-file header version
+│   │   ├── Relations/                      # RelationDefinition<TDeclaring, TTarget> and RelationKey
 │   │   └── DatabaseConnection.cs           # Main entry point
 │   ├── mvdmio.Database.PgSQL.Tool/         # CLI tool — `dotnet tool` command `db`
 │   └── mvdmio.Database.PgSQL.Analyzers/    # Roslyn analyzer (netstandard2.0, ships in the package)

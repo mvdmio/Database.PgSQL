@@ -339,7 +339,7 @@ internal static class TableRepositoryDiagnostics
    public static readonly DiagnosticDescriptor RelationConditionCannotBeCarried = new(
       id: "PGSQL0032",
       title: "Relation condition cannot be carried",
-      messageFormat: "'{0}.{1}' declares a relation condition that touches '{2}.{3}', which has no counterpart on '{2}''s generated data type",
+      messageFormat: "'{0}.{1}' declares a relation condition that touches '{2}.{3}', which has no counterpart on '{2}'s generated data type",
       category: CATEGORY_GENERATION,
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,

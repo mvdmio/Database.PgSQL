@@ -35,8 +35,10 @@ public abstract class RelationDefinition<TDeclaring, TTarget>
    ///    Builds one Relation key pairing a column on <typeparamref name="TDeclaring" /> against a column of the same
    ///    type on <typeparamref name="TTarget" />.
    /// </summary>
+   /// <typeparam name="TValue">The type both columns hold. Stating it once is what refuses a mismatched pair.</typeparam>
    /// <param name="declaringProperty">The property on <typeparamref name="TDeclaring" /> this key joins from.</param>
    /// <param name="targetProperty">The property on <typeparamref name="TTarget" /> this key joins to.</param>
+   /// <returns>The Relation key, for listing in <see cref="Keys" />.</returns>
    protected static RelationKey Key<TValue>(
       Expression<Func<TDeclaring, TValue>> declaringProperty,
       Expression<Func<TTarget, TValue>> targetProperty
@@ -50,8 +52,10 @@ public abstract class RelationDefinition<TDeclaring, TTarget>
    ///    non-nullable column of the same underlying type on <typeparamref name="TTarget" /> — the ordinary
    ///    outer-join shape, where a foreign key may hold null but the key it joins to never does.
    /// </summary>
+   /// <typeparam name="TValue">The type the target column holds, which the declaring column holds nullably.</typeparam>
    /// <param name="declaringProperty">The nullable property on <typeparamref name="TDeclaring" /> this key joins from.</param>
    /// <param name="targetProperty">The non-nullable property on <typeparamref name="TTarget" /> this key joins to.</param>
+   /// <returns>The Relation key, for listing in <see cref="Keys" />.</returns>
    protected static RelationKey Key<TValue>(
       Expression<Func<TDeclaring, TValue?>> declaringProperty,
       Expression<Func<TTarget, TValue>> targetProperty

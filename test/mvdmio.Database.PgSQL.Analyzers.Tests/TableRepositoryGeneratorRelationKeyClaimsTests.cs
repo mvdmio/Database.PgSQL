@@ -464,6 +464,83 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    }
 
    [Fact]
+   public void UnconditionedRelation_SharingItsKeyPairsWithAConditionedOneToADifferentTarget_ReportsPGSQL0034()
+   {
+      // The polymorphic shape the warning exists for: relations sharing one pair reach different targets and only
+      // the condition tells them apart, so the unconditioned one really does resolve every kind. Relations are
+      // grouped by their pairs alone for exactly this reason — grouping by target as well would put each in a group
+      // of its own and the warning would never fire on the case that motivates it.
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System;
+         using System.Collections.Generic;
+         using System.Linq.Expressions;
+
+         namespace Demo;
+
+         public enum LinkKind
+         {
+            Person,
+            Asset
+         }
+
+         [Table("public.links")]
+         public partial class LinkTable
+         {
+            [PrimaryKey]
+            public long LinkId { get; set; }
+
+            public LinkKind Kind { get; set; }
+            public long TargetId { get; set; }
+
+            private PersonRelation? Person { get; set; }
+            private AnyAssetRelation? AnyAsset { get; set; }
+
+            private class PersonRelation : RelationDefinition<LinkTable, PersonTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.TargetId, y => y.PersonId),
+               ];
+
+               public override Expression<Func<LinkTable, PersonTable, bool>> Condition
+                  => (link, person) => link.Kind == LinkKind.Person;
+            }
+
+            private class AnyAssetRelation : RelationDefinition<LinkTable, AssetTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.TargetId, y => y.AssetId),
+               ];
+            }
+         }
+
+         [Table("public.people")]
+         public partial class PersonTable
+         {
+            [PrimaryKey]
+            public long PersonId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+
+         [Table("public.assets")]
+         public partial class AssetTable
+         {
+            [PrimaryKey]
+            public long AssetId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """);
+
+      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0034").Subject;
+
+      diagnostic.Severity.Should().Be(DiagnosticSeverity.Warning);
+      diagnostic.GetMessage().Should().Contain("LinkTable").And.Contain("AnyAsset");
+   }
+
+   [Fact]
    public void TwoConditionedRelations_SharingTheirKeyPairs_ReportNoPGSQL0034()
    {
       // Both narrow by kind, so neither silently resolves every kind — the shape PGSQL0034 exists to permit.

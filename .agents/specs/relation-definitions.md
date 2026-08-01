@@ -49,8 +49,10 @@ public partial class LinkTable
    public TargetKind TargetKind { get; set; }
    public Guid TargetId { get; set; }
 
-   public PersonRelation? Person { get; set; }
-   public List<AuditRelation> Audits { get; set; } = [];
+   // As accessible as the nested definition class each is typed as, and no more: C# refuses a public property
+   // typed as a private nested class (CS0053). The build does not require either to be public.
+   private PersonRelation? Person { get; set; }
+   private List<AuditRelation> Audits { get; set; } = [];
 
    private class PersonRelation : RelationDefinition<LinkTable, PersonTable>
    {

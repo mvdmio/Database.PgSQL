@@ -91,20 +91,24 @@ public class TableRepositoryGeneratorRelationConditionTests
 
       // The key pair and the condition are combined with &&, and the condition's own parameters ("link" and
       // "person") are rewritten to the join lambda's own ("x" and "y") rather than left as the developer wrote them.
-      registration.Should().Contain(".Relation<global::Demo.PersonData>(x => x.Person, (x, y) => x.TargetId == y.PersonId && (x.Kind == global::LinqToDB.Sql.Constant(global::Demo.LinkKind.Person)))");
-      registration.Should().Contain(".Relation<global::Demo.LinkData>(x => x.Links, (x, y) => x.PersonId == y.TargetId && (y.Kind == global::LinqToDB.Sql.Constant(global::Demo.LinkKind.Person)))");
+      registration.Should().Contain(".Relation<global::Demo.PersonData>(x => x.Person, (x, y) => x.TargetId == y.PersonId && (x.Kind == global::Demo.LinkKind.Person))");
+      registration.Should().Contain(".Relation<global::Demo.LinkData>(x => x.Links, (x, y) => x.PersonId == y.TargetId && (y.Kind == global::Demo.LinkKind.Person))");
    }
 
    [Fact]
-   public void AConstantInTheCondition_ReachesTheEmittedJoinAsALiteral_NotAsAParameter()
+   public void AConstantInTheCondition_IsInlinedVerbatim_WithoutAWrapperAroundIt()
    {
       var result = GeneratorHarness.RunGenerator(CONDITIONED_RELATIONS);
       var registration = GeneratorHarness.RegistrationSource(result);
 
-      // The enum member is inlined verbatim (fully qualified, since the emitted file carries none of the developer's
-      // own using directives) and wrapped in LinqToDB.Sql.Constant, which is what tells the query surface to inline
-      // it into the join as a literal rather than parameterizing it for query-plan reuse.
-      registration.Should().Contain("global::LinqToDB.Sql.Constant(global::Demo.LinkKind.Person)");
+      // The enum member is inlined verbatim, fully qualified because the emitted file carries none of the developer's
+      // own using directives, and nothing is wrapped around it. The query surface already renders a constant in an
+      // association predicate as a literal on its own; the one case it does not — a column carrying a value
+      // conversion — no wrapper fixes, and Sql.ToSql would force a literal past the conversion and so emit the wrong
+      // one. See ADR 0010.
+      registration.Should().Contain("(x.Kind == global::Demo.LinkKind.Person)");
+      registration.Should().NotContain("Sql.Constant");
+      registration.Should().NotContain("Sql.ToSql");
    }
 
    [Fact]
@@ -330,5 +334,79 @@ public class TableRepositoryGeneratorRelationConditionTests
       // not even get a Relations.g.cs file.
       result.GeneratedSources.Should().Contain(x => x.HintName == "Demo_BookTable.Repository.g.cs");
       result.GeneratedSources.Should().NotContain(x => x.HintName == "Demo_BookTable.Relations.g.cs");
+   }
+
+   [Fact]
+   public void AConditionReachingThroughARelationThatWasItselfDropped_ProducesDiagnostic_AndCompiles()
+   {
+      // Reaching through another relation inside a condition is allowed, but only as far as the generated data type
+      // actually mirrors it — and it mirrors the relations that resolved, not the ones that were declared. Here
+      // Publisher is dropped because its target is not a table definition, so a condition reading Book.Publisher has
+      // to be dropped in turn. Checking against the declared relations instead would pass this and then fail inside
+      // generated source, which is the one failure this diagnostic exists to prevent.
+      const string SOURCE = """
+         using mvdmio.Database.PgSQL.Attributes;
+         using mvdmio.Database.PgSQL.Relations;
+         using System;
+         using System.Collections.Generic;
+         using System.Linq.Expressions;
+
+         namespace Demo;
+
+         public class NotATable
+         {
+            public long PublisherId { get; set; }
+         }
+
+         [Table("public.books")]
+         public partial class BookTable
+         {
+            [PrimaryKey]
+            public long BookId { get; set; }
+
+            public long? AuthorId { get; set; }
+            public long? PublisherId { get; set; }
+
+            private PublisherRelation? Publisher { get; set; }
+            private AuthorRelation? Author { get; set; }
+
+            private class PublisherRelation : RelationDefinition<BookTable, NotATable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.PublisherId, y => y.PublisherId),
+               ];
+            }
+
+            private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+            {
+               public override IReadOnlyList<RelationKey> Keys => [
+                  Key(x => x.AuthorId, y => y.AuthorId),
+               ];
+
+               public override Expression<Func<BookTable, AuthorTable, bool>> Condition
+                  => (book, author) => book.Publisher != null;
+            }
+         }
+
+         [Table("public.authors")]
+         public partial class AuthorTable
+         {
+            [PrimaryKey]
+            public long AuthorId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """;
+
+      var result = GeneratorHarness.RunGenerator(SOURCE);
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0014");
+
+      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0032").Subject;
+      diagnostic.GetMessage().Should().Contain("Publisher").And.Contain("BookTable");
+
+      // Both relations are gone, so nothing is mirrored and nothing registered names a member that does not exist.
+      result.GeneratedSources.Should().NotContain(x => x.HintName == "Demo_BookTable.Relations.g.cs");
+      GeneratorHarness.AssertGeneratedSourcesCompile(SOURCE);
    }
 }

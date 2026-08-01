@@ -119,3 +119,14 @@ None from the spec or the step file. The ADR's Consequences section and the READ
 rather than omit, the two carried deviations from earlier steps (the `Sql.Constant` literal not surviving the
 association path, and `PGSQL0017` no longer requiring `public`) exactly as the driving prompt required — this is
 documenting prior deviations honestly, not a new one introduced here.
+
+**Corrected by the review pass.** The first of those two was diagnosed wrongly by step 03 and is described wrongly
+above. The provider's association path *does* render a constant as a literal; step 03's conclusion that it "does not
+route through the visitor that honours `Sql.Constant`" is not what is happening. What actually parameterizes the
+comparison is the **value conversion** on the compared column — this library maps every enum with one — and no
+wrapper changes that, `Sql.Constant` least of all, which is inert in an association predicate for converted and
+unconverted constants alike. `Sql.ToSql`/`Sql.AsSql` do force a literal, and are wrong here because they force it
+past the conversion: a kind column stored as text would be compared against `1`. The now-inert `Sql.Constant` wrap
+was therefore removed from the generator, the `LinqToDB` stub was dropped from the harness so a reintroduction fails
+the "emitted source compiles" guard, ADR 0010 was rewritten to say this accurately, and an integration assertion now
+pins the parameter binding so a future provider version changing it fails a test rather than passing unnoticed.

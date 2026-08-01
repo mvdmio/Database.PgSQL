@@ -787,12 +787,13 @@ public class TableRepositoryGeneratorTenancyTests
    }
 
    [Fact]
-   public void RelationToAnUntenantedTarget_FromATenantedDeclaringTable_ReportsPGSQL0027ForTheDeclaringSidesOwnTenancyColumn()
+   public void RelationToAnUntenantedTarget_FromATenantedDeclaringTable_ReportsNoWarning()
    {
-      // The target declares no tenancy column at all, so there is nothing to pin against it. But the declaring
-      // table's own tenancy column is not part of this relation's key pairs either — it is paired with nothing — and
-      // the pair-based, direction-free rule warns on that regardless of what the target declares. This is the
-      // direction the old, positional rule missed: it only ever checked whichever side held the primary key.
+      // A tenanted table reaching a shared, untenanted lookup: the declaring table's own tenancy column is in no
+      // pair, but the target carries no tenant of its own, so the join cannot reach another tenant's rows and there
+      // is no column on the far side to pair with. Warning here would name a problem with no fix, on one of the most
+      // ordinary shapes there is. The unpinned half of the rule therefore asks that both tables be tenanted; the
+      // mispaired half, which is always actionable, does not — see the tests either side of this one.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -834,10 +835,7 @@ public class TableRepositoryGeneratorTenancyTests
          }
          """);
 
-      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0027").Subject;
-
-      diagnostic.Severity.Should().Be(DiagnosticSeverity.Warning);
-      diagnostic.GetMessage().Should().Contain("Category").And.Contain("AccountId");
+      result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0027");
    }
 
    [Fact]
@@ -937,10 +935,12 @@ public class TableRepositoryGeneratorTenancyTests
    }
 
    [Fact]
-   public void RelationTenancyColumn_OutsideTheJoinedKey_ReportsExactlyOnePGSQL0027()
+   public void RelationTenancyColumn_OutsideTheJoinedKey_WithATenantedDeclaringTable_ReportsPGSQL0027PerUnpinnedColumn()
    {
-      // The target's tenancy column is not part of the primary key the relation joins on, so nothing is paired
-      // against it at all — which is the same failure as pairing the wrong property, and warns exactly once.
+      // Neither table's tenancy column is part of the key the relation joins on, so nothing is paired against either
+      // at all. Both tables are tenanted, so the join really can reach another account's rows and each side has a
+      // column the other could have been pinned to — the warning is earned on both, and reported once per unpinned
+      // column rather than once per relation.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -964,6 +964,10 @@ public class TableRepositoryGeneratorTenancyTests
          [Table("public.widgets")]
          public partial class WidgetTable
          {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long AccountId { get; set; }
+
             [PrimaryKey]
             [Generated]
             public long WidgetId { get; set; }
@@ -981,9 +985,11 @@ public class TableRepositoryGeneratorTenancyTests
          }
          """);
 
-      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0027").Subject;
+      // Once per unpinned tenancy column, so twice here: neither table's AccountId is in the pair.
+      var diagnostics = result.Diagnostics.Where(x => x.Id == "PGSQL0027").ToList();
 
-      diagnostic.GetMessage().Should().Contain("Tenant").And.Contain("AccountId");
+      diagnostics.Should().HaveCount(2);
+      diagnostics.All(x => x.GetMessage().Contains("Tenant") && x.GetMessage().Contains("AccountId")).Should().BeTrue();
    }
 
    [Fact]

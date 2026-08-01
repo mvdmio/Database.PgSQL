@@ -79,15 +79,9 @@ internal static class GeneratorHarness
          }
       }
 
-      namespace LinqToDB
-      {
-         // A relation condition's constant subtrees are wrapped in this, so the query surface inlines them into the
-         // join as a literal rather than parameterizing them — the stub is the shape emitted source binds against.
-         public static class Sql
-         {
-            public static T Constant<T>(T value) => value;
-         }
-      }
+      // No LinqToDB stub: emitted source names no type from that assembly. A relation condition's constants are
+      // inlined verbatim, so an attempt to reintroduce a wrapper such as Sql.Constant fails the
+      // "emitted source compiles" assertion rather than passing quietly against a stub.
 
       namespace NpgsqlTypes
       {

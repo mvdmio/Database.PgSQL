@@ -128,24 +128,40 @@ what the class says from source and inlines it into the association it already r
   `[Unique]` column outright. Rather than add a third `Key(…)` overload for a nullable target side, the build refuses
   the pairing (`PGSQL0035`): a nullable unique column matches at most one row but may match none for reasons the
   relation cannot see, so the refusal is right on its own merits and keeps `Key(…)` at exactly two overloads.
-- **The condition's constant does not reliably reach PostgreSQL as a literal.** The generator emits the mechanism the
-  design calls for — a compile-time-constant subtree in the condition is wrapped in `Sql.Constant(...)`, which does
-  force a literal instead of a bound parameter for an ordinary `.Where()` predicate. But a relation's condition is
-  inlined into the *association* predicate registered once through the provider's mapping builder, and the provider's
-  association-building path does not route through the same expression visitor that honours `Sql.Constant` there —
-  confirmed by observing the kind comparison render as a bound parameter in the join however it is reached
-  (`.Select`, a cross-relation `.Where`, or `.Include`). This does not cost correctness: every relation still narrows
-  to the right kind in both directions, several conditioned relations sharing a pair still resolve independently, and
-  a relation to one row still folds into a single left join with no `IS NULL` widening. It does mean two conditioned
-  relations sharing a key pair do not necessarily get separate query plans from the constant alone — in practice they
-  already differ in SQL text because they reach different target tables, so this has not been observed to matter, but
-  it is not the guarantee originally intended and is recorded here rather than promised in the README.
+- **The condition's constant reaches PostgreSQL as a literal, except against a column carrying a value conversion.**
+  The provider renders a constant in an association predicate as a literal on its own: a string, a number and an
+  unconverted enum all appear inline in the join with no help from the generator. The exception is a column mapped
+  with a value conversion, which is how this library maps every enum by default — text unless a `[Column]` claims an
+  integral type. There the comparison binds the *converted* value as a parameter instead, and no wrapper changes
+  that. Nothing in the emitted condition tries to force the issue, because nothing can:
+  - `Sql.Constant(...)` — which the design originally called for and which earlier steps of this change emitted — is
+    inert here. It makes no difference to any constant in an association predicate, converted or not; the ones that
+    already render inline still do, and the converted one still binds.
+  - `Sql.ToSql(...)` and `Sql.AsSql(...)` do force a literal past the conversion, and are wrong for exactly that
+    reason: they emit the enum's underlying number, so a kind column stored as text is compared against `1` rather
+    than `'Person'`. That is silently wrong SQL against a text column, and a type error in PostgreSQL. A literal is
+    not worth buying at the price of the wrong literal.
+
+  So the emitted condition wraps nothing, and the shortfall is confined to a converted column. It costs no
+  correctness anywhere: the parameter carries the converted value, so every relation still narrows to the right kind
+  in both directions, several conditioned relations sharing a pair still resolve independently, and a relation to one
+  row still folds into a single left join with no `IS NULL` widening. What it costs is the per-kind query plan the
+  spec asked for, and only for a conditioned relation whose condition compares a converted column. In practice two
+  such relations already differ in SQL text because they reach different target tables. Claiming an integral storage
+  for the kind column does not recover it — a cast conversion binds a parameter just as a text one does — so the
+  honest summary is that the spec's story 33 holds for an unconverted column and not for a converted one, and this is
+  recorded here rather than promised in the README.
 - **The uniqueness claim, the tenancy check and the forgotten-condition check are reshaped to read resolved pairs,
   which changes what two of them report.** The tenancy check (`PGSQL0027`, same id) becomes pair-based and
   direction-free: a tenancy column on either table's side of a pair must be paired with a tenancy column on the other
-  side, and a tenancy column absent from every pair warns too. This is strictly stronger than the positional rule it
-  replaces, which only ever checked whichever side held the primary key — a relation to a wholly untenanted target now
-  still warns once, for the declaring table's own unpinned tenancy column, a case the old rule never looked at. The
+  side, and a tenancy column absent from every pair warns too. This is stronger than the positional rule it replaces,
+  which only ever checked whichever side held the primary key, and it now covers the declaring side as well. It fires
+  only when *both* tables are tenanted, which is the one narrowing taken against the spec's literal wording. A
+  relation reaching a wholly untenanted table cannot reach another tenant's rows, because the rows on the far side
+  belong to no tenant: a tenanted table reading a shared lookup is a common shape, it carries none of the risk the
+  warning exists for, and the developer's only response to a warning there would be to silence it. Pairing also needs
+  a tenancy column on both sides in order to pair at all, so where one side has none the warning could not say what
+  to do. Stories 37 to 40 all describe relations between two tenanted tables and are unaffected. The
   uniqueness warning (`PGSQL0031`) is new rather than reshaped: it replaces the arity check ADR 0006 introduced
   (`PGSQL0019`), which had nothing left to check once a relation states its pairs explicitly instead of matching a
   count against the target's key — what that arity check protected, a relation to one row reaching more than one, is

@@ -139,4 +139,22 @@ public class GeneratedRepositoryPolymorphicRelationTests : TestBase
       sql.Should().Contain("kind");
       sql.Should().NotContain("IS NULL");
    }
+
+   /// <remarks>
+   ///    Pins the one shortfall ADR 0010 records against user story 33, so that it stays a known limitation rather
+   ///    than quietly becoming untrue. <c>Kind</c> is an enum, which this library maps with a value conversion by
+   ///    default, and a comparison against a converted column binds the converted value as a parameter instead of
+   ///    rendering it inline. Nothing forces it: <c>Sql.Constant</c> makes no difference in an association predicate,
+   ///    and <c>Sql.ToSql</c> would push the enum's underlying number past the conversion and compare a text column
+   ///    against <c>1</c>. If a future provider version renders this inline, this test fails and the ADR should be
+   ///    revisited — that is the point of it.
+   /// </remarks>
+   [Fact]
+   public void Query_AConditionComparingAConvertedColumn_StillBindsItsConstantAsAParameter()
+   {
+      var sql = QueryDiagnostics.RenderSql(_links.Query().Select(x => x.Person!.Name));
+
+      sql.Should().NotContain("'Person'");
+      sql.Should().MatchRegex(@"kind[^\r\n]*=[^\r\n]*[:@]\w+");
+   }
 }
