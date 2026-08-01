@@ -1,4 +1,5 @@
 using mvdmio.Database.PgSQL.Attributes;
+using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
@@ -18,6 +19,12 @@ public partial class BookTable
 
    public long? AuthorId { get; set; }
 
-   [Relation(nameof(AuthorId))]
-   public AuthorTable? Author { get; set; }
+   private AuthorRelation? Author { get; set; }
+
+   private class AuthorRelation : RelationDefinition<BookTable, AuthorTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AuthorId, y => y.AuthorId),
+      ];
+   }
 }

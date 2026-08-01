@@ -1,6 +1,6 @@
 # 05 — Move the OData suite onto the new declaration form
 
-Status: pending
+Status: done
 
 ## What to build
 
@@ -38,3 +38,38 @@ way, and step 06 converts those as it removes the old form.
 - [ ] The generator reports no new warning over the OData fixtures — in particular no uniqueness or cross-tenant
       warning that the conversion introduced by pairing something differently than the old declaration did.
 - [ ] `dotnet format --verify-no-changes`, `dotnet build` and `dotnet test` are all green (Docker running).
+
+## Outcome
+
+All six relation declarations in `test/mvdmio.Database.PgSQL.Tests.Integration.OData/Fixture/` now use the
+`RelationDefinition<,>` class form, converted from the attribute-argument form the same way the main integration
+suite's `AuthorTable`/`BookTable`/`TenantProjectTable`/`TenantTaskTable` fixtures already had been (used as the
+pattern to follow):
+
+- `AuthorTable`: `MentorRelation` (`MentorId` → `AuthorId`), `MenteesRelation` (`AuthorId` → `MentorId`), `BooksRelation`
+  (`AuthorId` → `BookTable.AuthorId`).
+- `BookTable`: `AuthorRelation` (`AuthorId` → `AuthorTable.AuthorId`).
+- `TenantProjectTable`: `TasksRelation` (`(AccountId, ProjectId)` → `(AccountId, ProjectId)` on `TenantTaskTable`).
+- `TenantTaskTable`: `ProjectRelation` (`(AccountId, ProjectId)` → `(AccountId, ProjectId)` on `TenantProjectTable`).
+
+Each relation property (`Mentor`, `Mentees`, `Books`, `Author`, `Tasks`, `Project`) became `private`, backed by a
+`private` nested `RelationDefinition<,>` class, matching the already-converted main-suite fixtures. This is safe here
+because nothing in the OData suite's tests, conformance checks, or `ODataConfiguration` ever touches these
+Table-definition properties directly — every assertion and every EDM/query-option reference goes through the
+generated data types (`AuthorData`, `BookData`, `TenantProjectData`, `TenantTaskData`) and their navigation properties,
+confirmed by grepping the whole test project for `.Mentor`/`.Mentees`/`.Books`/`.Author`/`.Tasks`/`.Project` usage
+before making the change.
+
+No conformance test, regression test, model-shape test, or OData configuration file was touched — only the four
+fixture files under `Fixture/`. The old attribute-argument form still compiles elsewhere (untouched by this step, per
+the boundary).
+
+Verification: `dotnet format --verify-no-changes` exits 0. `dotnet build` is clean with 0 warnings, 0 errors — in
+particular no new PGSQL0027 (tenancy) or PGSQL0031 (uniqueness) warning was reported for the converted fixtures, so no
+deviation to report there. `dotnet test` is green across every project: the OData suite (134/134, including all
+`$expand`, navigation-path, collection-quantifier, composite-key and misconfiguration-regression tests, unchanged),
+the analyzer tests (165/165, `DOTNET_ROLL_FORWARD=Major` needed to launch the net9.0 host on this machine's net10.0-only
+SDK — a pre-existing environment quirk, not a code issue), the unit tests (197/197), the packaging tests (13/13), and
+the main integration suite (263/263, Docker running).
+
+No deviations from the spec or from earlier steps' carried context.

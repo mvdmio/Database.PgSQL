@@ -1,4 +1,5 @@
 using mvdmio.Database.PgSQL.Attributes;
+using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
@@ -24,12 +25,28 @@ public partial class AuthorTable
 
    public long? MentorId { get; set; }
 
-   [Relation(nameof(MentorId))]
-   public AuthorTable? Mentor { get; set; }
+   private MentorRelation? Mentor { get; set; }
+   private List<MenteesRelation> Mentees { get; set; } = [];
+   private List<BooksRelation> Books { get; set; } = [];
 
-   [Relation(nameof(MentorId))]
-   public List<AuthorTable> Mentees { get; set; } = [];
+   private class MentorRelation : RelationDefinition<AuthorTable, AuthorTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.MentorId, y => y.AuthorId),
+      ];
+   }
 
-   [Relation(nameof(BookTable.AuthorId))]
-   public List<BookTable> Books { get; set; } = [];
+   private class MenteesRelation : RelationDefinition<AuthorTable, AuthorTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AuthorId, y => y.MentorId),
+      ];
+   }
+
+   private class BooksRelation : RelationDefinition<AuthorTable, BookTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AuthorId, y => y.AuthorId),
+      ];
+   }
 }

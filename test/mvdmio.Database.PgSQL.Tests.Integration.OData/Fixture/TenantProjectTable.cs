@@ -1,4 +1,5 @@
 using mvdmio.Database.PgSQL.Attributes;
+using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
@@ -27,6 +28,13 @@ public partial class TenantProjectTable
 
    public string Name { get; set; } = string.Empty;
 
-   [Relation(nameof(TenantTaskTable.AccountId), nameof(TenantTaskTable.ProjectId))]
-   public List<TenantTaskTable> Tasks { get; set; } = [];
+   private List<TasksRelation> Tasks { get; set; } = [];
+
+   private class TasksRelation : RelationDefinition<TenantProjectTable, TenantTaskTable>
+   {
+      public override IReadOnlyList<RelationKey> Keys => [
+         Key(x => x.AccountId, y => y.AccountId),
+         Key(x => x.ProjectId, y => y.ProjectId),
+      ];
+   }
 }
