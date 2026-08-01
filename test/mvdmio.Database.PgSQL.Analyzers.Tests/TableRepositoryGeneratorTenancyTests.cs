@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Microsoft.CodeAnalysis;
 
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
@@ -418,5 +419,130 @@ public class TableRepositoryGeneratorTenancyTests
 
       result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0007");
       result.GeneratedSources.Should().BeEmpty();
+   }
+
+   [Fact]
+   public void NullableTenancyColumn_FromANullableType_ReportsPGSQL0025_AndAbandonsTheTable()
+   {
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.rows")]
+         public partial class RowTable
+         {
+            [PrimaryKey]
+            [Generated]
+            public long RowId { get; set; }
+
+            [Column(Tenancy = true)]
+            public long? AccountId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """);
+
+      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0025").Subject;
+
+      diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
+      diagnostic.GetMessage().Should().Contain("AccountId");
+      result.GeneratedSources.Should().BeEmpty();
+   }
+
+   [Fact]
+   public void NullableTenancyColumn_FromANullClaim_ReportsPGSQL0025_AndAbandonsTheTable()
+   {
+      // A non-nullable reference type carrying Null = true is not a contradiction — [Column]'s claim overrides the
+      // type — so the column is nullable through the claim alone, which the tenancy rule must catch the same way.
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.rows")]
+         public partial class RowTable
+         {
+            [PrimaryKey]
+            [Generated]
+            public long RowId { get; set; }
+
+            [Column(Tenancy = true, Null = true)]
+            public string AccountId { get; set; } = string.Empty;
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """);
+
+      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0025").Subject;
+
+      diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
+      diagnostic.GetMessage().Should().Contain("AccountId");
+      result.GeneratedSources.Should().BeEmpty();
+   }
+
+   [Fact]
+   public void GeneratedTenancyColumn_ReportsPGSQL0026_AndAbandonsTheTable()
+   {
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.rows")]
+         public partial class RowTable
+         {
+            [PrimaryKey]
+            public long RowId { get; set; }
+
+            [Column(Tenancy = true)]
+            [Generated]
+            public long AccountId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """);
+
+      var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0026").Subject;
+
+      diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
+      diagnostic.GetMessage().Should().Contain("AccountId");
+      result.GeneratedSources.Should().BeEmpty();
+   }
+
+   [Fact]
+   public void NullablePrimaryKeyThatIsAlsoATenancyColumn_ReportsOnlyPGSQL0020_NotPGSQL0025()
+   {
+      // Malformed two ways at once: a nullable key member that also carries Tenancy = true. The key rule already
+      // abandons the table, so the tenancy rule must not pile on a second, competing diagnostic for the same property.
+      var result = GeneratorHarness.RunGenerator("""
+         using mvdmio.Database.PgSQL.Attributes;
+
+         namespace Demo;
+
+         [Table("public.rows")]
+         public partial class RowTable
+         {
+            [Column(Tenancy = true)]
+            [PrimaryKey]
+            public long? AccountId { get; set; }
+
+            public string Name { get; set; } = string.Empty;
+         }
+         """);
+
+      result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0020");
+      result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0025");
+      result.GeneratedSources.Should().BeEmpty();
+   }
+
+   [Fact]
+   public void WellFormedTenancyColumns_ReportNeitherPGSQL0025NorPGSQL0026()
+   {
+      var insideKey = GeneratorHarness.RunGenerator(TENANCY_INSIDE_KEY);
+      var outsideKey = GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY);
+
+      insideKey.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0025" || x.Id == "PGSQL0026");
+      outsideKey.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0025" || x.Id == "PGSQL0026");
    }
 }

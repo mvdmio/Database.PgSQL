@@ -283,4 +283,27 @@ internal static class TableRepositoryDiagnostics
       isEnabledByDefault: true,
       description: "A storage claim feeds the parameter binding and the query surface mapping both, which is what stops the two disagreeing about a column. Where the query surface has no equivalent for the claim — the network address and geometry types among them — the claim is honoured on the Dapper surface and left unstated on the other, so the divergence is made visible here rather than left silent."
    );
+
+   // The two diagnostics below abandon the table, the same as a malformed key: generating it anyway would emit
+   // precisely the unguarded surface this feature removes, and would do it quietly.
+
+   public static readonly DiagnosticDescriptor NullableTenancyColumn = new(
+      id: "PGSQL0025",
+      title: "Tenancy column property cannot be nullable",
+      messageFormat: "'{0}.{1}' is marked Tenancy = true but can hold null, whether from its type or from a Null = true claim",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "A null tenant matches no row, so every generated member over the table would return nothing. This follows the same reasoning that already refuses a nullable primary-key member."
+   );
+
+   public static readonly DiagnosticDescriptor GeneratedTenancyColumn = new(
+      id: "PGSQL0026",
+      title: "Tenancy column property cannot be [Generated]",
+      messageFormat: "'{0}.{1}' is marked Tenancy = true but is also [Generated], so it is on no command type for a required property to carry",
+      category: CATEGORY_GENERATION,
+      defaultSeverity: DiagnosticSeverity.Error,
+      isEnabledByDefault: true,
+      description: "A generated column is on no command type, so there is no property to make required — the developer would learn that at run time instead of build time."
+   );
 }

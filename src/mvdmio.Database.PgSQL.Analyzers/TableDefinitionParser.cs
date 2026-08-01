@@ -140,6 +140,45 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
+      // Abandons the table, the same as a nullable key member: a null tenant matches no row, so every generated member
+      // would return nothing. IsDeclaredNotNull already folds the property's type and a Null = true claim into one
+      // answer (a dropped contradiction falls back to the type), so checking it here catches both without checking
+      // each separately. A key member that is also nullable is already caught above and this table already abandoned,
+      // so a property malformed both ways reports one clear reason rather than two.
+      var nullableTenancyColumns = properties.Where(x => x.IsTenancy && !x.IsDeclaredNotNull).ToImmutableArray();
+      if (!nullableTenancyColumns.IsEmpty)
+      {
+         foreach (var tenancyColumn in nullableTenancyColumns)
+         {
+            diagnostics.Add(Diagnostic.Create(
+               TableRepositoryDiagnostics.NullableTenancyColumn,
+               TableDefinitionSymbols.PropertyLocation(mappedProperties, tenancyColumn, classSyntax),
+               classSymbol.Name,
+               tenancyColumn.PropertyName
+            ));
+         }
+
+         return new ParseResult(null, diagnostics.ToImmutable());
+      }
+
+      // Abandons the table for the same reason: a generated column is on no command type, so there is no property to
+      // make required, and the developer would learn that at run time instead of build time.
+      var generatedTenancyColumns = properties.Where(x => x.IsTenancy && x.IsGenerated).ToImmutableArray();
+      if (!generatedTenancyColumns.IsEmpty)
+      {
+         foreach (var tenancyColumn in generatedTenancyColumns)
+         {
+            diagnostics.Add(Diagnostic.Create(
+               TableRepositoryDiagnostics.GeneratedTenancyColumn,
+               TableDefinitionSymbols.PropertyLocation(mappedProperties, tenancyColumn, classSyntax),
+               classSymbol.Name,
+               tenancyColumn.PropertyName
+            ));
+         }
+
+         return new ParseResult(null, diagnostics.ToImmutable());
+      }
+
       var duplicateColumn = properties
          .GroupBy(x => x.ColumnName, StringComparer.OrdinalIgnoreCase)
          .FirstOrDefault(x => x.Count() > 1);
