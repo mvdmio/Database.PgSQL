@@ -169,22 +169,13 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
    ///    How one relation is registered with the query surface.
    /// </summary>
    /// <remarks>
-   ///    A relation joining one pair of columns keeps the key-based overload it has always used. A relation joining more
-   ///    than one pair takes the predicate overload instead, which is not a preference: the key-based overloads carry a
-   ///    single key each and their key type parameters are unconstrained, so an anonymous type or a tuple compiles there
-   ///    and registers as one key named after its constructor, failing only at the first query. A predicate is checked
+   ///    Every relation, whatever its pair count, takes the predicate overload. The key-based overloads carry a single
+   ///    key each and their key type parameters are unconstrained, so an anonymous type or a tuple compiles there and
+   ///    registers as one key named after its constructor, failing only at the first query. A predicate is checked
    ///    member by member at build time, so that shape is unreachable from here.
    /// </remarks>
    private static string RelationCall(ResolvedRelation relation)
    {
-      if (!relation.IsComposite)
-      {
-         var only = relation.JoinedKeys[0];
-
-         return
-            $".Relation<{relation.TargetDataTypeName}, {only.ThisKey.TypeName}, {only.TargetKey.TypeName}>(x => x.{relation.PropertyName}, x => x.{only.ThisKey.PropertyName}, x => x.{only.TargetKey.PropertyName})";
-      }
-
       var comparisons = relation.JoinedKeys.Select(x => $"x.{x.ThisKey.PropertyName} == y.{x.TargetKey.PropertyName}");
 
       return $".Relation<{relation.TargetDataTypeName}>(x => x.{relation.PropertyName}, (x, y) => {string.Join(" && ", comparisons)})";

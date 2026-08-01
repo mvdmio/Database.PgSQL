@@ -287,12 +287,6 @@ internal sealed class ResolvedRelation
 
    /// <summary>The column pairs the relation joins on, in key order.</summary>
    public ImmutableArray<JoinedKeyPair> JoinedKeys { get; }
-
-   /// <summary>
-   ///    Whether the relation joins on more than one pair of columns, which is what decides how it is registered with
-   ///    the provider.
-   /// </summary>
-   public bool IsComposite => JoinedKeys.Length > 1;
 }
 
 /// <summary>

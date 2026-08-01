@@ -1,6 +1,6 @@
 # 01 — Every relation registers through the predicate association
 
-Status: pending
+Status: done
 
 ## What to build
 
@@ -45,3 +45,49 @@ anything from the old path here.
       condition is still plain column equality with no "or both are null" alternative.
 - [ ] The OData conformance and regression suites pass unchanged.
 - [ ] `dotnet format --verify-no-changes`, `dotnet build` and `dotnet test` are all green (Docker running).
+
+## Outcome
+
+`RelationCall` in `GeneratedAssemblyRegistrationSourceBuilder.cs` no longer branches on `ResolvedRelation.IsComposite`.
+It now always builds the `&&`-joined column-equality lambda and emits the predicate overload —
+`.Relation<TTarget>(x => x.Property, (x, y) => ...)` — for every relation, whether it joins one pair or several. The
+now-unreachable single-pair branch (the three-type-argument key-expression call) is gone from this method, and the
+`IsComposite` property on `ResolvedRelation` in `RelationResolver.cs` was removed with it, since nothing reads it any
+longer. Nothing else in the resolver changed: key-pair resolution, the arity check, and all existing diagnostics are
+untouched.
+
+The public key-expression overloads on `QueryEntityMappingBuilder<TEntity>` are untouched and still resolve for a
+hand-written call, per the step's instruction to leave the old path alone until step 06.
+
+Test changes are assertion-only, in the two generator test classes that pinned the old call text:
+
+- `TableRepositoryGeneratorTests.cs` — `ValidRelations_ProduceNoDiagnostics_AndMirrorTheRelationsOntoTheDataTypes` now
+  pins the predicate form for the single-pair `Author`, `Editor` and `Books` relations instead of the key-expression
+  form. Its companion "reports nothing" and "emitted source compiles" tests
+  (`ValidRelations_ProduceCodeThatCompiles`) were already assertion-shape-agnostic and needed no change.
+- `TableRepositoryGeneratorCompositeKeyTests.cs` — the existing `CompositeRelation_IsRegisteredThroughThePredicateOverload`
+  test needed no change (composite relations already used the predicate form). The defensive
+  `CompositeRelation_IsNeverRegisteredThroughAKeyExpression` test was renamed to
+  `Relation_IsNeverRegisteredThroughAKeyExpression` and its remark updated, since the claim it guards — no
+  three-type-argument key-expression call appears in the registration — now holds for every relation, not only
+  composite ones. `CompositeRelations_ProduceCodeThatCompiles` needed no change.
+
+No table definition changed: `git diff --stat` against the pre-step tree touches only the two generator source files
+and the two test files above — none of the 45 existing `[Relation]` declarations across the three test projects were
+touched.
+
+Verification, run sequentially in the foreground with Docker running:
+- `dotnet format` — no changes.
+- `dotnet build` — 0 warnings, 0 errors.
+- `dotnet test`, run per project with `DOTNET_ROLL_FORWARD=LatestMajor` for the net9.0 projects (a pre-existing
+  environment quirk on this machine, not a step concern): Analyzers.Tests 130/130, Tests.Unit 197/197,
+  Tests.Integration 256/256 (Docker/Testcontainers), Tests.Integration.OData 134/134, Tests.Packaging 13/13. All
+  green; the integration and OData suites needed no changes to pass, confirming no observable behavior moved.
+- `dotnet format --verify-no-changes` — exits 0.
+
+### Deviations
+
+None from the spec or the step file. One incidental cleanup beyond the letter of "prefactor, nothing else changes":
+`ResolvedRelation.IsComposite` (an internal-only resolver property) was removed because `RelationCall` was its only
+reader and it would otherwise sit dead. This is an internal implementation detail with no effect on any consumer,
+any generated source, or any later step's contract.

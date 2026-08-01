@@ -150,13 +150,13 @@ public class TableRepositoryGeneratorCompositeKeyTests
    ///    can hold the generator off that shape.
    /// </remarks>
    [Fact]
-   public void CompositeRelation_IsNeverRegisteredThroughAKeyExpression()
+   public void Relation_IsNeverRegisteredThroughAKeyExpression()
    {
       var registration = GeneratorHarness.RegistrationSource(GeneratorHarness.RunGenerator(COMPOSITE_KEY_TABLES));
 
       registration.Should().NotContainAny("x => new", "y => new", "ValueTuple", "System.Tuple");
 
-      // Every relation registered here is composite, so no three-argument key-based call may appear at all.
+      // Every relation now registers through the predicate overload, so no three-argument key-based call may appear.
       registration.Should().NotContain(".Relation<global::Demo.TaskData, ");
       registration.Should().NotContain(".Relation<global::Demo.ProjectData, ");
    }

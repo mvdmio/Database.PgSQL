@@ -309,10 +309,10 @@ public class TableRepositoryGeneratorTests
       bookRelations.Should().Contain("public global::Demo.AuthorData? Editor { get; set; }");
       authorRelations.Should().Contain("public global::System.Collections.Generic.List<global::Demo.BookData> Books { get; set; } = new();");
 
-      // A relation joining one pair of columns keeps the key-based registration it has always used, unchanged.
-      registration.Should().Contain(".Relation<global::Demo.AuthorData, long?, long>(x => x.Author, x => x.AuthorId, x => x.AuthorId)");
-      registration.Should().Contain(".Relation<global::Demo.AuthorData, long?, long>(x => x.Editor, x => x.EditorId, x => x.AuthorId)");
-      registration.Should().Contain(".Relation<global::Demo.BookData, long, long?>(x => x.Books, x => x.AuthorId, x => x.AuthorId)");
+      // A relation joining one pair of columns registers through the predicate overload, the same as a composite one.
+      registration.Should().Contain(".Relation<global::Demo.AuthorData>(x => x.Author, (x, y) => x.AuthorId == y.AuthorId)");
+      registration.Should().Contain(".Relation<global::Demo.AuthorData>(x => x.Editor, (x, y) => x.EditorId == y.AuthorId)");
+      registration.Should().Contain(".Relation<global::Demo.BookData>(x => x.Books, (x, y) => x.AuthorId == y.AuthorId)");
    }
 
    [Fact]
