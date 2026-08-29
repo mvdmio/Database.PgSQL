@@ -25,7 +25,7 @@ A **Scope** an application declares as its own in the tool configuration (`scope
 _Avoid_: Included scope, exported scope.
 
 **Vouched scope**:
-A **Scope** an assembly may establish a schema-first baseline for: the scopes of migrations discovered from that assembly, plus the assembly's simple name. Header lines for non-vouched scopes are ignored with a warning during bootstrap.
+A **Scope** an assembly may establish a schema-first baseline for: the scopes of migrations discovered from that assembly, plus the assembly's simple name. Schema-first bootstrap applies that assembly's embedded schema when at least one vouched scope has no **Watermark** yet. Header lines for non-vouched scopes are ignored with a warning during bootstrap.
 _Avoid_: Trusted scope, verified scope.
 
 **Table definition**:

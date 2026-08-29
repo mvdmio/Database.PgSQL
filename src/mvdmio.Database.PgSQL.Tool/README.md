@@ -82,7 +82,8 @@ Schema files are written into the configured `schemasDirectory` (`Schemas/` by d
 `schema.<environment>.sql` — where the environment is the one `--environment` names, or the first entry in
 `connectionStrings` when it is omitted. Only `--connection-string`, which belongs to no environment, produces a plain
 `schema.sql`. Files in that directory are embedded into the project's assembly automatically, so the library can apply
-them to an empty database instead of replaying every migration.
+them schema-first when this project's vouched scopes have no watermark yet — including on a database that already
+has another application's migration rows — instead of replaying every migration.
 
 `db pull` starts the file with an `AUTO-GENERATED FILE — DO NOT MODIFY` banner: change a migration and re-run
 `db pull` rather than editing the schema file by hand.

@@ -50,7 +50,7 @@ internal class MigrationExecutionService
          ? []
          : (await runtime.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
 
-      if (!await TryReportSchemaPathAsync(request, environmentName, project, isDatabaseEmpty, cancellationToken))
+      if (!await TryReportSchemaPathAsync(request, environmentName, project, alreadyExecuted, cancellationToken))
       {
          var pendingCount = CountPendingMigrations(targetMigrations, alreadyExecuted);
 
@@ -104,6 +104,32 @@ internal class MigrationExecutionService
       return targetMigrations.Count(m => !watermarks.TryGetValue(m.Scope, out var watermark) || m.Identifier > watermark);
    }
 
+   /// <summary>
+   ///    Scopes this project's assembly vouches for: the assembly simple name plus the scopes of
+   ///    <paramref name="project"/>.Migrations. Matches the migrator's vouching rule for a single assembly.
+   /// </summary>
+   private static IReadOnlyCollection<string> GetVouchedScopes(MigrationProjectContext project)
+   {
+      var scopes = new HashSet<string>(StringComparer.Ordinal);
+
+      var assemblyName = project.Assembly.GetName().Name;
+      if (assemblyName is not null)
+         scopes.Add(assemblyName);
+
+      foreach (var migration in project.Migrations)
+         scopes.Add(migration.Scope);
+
+      return scopes;
+   }
+
+   private static HashSet<string> GetScopesWithWatermark(IReadOnlyList<ExecutedMigrationModel> alreadyExecuted)
+   {
+      return alreadyExecuted
+         .Where(x => x.Scope is not null)
+         .Select(x => x.Scope!)
+         .ToHashSet(StringComparer.Ordinal);
+   }
+
    private IReadOnlyList<IDbMigration>? GetTargetMigrations(
       MigrateRequest request,
       IReadOnlyList<IDbMigration> migrations
@@ -120,15 +146,27 @@ internal class MigrationExecutionService
       return null;
    }
 
+   /// <summary>
+   ///    Reports the schema-first path when this project has a schema file and at least one vouched scope has
+   ///    no watermark yet (the same per-scope rule as the migrator). A globally empty migrations table is just
+   ///    the case where every scope is empty. Returns true when the caller should skip the incremental
+   ///    pending-count short-circuit and invoke the migrator — including a fully folded schema (zero pending
+   ///    incrementals) on a shared database, and a migrate-to target older than the schema header.
+   /// </summary>
    private async Task<bool> TryReportSchemaPathAsync(
       MigrateRequest request,
       string? environmentName,
       MigrationProjectContext project,
-      bool isDatabaseEmpty,
+      IReadOnlyList<ExecutedMigrationModel> alreadyExecuted,
       CancellationToken cancellationToken
    )
    {
-      if (!isDatabaseEmpty || !_schemaResourceService.SchemaResourceExists(project, environmentName))
+      if (!_schemaResourceService.SchemaResourceExists(project, environmentName))
+         return false;
+
+      var vouchedScopes = GetVouchedScopes(project);
+      var scopesWithWatermark = GetScopesWithWatermark(alreadyExecuted);
+      if (!vouchedScopes.Any(scope => !scopesWithWatermark.Contains(scope)))
          return false;
 
       var schemaResourceName = _schemaResourceService.GetSchemaResourceName(project, environmentName);

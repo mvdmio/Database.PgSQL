@@ -151,8 +151,8 @@ db copy --from prod --to local
   without writing the join
 - **Migrations from application code**, tracked per scope so several assemblies can migrate one database
   independently, and serialized by an advisory lock so concurrently starting instances apply them exactly once
-- **Schema-first bootstrap**: `Schemas/**/*.sql` files are embedded automatically and applied to an empty database
-  instead of replaying every migration
+- **Schema-first bootstrap**: `Schemas/**/*.sql` files are embedded automatically and applied per empty migration
+  scope instead of replaying every migration
 - **Schema management**: table and schema existence checks, catalog inspection, and full schema export
 
 Usage and examples: **[library documentation](src/mvdmio.Database.PgSQL/README.md)**.

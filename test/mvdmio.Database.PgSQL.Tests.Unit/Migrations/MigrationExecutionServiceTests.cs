@@ -120,6 +120,116 @@ public class MigrationExecutionServiceTests
       runtime.MigrateLatestCallCount.Should().Be(0);
    }
 
+   [Fact]
+   public async Task ExecuteAsync_LatestOnSharedDatabaseWithEmptyVouchedScope_ReportsSchemaPathAndRunsMigrator()
+   {
+      // Another scope already has rows. This project's vouched scope does not — schema-first must still report
+      // and call the migrator even though IsDatabaseEmptyAsync is false.
+      var runtime = new FakeMigrationRuntime
+      {
+         IsDatabaseEmptyResult = false,
+         AlreadyExecuted = [new ExecutedMigrationModel(202602161430, "OtherBaseline", DateTime.UtcNow, "Other.Scope")],
+         FinalExecuted =
+         [
+            new ExecutedMigrationModel(202602161430, "OtherBaseline", DateTime.UtcNow, "Other.Scope"),
+            new ExecutedMigrationModel(202602161530, "Baseline", DateTime.UtcNow, ThisAssemblyScope)
+         ]
+      };
+      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
+      var schemaResourceService = new FakeSchemaResourceService
+      {
+         SchemaExists = true,
+         SchemaResourceName = "schema.local.sql",
+         SchemaContent = "-- Migration version: 202602161530 (Baseline) [mvdmio.Database.PgSQL.Tests.Unit]"
+      };
+      var reporter = new FakeMigrateReporter();
+      var service = new MigrationExecutionService(runtimeFactory, schemaResourceService, reporter);
+      var project = CreateProjectContext([new FakeDbMigration(202602161430), new FakeDbMigration(202602161530)]);
+
+      await service.ExecuteAsync(
+         MigrateRequest.Latest,
+         "Host=localhost;Database=mydb",
+         "local",
+         project,
+         TestContext.Current.CancellationToken
+      );
+
+      reporter.Infos.Should().Contain($"Empty database detected. Will apply embedded schema: schema.local.sql");
+      reporter.Infos.Should().NotContain("Database is already up to date.");
+      runtime.MigrateLatestCallCount.Should().Be(1);
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_LatestOnSharedDatabaseWithFoldedSchemaAndEmptyScope_RunsMigratorDespiteZeroPending()
+   {
+      // Every incremental is folded into the schema (CountPendingMigrations would be 0 against an empty
+      // watermark). The reporter must still call the migrator so the baseline is applied on a shared database.
+      var runtime = new FakeMigrationRuntime
+      {
+         IsDatabaseEmptyResult = false,
+         AlreadyExecuted = [new ExecutedMigrationModel(202601010000, "OtherBaseline", DateTime.UtcNow, "Other.Scope")],
+         FinalExecuted =
+         [
+            new ExecutedMigrationModel(202601010000, "OtherBaseline", DateTime.UtcNow, "Other.Scope"),
+            new ExecutedMigrationModel(202602161530, "Baseline", DateTime.UtcNow, ThisAssemblyScope)
+         ]
+      };
+      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
+      var schemaResourceService = new FakeSchemaResourceService
+      {
+         SchemaExists = true,
+         SchemaResourceName = "schema.local.sql",
+         SchemaContent = "-- Migration version: 202602161530 (Baseline)"
+      };
+      var reporter = new FakeMigrateReporter();
+      var service = new MigrationExecutionService(runtimeFactory, schemaResourceService, reporter);
+      // No incremental migrations left in the project — they were all folded into the schema file.
+      var project = CreateProjectContext([]);
+
+      await service.ExecuteAsync(
+         MigrateRequest.Latest,
+         "Host=localhost;Database=mydb",
+         "local",
+         project,
+         TestContext.Current.CancellationToken
+      );
+
+      reporter.Infos.Should().Contain("Empty database detected. Will apply embedded schema: schema.local.sql");
+      runtime.MigrateLatestCallCount.Should().Be(1);
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_LatestWithSchemaAndScopeWatermark_ReportsUpToDateWithoutClaimingSchema()
+   {
+      var runtime = new FakeMigrationRuntime
+      {
+         IsDatabaseEmptyResult = false,
+         AlreadyExecuted = [new ExecutedMigrationModel(202602161600, "Baseline", DateTime.UtcNow, ThisAssemblyScope)]
+      };
+      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
+      var schemaResourceService = new FakeSchemaResourceService
+      {
+         SchemaExists = true,
+         SchemaResourceName = "schema.local.sql",
+         SchemaContent = "-- Migration version: 202602161600 (Baseline)"
+      };
+      var reporter = new FakeMigrateReporter();
+      var service = new MigrationExecutionService(runtimeFactory, schemaResourceService, reporter);
+      var project = CreateProjectContext([new FakeDbMigration(202602161430), new FakeDbMigration(202602161530)]);
+
+      await service.ExecuteAsync(
+         MigrateRequest.Latest,
+         "Host=localhost;Database=mydb",
+         "local",
+         project,
+         TestContext.Current.CancellationToken
+      );
+
+      reporter.Infos.Should().Contain("Database is already up to date.");
+      reporter.Infos.Should().NotContain(info => info.Contains("Will apply embedded schema", StringComparison.Ordinal));
+      runtime.MigrateLatestCallCount.Should().Be(0);
+   }
+
    private static string ThisAssemblyScope => typeof(MigrationExecutionServiceTests).Assembly.GetName().Name!;
 
    [Fact]

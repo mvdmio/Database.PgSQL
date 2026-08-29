@@ -1199,14 +1199,18 @@ When a project references `mvdmio.Database.PgSQL` directly, or references anothe
 created from one schema file instead of replaying years of migrations. Generate those files with the
 [CLI tool](#cli-tool)'s `db pull`.
 
-When `DatabaseMigrator` is constructed with multiple assemblies and the target database is empty, **every** assembly
-that contains an embedded `schema.sql` (or environment-specific `schema.{env}.sql`) has its schema applied, in the
-order the assemblies are passed to the constructor. Assemblies without a matching schema resource are skipped. All
-schemas run in a single transaction.
+Schema-first bootstrap is **per scope**. An assembly's embedded `schema.sql` (or environment-specific
+`schema.{env}.sql`) is applied when at least one scope that assembly **vouches for** has no watermark yet —
+regardless of whether other scopes already have rows in the same database. Assemblies whose every vouched scope
+already has a watermark are left alone. When several assemblies are passed to one `DatabaseMigrator`, each is
+considered independently, in constructor order; assemblies without a matching schema resource are skipped. Schemas
+that do apply run in a single transaction.
 
 A schema file's `-- Migration version: <id> (<name>) [<scope>]` header lines — one per scope — establish the
 baseline, so migrations already folded into a schema file are not re-run while another assembly bootstraps alongside
-it. Header lines without a `[<scope>]` part are accepted too.
+it. Header lines without a `[<scope>]` part are accepted too. On a globally empty database they still record as a
+legacy scope-less baseline that the backfill heals; on a populated database only vouched, previously empty scopes
+receive a baseline row.
 
 A schema file may only establish a baseline for scopes its own assembly **vouches for**: the scopes of migrations
 discovered from that assembly, plus the assembly's simple name. Header lines naming any other scope — typically a
@@ -1220,12 +1224,9 @@ migrations from zero instead.
 > its later migrations then fail because the objects already exist. Keep the default scope, or keep at least one
 > discovered migration carrying the overridden scope.
 
-If the database already contains migrations, no schema file is applied. That check is global rather than per scope:
-schema-first bootstrap works for the first scope to reach a fresh database, or for several assemblies bootstrapped by
-a single `DatabaseMigrator`, but a second, separate schema-first migrator against an already-populated database falls
-back to running migrations. When `MigrateDatabaseToAsync(targetIdentifier)` is used and any schema's header version
-exceeds the target, the bootstrap is skipped entirely, because applying a subset would leave gaps that later
-migrations cannot fill.
+When `MigrateDatabaseToAsync(targetIdentifier)` is used, a schema whose header contains an identifier above the
+target is skipped for that assembly only; other assemblies whose headers are at or below the target are still
+considered when their scopes are empty.
 
 ### Databases Without Scope Information
 
