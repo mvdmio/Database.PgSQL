@@ -2,7 +2,11 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
+using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers.Interfaces;
+using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
+using mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema;
+using System.Reflection;
 using Testcontainers.PostgreSql;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.Migrations;
@@ -18,6 +22,8 @@ public class ConcurrentMigrationTests : IAsyncLifetime
 
    private PostgreSqlContainer _dbContainer = null!;
    private DatabaseConnectionFactory _connectionFactory = null!;
+
+   private static Assembly SecondaryAssembly => typeof(AssemblyMarker).Assembly;
 
    protected static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
@@ -74,6 +80,59 @@ public class ConcurrentMigrationTests : IAsyncLifetime
       (await verifyDb.Management.TableExistsAsync("public", "concurrent_table_one")).Should().BeTrue();
       (await verifyDb.Management.TableExistsAsync("public", "concurrent_table_slow")).Should().BeTrue();
       (await verifyDb.Management.TableExistsAsync("public", "concurrent_table_three")).Should().BeTrue();
+   }
+
+   [Fact]
+   public async Task MigrateDatabaseToLatestAsync_WithConcurrentSecondScopeOnPopulatedDatabase_AppliesBaselineOnce()
+   {
+      // Two SelfHost-style processes for an empty second scope against a database that already has another
+      // scope's rows: the advisory lock must still serialise schema-first bootstrap for that empty scope.
+      var connectionString = _dbContainer.GetConnectionString();
+
+      await using (var seedDb = _connectionFactory.BuildConnection(connectionString))
+      {
+         var seedMigrator = new DatabaseMigrator(seedDb, NullLoggerFactory.Instance, typeof(TestFixture).Assembly);
+         await seedMigrator.MigrateDatabaseToLatestAsync(CancellationToken);
+      }
+
+      var startSignal = new TaskCompletionSource();
+
+      var runs = Enumerable.Range(0, CONCURRENT_INSTANCES).Select(_ => Task.Run(async () =>
+      {
+         await using var db = _connectionFactory.BuildConnection(connectionString);
+         var migrator = new DatabaseMigrator(
+            db,
+            environment: null,
+            NullLoggerFactory.Instance,
+            [SecondaryAssembly],
+            new ReflectionMigrationRetriever(SecondaryAssembly));
+
+         await startSignal.Task;
+         await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
+      })).ToArray();
+
+      startSignal.SetResult();
+
+      var act = async () => await Task.WhenAll(runs);
+      await act.Should().NotThrowAsync();
+
+      await using var verifyDb = _connectionFactory.BuildConnection(connectionString);
+      var verifyMigrator = new DatabaseMigrator(
+         verifyDb,
+         environment: null,
+         NullLoggerFactory.Instance,
+         [SecondaryAssembly],
+         new ReflectionMigrationRetriever(SecondaryAssembly));
+
+      (await verifyDb.Management.TableExistsAsync("public", "secondary_table")).Should().BeTrue();
+      (await verifyDb.Management.TableExistsAsync("public", "secondary_follow_up_table")).Should().BeTrue();
+
+      var executedMigrations = (await verifyMigrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
+      executedMigrations.Count(m =>
+            m.Identifier == 202505181100 &&
+            m.Name == "SecondaryTable" &&
+            m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema")
+         .Should().Be(1);
    }
 
    /// <summary>

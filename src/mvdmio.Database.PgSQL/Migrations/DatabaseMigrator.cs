@@ -73,7 +73,8 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <param name="environment">
    ///    Optional environment name for schema discovery. If specified, looks for an embedded
    ///    schema.{environment}.sql resource (case-insensitive). Falls back to schema.sql if not found.
-   ///    If the database is empty, the embedded schema is applied before running migrations.
+   ///    An assembly's embedded schema is applied when at least one scope that assembly vouches for has no
+   ///    watermark yet.
    /// </param>
    /// <param name="loggerFactory">The logger factory to use for logging migration warnings and diagnostics.</param>
    /// <param name="assembliesContainingMigrations">
@@ -104,7 +105,8 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <param name="environment">
    ///    Optional environment name for schema discovery. If specified, looks for an embedded
    ///    schema.{environment}.sql resource (case-insensitive). Falls back to schema.sql if not found.
-   ///    If the database is empty, the embedded schema is applied before running migrations.
+   ///    An assembly's embedded schema is applied when at least one scope that assembly vouches for has no
+   ///    watermark yet.
    /// </param>
    /// <param name="loggerFactory">The logger factory to use for logging migration warnings and diagnostics.</param>
    /// <param name="assembliesForSchemaDiscovery">
@@ -171,9 +173,9 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 
    /// <summary>
    ///    Runs the full migration orchestration under a session-scoped advisory lock so that concurrently-starting
-   ///    instances apply migrations exactly once. The lock is acquired before the empty-database check, held across
-   ///    schema application, the table upgrade, the scope backfill, and the entire migration loop, and released in
-   ///    a <c>finally</c>.
+   ///    instances apply migrations exactly once. The lock is acquired before the per-scope watermark read, held
+   ///    across schema application, the table upgrade, the scope backfill, and the entire migration loop, and
+   ///    released in a <c>finally</c>.
    /// </summary>
    private async Task MigrateAsync(long? targetIdentifier, CancellationToken cancellationToken)
    {
@@ -191,22 +193,46 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
          // scopes each schema file's assembly vouches for.
          var discoveredMigrations = _migrationRetriever.RetrieveMigrations().ToArray();
 
-         // Check if database is empty and we have a schema resource to apply
-         if (await ShouldApplySchemaAsync(targetIdentifier, cancellationToken))
+         var tableExisted = await _connection.Management.TableExistsAsync(MIGRATIONS_SCHEMA, MIGRATIONS_TABLE);
+         ExecutedMigrationModel[] executedMigrations;
+
+         if (tableExisted)
          {
-            await ApplySchemaAsync(discoveredMigrations, cancellationToken);
+            // Upgrade and backfill before the per-scope empty check so legacy scope-less rows become watermarks
+            // and a schema for an already-attributed scope is not re-applied.
+            await MigrationsTableManager.EnsureTableAsync(_connection, cancellationToken);
+            _scopeColumnExists = true;
+            executedMigrations = (await RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
+            executedMigrations = await BackfillScopesAsync(executedMigrations, discoveredMigrations, cancellationToken);
          }
          else
+         {
+            executedMigrations = [];
+         }
+
+         var scopesWithWatermark = executedMigrations
+            .Where(row => row.Scope is not null)
+            .Select(row => row.Scope!)
+            .ToHashSet(StringComparer.Ordinal);
+         var databaseWasGloballyEmpty = !tableExisted || executedMigrations.Length == 0;
+
+         var schemasApplied = await ApplySchemasForEmptyScopesAsync(
+            discoveredMigrations,
+            scopesWithWatermark,
+            databaseWasGloballyEmpty,
+            targetIdentifier,
+            cancellationToken);
+
+         if (schemasApplied)
+         {
+            executedMigrations = (await RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
+            executedMigrations = await BackfillScopesAsync(executedMigrations, discoveredMigrations, cancellationToken);
+         }
+         else if (!tableExisted)
          {
             await MigrationsTableManager.EnsureTableAsync(_connection, cancellationToken);
             _scopeColumnExists = true;
          }
-
-         // Read executed rows once; the backfill returns the executed set with its attributions applied
-         // so the selection below needs no second read.
-         var executedMigrations = (await RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
-
-         executedMigrations = await BackfillScopesAsync(executedMigrations, discoveredMigrations, cancellationToken);
 
          var pendingMigrations = PendingMigrationSelector.SelectPending(executedMigrations, discoveredMigrations, targetIdentifier);
 
@@ -309,58 +335,45 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    }
 
    /// <summary>
-   ///    Determines whether an embedded schema should be applied.
-   ///    Returns true if:
-   ///    - Assemblies are configured for schema discovery
-   ///    - An embedded schema resource exists in at least one assembly
-   ///    - The database is empty
-   ///    - If targetIdentifier is specified, every version line of every discovered schema must be &lt;= targetIdentifier.
-   ///      A schema whose header version exceeds the target means the caller is asking for a state older
-   ///      than one of the baselines can represent; applying only a subset would leave gaps that later
-   ///      migrations cannot fill, so the entire schema-first bootstrap is skipped instead.
+   ///    Applies embedded schemas for assemblies that still have at least one empty vouched scope, in
+   ///    constructor order. A migrate-to target skips only the schemas whose headers exceed it. Baseline rows
+   ///    are recorded for vouched scopes that had no watermark before this run; legacy scope-less header lines
+   ///    are recorded only when the database was globally empty.
    /// </summary>
-   private async Task<bool> ShouldApplySchemaAsync(long? targetIdentifier, CancellationToken cancellationToken)
+   /// <returns>True when at least one schema file was applied.</returns>
+   private async Task<bool> ApplySchemasForEmptyScopesAsync(
+      IReadOnlyCollection<IDbMigration> discoveredMigrations,
+      IReadOnlySet<string> scopesWithWatermark,
+      bool databaseWasGloballyEmpty,
+      long? targetIdentifier,
+      CancellationToken cancellationToken)
    {
       if (_assemblies.Length == 0)
          return false;
 
-      var contents = await EmbeddedSchemaDiscovery.ReadAllSchemaContentsAsync(_assemblies, _environment, cancellationToken);
-
-      if (contents.Count == 0)
-         return false;
-
-      if (!await IsDatabaseEmptyAsync(cancellationToken))
-         return false;
-
-      if (targetIdentifier.HasValue)
-      {
-         foreach (var (content, _, _) in contents)
-         {
-            var infos = SchemaFileParser.ParseMigrationVersion(content);
-
-            if (infos.Any(info => info.Identifier > targetIdentifier.Value))
-               return false;
-         }
-      }
-
-      return true;
-   }
-
-   /// <summary>
-   ///    Applies all embedded schema resources to the database in assembly order.
-   ///    Each assembly contributes at most one schema file. One baseline migration row is recorded per scope,
-   ///    using the highest identifier for that scope across all applied schema headers — but only for scopes
-   ///    the contributing file's assembly vouches for (see <see cref="SchemaBaselineSelector" />); foreign
-   ///    header lines are ignored with a warning so they cannot suppress another assembly's migrations.
-   ///    Version lines without a scope (legacy headers) record a scope-less baseline that the backfill later
-   ///    attributes.
-   /// </summary>
-   private async Task ApplySchemaAsync(IReadOnlyCollection<IDbMigration> discoveredMigrations, CancellationToken cancellationToken)
-   {
       var schemas = await EmbeddedSchemaDiscovery.ReadAllSchemaContentsAsync(_assemblies, _environment, cancellationToken);
 
       if (schemas.Count == 0)
-         throw new InvalidOperationException("No embedded schema resource found.");
+         return false;
+
+      var schemasToApply = new List<(string Content, string ResourceName, Assembly Assembly, IReadOnlyList<SchemaFileMigrationInfo> HeaderLines, IReadOnlyCollection<string> VouchedScopes)>();
+
+      foreach (var (content, resourceName, assembly) in schemas)
+      {
+         if (string.IsNullOrEmpty(content))
+            continue;
+
+         var headerLines = SchemaFileParser.ParseMigrationVersion(content);
+         var vouchedScopes = GetVouchedScopes(assembly, discoveredMigrations);
+
+         if (!SchemaBootstrapSelector.ShouldApplySchema(vouchedScopes, scopesWithWatermark, headerLines, targetIdentifier))
+            continue;
+
+         schemasToApply.Add((content, resourceName, assembly, headerLines, vouchedScopes));
+      }
+
+      if (schemasToApply.Count == 0)
+         return false;
 
       await _connection.InTransactionAsync(async () =>
       {
@@ -371,18 +384,15 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 
          var headers = new List<SchemaFileHeader>();
 
-         foreach (var (content, resourceName, assembly) in schemas)
+         foreach (var (content, resourceName, assembly, headerLines, vouchedScopes) in schemasToApply)
          {
-            if (string.IsNullOrEmpty(content))
-               continue;
-
             await _connection.Dapper.ExecuteAsync(content, ct: cancellationToken);
 
             headers.Add(new SchemaFileHeader(
                resourceName,
                assembly.GetName().Name ?? assembly.ToString(),
-               SchemaFileParser.ParseMigrationVersion(content),
-               GetVouchedScopes(assembly, discoveredMigrations)
+               headerLines,
+               vouchedScopes
             ));
          }
 
@@ -401,11 +411,18 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
             );
          }
 
-         foreach (var baseline in selection.Baselines)
+         var baselinesToRecord = SchemaBootstrapSelector.FilterBaselinesToRecord(
+            selection.Baselines,
+            scopesWithWatermark,
+            databaseWasGloballyEmpty);
+
+         foreach (var baseline in baselinesToRecord)
          {
             await InsertMigrationRowAsync(baseline.Identifier, baseline.Name, baseline.Scope, cancellationToken);
          }
       });
+
+      return true;
    }
 
    /// <summary>

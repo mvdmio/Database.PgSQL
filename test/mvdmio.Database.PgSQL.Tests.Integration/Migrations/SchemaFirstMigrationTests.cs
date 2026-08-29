@@ -106,6 +106,82 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    }
 
    [Fact]
+   public async Task IsDatabaseEmptyAsync_WithOnlyOtherScopeRows_ReturnsFalse()
+   {
+      // The public empty check stays global: a row for any scope means the database is not empty,
+      // even when the caller's own scope has never been touched.
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      var firstMigrator = new DatabaseMigrator(db, NullLoggerFactory.Instance, typeof(TestFixture).Assembly);
+      await firstMigrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      var secondMigrator = new DatabaseMigrator(
+         db,
+         environment: null,
+         NullLoggerFactory.Instance,
+         [SecondaryAssembly],
+         new ReflectionMigrationRetriever(SecondaryAssembly));
+
+      var isEmpty = await secondMigrator.IsDatabaseEmptyAsync(CancellationToken);
+
+      isEmpty.Should().BeFalse();
+   }
+
+   [Fact]
+   public async Task MigrateDatabaseToLatestAsync_WithOtherScopeAlreadyPresent_AppliesSecondarySchemaAndBaseline()
+   {
+      // Product case: Auth-style first scope already has rows. A second, separate migrator for another
+      // assembly still applies that assembly's embedded schema and records its baseline.
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      var firstMigrator = new DatabaseMigrator(
+         db,
+         environment: null,
+         NullLoggerFactory.Instance,
+         [TestAssembly],
+         new ReflectionMigrationRetriever(typeof(TestFixture).Assembly));
+      await firstMigrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      var firstScopeRowsBefore = (await firstMigrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken))
+         .Where(m => m.Scope == "mvdmio.Database.PgSQL.Tests.Integration")
+         .Select(m => (m.Identifier, m.Name))
+         .OrderBy(m => m.Identifier)
+         .ToArray();
+
+      (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
+      (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeFalse();
+
+      var secondMigrator = new DatabaseMigrator(
+         db,
+         environment: null,
+         NullLoggerFactory.Instance,
+         [SecondaryAssembly],
+         new ReflectionMigrationRetriever(SecondaryAssembly));
+      await secondMigrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
+      (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeTrue();
+      (await db.Management.TableExistsAsync("public", "secondary_follow_up_table")).Should().BeTrue();
+
+      var executedMigrations = (await secondMigrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
+      executedMigrations.Should().Contain(m =>
+         m.Identifier == 202505181100 &&
+         m.Name == "SecondaryTable" &&
+         m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
+      executedMigrations.Should().Contain(m =>
+         m.Identifier == 202505190000 &&
+         m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
+      executedMigrations.Count(m => m.Identifier == 202505181100).Should().Be(1);
+
+      var firstScopeRowsAfter = executedMigrations
+         .Where(m => m.Scope == "mvdmio.Database.PgSQL.Tests.Integration")
+         .Select(m => (m.Identifier, m.Name))
+         .OrderBy(m => m.Identifier)
+         .ToArray();
+      firstScopeRowsAfter.Should().Equal(firstScopeRowsBefore);
+   }
+
+   [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithEmbeddedSchema_AppliesSchemaAndRecordsMigration()
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
@@ -514,14 +590,13 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    }
 
    [Fact]
-   public async Task MigrateDatabaseToAsync_WithTargetBelowHighestSchemaIdentifier_DoesNotApplyAnySchemas()
+   public async Task MigrateDatabaseToAsync_WithTargetBelowSecondarySchemaHeader_SkipsOnlyThatSchema()
    {
       // Primary schema header = 202505181000, secondary = 202505181100.
-      // Targeting a value below the highest schema header must skip the whole bootstrap
-      // rather than applying only a subset (which would leave gaps that cannot be filled later).
+      // Targeting a value between them skips only the secondary schema; the primary schema still applies.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
+      var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly, SecondaryAssembly);
       var migrator = new DatabaseMigrator(
          db,
          environment: null,
@@ -531,9 +606,14 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
 
       await migrator.MigrateDatabaseToAsync(202505181050, CancellationToken);
 
-      // Bootstrap must be skipped because the secondary schema's header (202505181100) exceeds the target.
-      // secondary_table only comes from the secondary schema, so its absence proves the schema was not applied.
-      // (simple_table may exist because a reflection-based migration with identifier <= target creates it.)
+      (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
       (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeFalse();
+
+      var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
+      executedMigrations.Should().Contain(m =>
+         m.Identifier == 202505181000 &&
+         m.Scope == "mvdmio.Database.PgSQL.Tests.Integration");
+      executedMigrations.Should().NotContain(m =>
+         m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
    }
 }

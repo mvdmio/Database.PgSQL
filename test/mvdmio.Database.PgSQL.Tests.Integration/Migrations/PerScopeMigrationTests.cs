@@ -199,6 +199,45 @@ public class PerScopeMigrationTests : IAsyncLifetime
    }
 
    [Fact]
+   public async Task MigrateDatabaseToLatestAsync_WithOneScopeAlreadyPresent_AppliesOnlyTheEmptyAssemblySchema()
+   {
+      // HealthCheck/Statistics shape: one migrator receives a watermarked shared assembly and an empty app
+      // assembly. Only the empty scope's schema is applied; re-applying the watermarked schema would fail
+      // because simple_table is created without IF NOT EXISTS.
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      var firstMigrator = new DatabaseMigrator(
+         db,
+         environment: null,
+         NullLoggerFactory.Instance,
+         [TestAssembly],
+         new ReflectionMigrationRetriever(typeof(TestFixture).Assembly));
+      await firstMigrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      var firstScopeCountBefore = (await firstMigrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken))
+         .Count(m => m.Scope == "mvdmio.Database.PgSQL.Tests.Integration");
+
+      var combinedMigrator = new DatabaseMigrator(
+         db,
+         environment: null,
+         NullLoggerFactory.Instance,
+         [TestAssembly, SecondaryAssembly],
+         new ReflectionMigrationRetriever(typeof(TestFixture).Assembly, SecondaryAssembly));
+      await combinedMigrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
+      (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeTrue();
+      (await db.Management.TableExistsAsync("public", "secondary_follow_up_table")).Should().BeTrue();
+
+      var executedMigrations = (await combinedMigrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
+      executedMigrations.Count(m => m.Scope == "mvdmio.Database.PgSQL.Tests.Integration").Should().Be(firstScopeCountBefore);
+      executedMigrations.Should().Contain(m =>
+         m.Identifier == 202505181100 &&
+         m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
+      executedMigrations.Count(m => m.Identifier == 202505181100).Should().Be(1);
+   }
+
+   [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithMultipleLegacyScopelessSchemaHeaders_RecordsABaselinePerHeaderAndHealsEach()
    {
       // Both assemblies' schema.legacymulti.sql files carry legacy scope-less headers (1000 and 1100).

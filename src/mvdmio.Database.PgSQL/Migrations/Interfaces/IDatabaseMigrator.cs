@@ -15,16 +15,20 @@ public interface IDatabaseMigrator
    /// <summary>
    ///    Run all migrations that have not yet been executed in order. A migration is pending when its identifier
    ///    is ahead of the highest executed identifier within its own scope.
-   ///    If the database is empty and an embedded schema resource is found (based on the configured environment),
-   ///    the schema is applied first, then any remaining migrations past each scope's baseline are run.
+   ///    Schema-first bootstrap is per scope: an assembly's embedded schema (based on the configured environment)
+   ///    is applied when at least one scope that assembly vouches for has no watermark yet. Assemblies whose
+   ///    vouched scopes already have rows are left alone. After baselines are recorded, remaining migrations past
+   ///    each scope's watermark are run.
    /// </summary>
    Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken = default);
 
    /// <summary>
    ///    Run all pending migrations up to and including the specified identifier. The target is a global ceiling
    ///    applied per scope: every scope advances up to the given identifier.
-   ///    If the database is empty and an embedded schema resource is found (with all versions &lt;= targetIdentifier),
-   ///    the schema is applied first, then any remaining migrations up to the target are run.
+   ///    Schema-first bootstrap is per scope: an assembly's embedded schema is applied when at least one scope
+   ///    that assembly vouches for has no watermark yet, unless that schema's header contains an identifier above
+   ///    <paramref name="targetIdentifier"/> — that schema is skipped, while other assemblies are still considered.
+   ///    After baselines are recorded, remaining migrations up to the target are run.
    /// </summary>
    /// <param name="targetIdentifier">The migration identifier to migrate up to (inclusive).</param>
    /// <param name="cancellationToken">Cancellation token.</param>
@@ -36,7 +40,9 @@ public interface IDatabaseMigrator
    Task RunAsync(IDbMigration migration, CancellationToken cancellationToken = default);
 
    /// <summary>
-   ///    Checks whether the database has any migrations applied.
+   ///    Checks whether the migrations table is missing or has no rows at all. This is a global check: a row
+   ///    belonging to any scope makes the database non-empty. Schema-first bootstrap uses per-scope watermarks
+   ///    instead of this method.
    /// </summary>
    /// <param name="cancellationToken">Cancellation token.</param>
    /// <returns>True if no migrations have been applied (empty database), false otherwise.</returns>
