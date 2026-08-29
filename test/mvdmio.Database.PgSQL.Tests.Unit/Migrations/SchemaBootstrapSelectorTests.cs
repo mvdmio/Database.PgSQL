@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using mvdmio.Database.PgSQL.Migrations;
+using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.Models;
 
 namespace mvdmio.Database.PgSQL.Tests.Unit.Migrations;
@@ -107,5 +108,61 @@ public class SchemaBootstrapSelectorTests
       recorded.Should().HaveCount(2);
       recorded.Should().Contain(new SchemaFileMigrationInfo(202601010000, "Legacy"));
       recorded.Should().Contain(new SchemaFileMigrationInfo(202602010000, "B", "App.B"));
+   }
+
+   [Fact]
+   public void GetVouchedScopes_IncludesAssemblyNameAndDiscoveredMigrationScopes()
+   {
+      var assembly = typeof(SchemaBootstrapSelectorTests).Assembly;
+      var migrations = new IDbMigration[] { new FakeScopedMigration("App.Extra") };
+
+      var vouched = SchemaBootstrapSelector.GetVouchedScopes(assembly, migrations);
+
+      vouched.Should().BeEquivalentTo([assembly.GetName().Name, "App.Extra"]);
+   }
+
+   [Fact]
+   public void GetVouchedScopes_IgnoresMigrationsFromOtherAssemblies()
+   {
+      var assembly = typeof(SchemaBootstrapSelector).Assembly;
+      var migrations = new IDbMigration[] { new FakeScopedMigration("App.Extra") };
+
+      var vouched = SchemaBootstrapSelector.GetVouchedScopes(assembly, migrations);
+
+      vouched.Should().Equal(assembly.GetName().Name);
+      vouched.Should().NotContain("App.Extra");
+   }
+
+   [Fact]
+   public void GetScopesWithWatermark_CollectsDistinctNonNullScopes()
+   {
+      var executed = new[]
+      {
+         new ExecutedMigrationModel(1, "A", DateTime.UtcNow, "App.A"),
+         new ExecutedMigrationModel(2, "Legacy", DateTime.UtcNow),
+         new ExecutedMigrationModel(3, "A2", DateTime.UtcNow, "App.A"),
+         new ExecutedMigrationModel(4, "B", DateTime.UtcNow, "App.B")
+      };
+
+      var scopes = SchemaBootstrapSelector.GetScopesWithWatermark(executed);
+
+      scopes.Should().BeEquivalentTo(["App.A", "App.B"]);
+   }
+
+   private sealed class FakeScopedMigration : IDbMigration
+   {
+      public FakeScopedMigration(string scope)
+      {
+         Scope = scope;
+      }
+
+      public long Identifier => 202601010000;
+      public string Name => "Fake";
+      public string Scope { get; }
+
+      public Task UpAsync(DatabaseConnection db)
+      {
+         return Task.CompletedTask;
+      }
    }
 }

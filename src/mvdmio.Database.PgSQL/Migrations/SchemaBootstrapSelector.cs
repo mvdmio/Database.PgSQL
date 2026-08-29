@@ -1,4 +1,6 @@
+using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.Models;
+using System.Reflection;
 
 namespace mvdmio.Database.PgSQL.Migrations;
 
@@ -55,5 +57,39 @@ internal static class SchemaBootstrapSelector
             ? databaseWasGloballyEmpty
             : !scopesWithWatermarkBeforeRun.Contains(baseline.Scope))
          .ToArray();
+   }
+
+   /// <summary>
+   ///    Scopes a schema file's assembly vouches for: the scopes of migrations discovered from that
+   ///    assembly, plus the assembly's simple name (the default scope, which also covers an assembly that
+   ///    folded all of its migrations into its schema and therefore contributes none to discover).
+   /// </summary>
+   public static IReadOnlyCollection<string> GetVouchedScopes(Assembly assembly, IEnumerable<IDbMigration> discoveredMigrations)
+   {
+      var scopes = new HashSet<string>(StringComparer.Ordinal);
+
+      var assemblyName = assembly.GetName().Name;
+      if (assemblyName is not null)
+         scopes.Add(assemblyName);
+
+      foreach (var migration in discoveredMigrations)
+      {
+         if (migration.GetType().Assembly == assembly)
+            scopes.Add(migration.Scope);
+      }
+
+      return scopes;
+   }
+
+   /// <summary>
+   ///    Scopes that already have at least one executed migration row. Rows without a scope (legacy, not
+   ///    yet backfilled) are excluded.
+   /// </summary>
+   public static IReadOnlySet<string> GetScopesWithWatermark(IEnumerable<ExecutedMigrationModel> executedMigrations)
+   {
+      return executedMigrations
+         .Where(row => row.Scope is not null)
+         .Select(row => row.Scope!)
+         .ToHashSet(StringComparer.Ordinal);
    }
 }

@@ -64,7 +64,7 @@ The analyzer project is referenced by the library as an analyzer and is packed i
 
 - Migrations implement `IDbMigration`; `Identifier` (a `YYYYMMDDHHmm` timestamp) and `Name` default to values parsed from the class name (`_{identifier}_{name}`).
 - `DatabaseMigrator` runs pending migrations, tracked in the `mvdmio.migrations` table, serialized across instances by a session-scoped advisory lock (ADR 0001).
-- Schema-first bootstrap: an empty database can be seeded from an embedded `schema.sql` whose header records a baseline migration version; only migrations past the baseline then run.
+- Schema-first bootstrap is per scope: an assembly's embedded `schema.sql` is applied when at least one scope that assembly vouches for has no watermark yet; only migrations past that baseline then run.
 
 ## Important files
 
@@ -72,6 +72,7 @@ The analyzer project is referenced by the library as an analyzer and is packed i
 |------|---------|
 | `src/mvdmio.Database.PgSQL/DatabaseConnection.cs` | Main entry point |
 | `src/mvdmio.Database.PgSQL/Migrations/DatabaseMigrator.cs` | Migration runner & orchestration |
+| `src/mvdmio.Database.PgSQL/Migrations/SchemaBootstrapSelector.cs` | Per-scope schema-first apply/record decisions |
 | `src/mvdmio.Database.PgSQL/Migrations/Interfaces/IDbMigration.cs` | Migration interface |
 | `src/mvdmio.Database.PgSQL/Connectors/Schema/SchemaExtractor.cs` | Schema script generation (header + DDL) |
 | `Directory.Build.props` | Single source of the package version |

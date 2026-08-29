@@ -104,32 +104,6 @@ internal class MigrationExecutionService
       return targetMigrations.Count(m => !watermarks.TryGetValue(m.Scope, out var watermark) || m.Identifier > watermark);
    }
 
-   /// <summary>
-   ///    Scopes this project's assembly vouches for: the assembly simple name plus the scopes of
-   ///    <paramref name="project"/>.Migrations. Matches the migrator's vouching rule for a single assembly.
-   /// </summary>
-   private static IReadOnlyCollection<string> GetVouchedScopes(MigrationProjectContext project)
-   {
-      var scopes = new HashSet<string>(StringComparer.Ordinal);
-
-      var assemblyName = project.Assembly.GetName().Name;
-      if (assemblyName is not null)
-         scopes.Add(assemblyName);
-
-      foreach (var migration in project.Migrations)
-         scopes.Add(migration.Scope);
-
-      return scopes;
-   }
-
-   private static HashSet<string> GetScopesWithWatermark(IReadOnlyList<ExecutedMigrationModel> alreadyExecuted)
-   {
-      return alreadyExecuted
-         .Where(x => x.Scope is not null)
-         .Select(x => x.Scope!)
-         .ToHashSet(StringComparer.Ordinal);
-   }
-
    private IReadOnlyList<IDbMigration>? GetTargetMigrations(
       MigrateRequest request,
       IReadOnlyList<IDbMigration> migrations
@@ -148,10 +122,11 @@ internal class MigrationExecutionService
 
    /// <summary>
    ///    Reports the schema-first path when this project has a schema file and at least one vouched scope has
-   ///    no watermark yet (the same per-scope rule as the migrator). A globally empty migrations table is just
-   ///    the case where every scope is empty. Returns true when the caller should skip the incremental
-   ///    pending-count short-circuit and invoke the migrator — including a fully folded schema (zero pending
-   ///    incrementals) on a shared database, and a migrate-to target older than the schema header.
+   ///    no watermark yet (the same per-scope rule as the migrator, via <see cref="SchemaBootstrapSelector"/>).
+   ///    A globally empty migrations table is just the case where every scope is empty. Returns true when the
+   ///    caller should skip the incremental pending-count short-circuit and invoke the migrator — including a
+   ///    fully folded schema (zero pending incrementals) on a shared database, and a migrate-to target older
+   ///    than the schema header.
    /// </summary>
    private async Task<bool> TryReportSchemaPathAsync(
       MigrateRequest request,
@@ -164,52 +139,46 @@ internal class MigrationExecutionService
       if (!_schemaResourceService.SchemaResourceExists(project, environmentName))
          return false;
 
-      var vouchedScopes = GetVouchedScopes(project);
-      var scopesWithWatermark = GetScopesWithWatermark(alreadyExecuted);
-      if (!vouchedScopes.Any(scope => !scopesWithWatermark.Contains(scope)))
-         return false;
-
+      var vouchedScopes = SchemaBootstrapSelector.GetVouchedScopes(project.Assembly, project.Migrations);
+      var scopesWithWatermark = SchemaBootstrapSelector.GetScopesWithWatermark(alreadyExecuted);
       var schemaResourceName = _schemaResourceService.GetSchemaResourceName(project, environmentName);
       var schemaContent = await _schemaResourceService.ReadSchemaContentAsync(project, environmentName, cancellationToken);
+      var headerLines = schemaContent is null
+         ? []
+         : SchemaFileParser.ParseMigrationVersion(schemaContent);
+
+      if (!SchemaBootstrapSelector.ShouldApplySchema(vouchedScopes, scopesWithWatermark, headerLines, targetIdentifier: null))
+         return false;
 
       if (request.IsLatest)
       {
-         _reporter.WriteInfo($"Empty database detected. Will apply embedded schema: {schemaResourceName}");
-
-         if (schemaContent is not null)
-         {
-            foreach (var migrationInfo in SchemaFileParser.ParseMigrationVersion(schemaContent))
-               _reporter.WriteInfo($"Schema contains migration version: {FormatMigrationVersion(migrationInfo)}");
-         }
-
-         _reporter.WriteInfo(string.Empty);
+         ReportSchemaApply(schemaResourceName, headerLines);
          return true;
       }
 
-      if (schemaContent is null)
+      if (schemaContent is null || headerLines.Count == 0)
          return true;
 
-      var targetIdentifier = request.TargetIdentifier!.Value;
-      var schemaMigrationInfos = SchemaFileParser.ParseMigrationVersion(schemaContent);
-      if (schemaMigrationInfos.Count == 0)
-         return true;
-
-      var highestSchemaIdentifier = schemaMigrationInfos.Max(x => x.Identifier);
-
-      if (highestSchemaIdentifier <= targetIdentifier)
+      if (SchemaBootstrapSelector.ShouldApplySchema(vouchedScopes, scopesWithWatermark, headerLines, request.TargetIdentifier))
       {
-         _reporter.WriteInfo($"Empty database detected. Will apply embedded schema: {schemaResourceName}");
-
-         foreach (var migrationInfo in schemaMigrationInfos)
-            _reporter.WriteInfo($"Schema contains migration version: {FormatMigrationVersion(migrationInfo)}");
-
-         _reporter.WriteInfo(string.Empty);
+         ReportSchemaApply(schemaResourceName, headerLines);
          return true;
       }
 
-      _reporter.WriteInfo($"Schema version ({highestSchemaIdentifier}) is newer than target ({targetIdentifier}). Running migrations instead.");
+      var highestSchemaIdentifier = headerLines.Max(x => x.Identifier);
+      _reporter.WriteInfo($"Schema version ({highestSchemaIdentifier}) is newer than target ({request.TargetIdentifier}). Running migrations instead.");
       _reporter.WriteInfo(string.Empty);
       return true;
+   }
+
+   private void ReportSchemaApply(string? schemaResourceName, IReadOnlyList<SchemaFileMigrationInfo> headerLines)
+   {
+      _reporter.WriteInfo($"Empty vouched scope detected. Will apply embedded schema: {schemaResourceName}");
+
+      foreach (var migrationInfo in headerLines)
+         _reporter.WriteInfo($"Schema contains migration version: {FormatMigrationVersion(migrationInfo)}");
+
+      _reporter.WriteInfo(string.Empty);
    }
 
    private static string FormatMigrationVersion(SchemaFileMigrationInfo migrationInfo)

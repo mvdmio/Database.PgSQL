@@ -53,7 +53,9 @@ library requires: the timestamp becomes the migration's identifier and orders it
 
 ### `db migrate latest`
 
-Applies all pending migrations.
+Applies all pending migrations. When this project's assembly has an embedded schema and at least one vouched
+scope has no watermark yet, the command reports that it will apply that schema — including on a database that
+already has another application's rows — then runs the migrator.
 
 ```bash
 db migrate latest

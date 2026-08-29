@@ -154,8 +154,9 @@ public class MigrationExecutionServiceTests
          TestContext.Current.CancellationToken
       );
 
-      reporter.Infos.Should().Contain($"Empty database detected. Will apply embedded schema: schema.local.sql");
+      reporter.Infos.Should().Contain("Empty vouched scope detected. Will apply embedded schema: schema.local.sql");
       reporter.Infos.Should().NotContain("Database is already up to date.");
+      reporter.Infos.Should().NotContain(info => info.Contains("Empty database detected", StringComparison.Ordinal));
       runtime.MigrateLatestCallCount.Should().Be(1);
    }
 
@@ -194,7 +195,41 @@ public class MigrationExecutionServiceTests
          TestContext.Current.CancellationToken
       );
 
-      reporter.Infos.Should().Contain("Empty database detected. Will apply embedded schema: schema.local.sql");
+      reporter.Infos.Should().Contain("Empty vouched scope detected. Will apply embedded schema: schema.local.sql");
+      reporter.Infos.Should().NotContain(info => info.Contains("Empty database detected", StringComparison.Ordinal));
+      runtime.MigrateLatestCallCount.Should().Be(1);
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_LatestOnEmptyDatabaseWithSchema_ReportsSchemaPathWithoutCallingItEmpty()
+   {
+      var runtime = new FakeMigrationRuntime
+      {
+         IsDatabaseEmptyResult = true,
+         AlreadyExecuted = [],
+         FinalExecuted = [new ExecutedMigrationModel(202602161530, "Baseline", DateTime.UtcNow, ThisAssemblyScope)]
+      };
+      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
+      var schemaResourceService = new FakeSchemaResourceService
+      {
+         SchemaExists = true,
+         SchemaResourceName = "schema.local.sql",
+         SchemaContent = "-- Migration version: 202602161530 (Baseline)"
+      };
+      var reporter = new FakeMigrateReporter();
+      var service = new MigrationExecutionService(runtimeFactory, schemaResourceService, reporter);
+      var project = CreateProjectContext([new FakeDbMigration(202602161430)]);
+
+      await service.ExecuteAsync(
+         MigrateRequest.Latest,
+         "Host=localhost;Database=mydb",
+         "local",
+         project,
+         TestContext.Current.CancellationToken
+      );
+
+      reporter.Infos.Should().Contain("Empty vouched scope detected. Will apply embedded schema: schema.local.sql");
+      reporter.Infos.Should().NotContain(info => info.Contains("Empty database detected", StringComparison.Ordinal));
       runtime.MigrateLatestCallCount.Should().Be(1);
    }
 
@@ -261,6 +296,45 @@ public class MigrationExecutionServiceTests
       );
 
       reporter.Infos.Should().Contain("Schema version (202602161500) is newer than target (202602161430). Running migrations instead.");
+      reporter.Infos.Should().NotContain(info => info.Contains("Empty database detected", StringComparison.Ordinal));
+      runtime.MigrateToCallCount.Should().Be(1);
+      runtime.MigrateToTarget.Should().Be(202602161430);
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_TargetOnSharedDatabaseWithSchemaAtOrBelowTarget_ReportsSchemaPath()
+   {
+      var runtime = new FakeMigrationRuntime
+      {
+         IsDatabaseEmptyResult = false,
+         AlreadyExecuted = [new ExecutedMigrationModel(202602161430, "OtherBaseline", DateTime.UtcNow, "Other.Scope")],
+         FinalExecuted =
+         [
+            new ExecutedMigrationModel(202602161430, "OtherBaseline", DateTime.UtcNow, "Other.Scope"),
+            new ExecutedMigrationModel(202602161430, "Baseline", DateTime.UtcNow, ThisAssemblyScope)
+         ]
+      };
+      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
+      var schemaResourceService = new FakeSchemaResourceService
+      {
+         SchemaExists = true,
+         SchemaResourceName = "schema.local.sql",
+         SchemaContent = "-- Migration version: 202602161430 (Baseline)"
+      };
+      var reporter = new FakeMigrateReporter();
+      var service = new MigrationExecutionService(runtimeFactory, schemaResourceService, reporter);
+      var project = CreateProjectContext([new FakeDbMigration(202602161430)]);
+
+      await service.ExecuteAsync(
+         MigrateRequest.To(202602161430),
+         "Host=localhost;Database=mydb",
+         "local",
+         project,
+         TestContext.Current.CancellationToken
+      );
+
+      reporter.Infos.Should().Contain("Empty vouched scope detected. Will apply embedded schema: schema.local.sql");
+      reporter.Infos.Should().NotContain(info => info.Contains("Empty database detected", StringComparison.Ordinal));
       runtime.MigrateToCallCount.Should().Be(1);
       runtime.MigrateToTarget.Should().Be(202602161430);
    }

@@ -210,13 +210,14 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
             executedMigrations = [];
          }
 
-         var scopesWithWatermark = executedMigrations
-            .Where(row => row.Scope is not null)
-            .Select(row => row.Scope!)
-            .ToHashSet(StringComparer.Ordinal);
+         var scopesWithWatermark = SchemaBootstrapSelector.GetScopesWithWatermark(executedMigrations);
          var databaseWasGloballyEmpty = !tableExisted || executedMigrations.Length == 0;
 
-         var schemasApplied = await ApplySchemasForEmptyScopesAsync(
+         var schemasApplied = await SchemaBootstrapApplier.ApplyForEmptyScopesAsync(
+            _connection,
+            _logger,
+            _assemblies,
+            _environment,
             discoveredMigrations,
             scopesWithWatermark,
             databaseWasGloballyEmpty,
@@ -225,6 +226,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 
          if (schemasApplied)
          {
+            _scopeColumnExists = true;
             executedMigrations = (await RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
             executedMigrations = await BackfillScopesAsync(executedMigrations, discoveredMigrations, cancellationToken);
          }
@@ -332,119 +334,6 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
       );
 
       return count == 0;
-   }
-
-   /// <summary>
-   ///    Applies embedded schemas for assemblies that still have at least one empty vouched scope, in
-   ///    constructor order. A migrate-to target skips only the schemas whose headers exceed it. Baseline rows
-   ///    are recorded for vouched scopes that had no watermark before this run; legacy scope-less header lines
-   ///    are recorded only when the database was globally empty.
-   /// </summary>
-   /// <returns>True when at least one schema file was applied.</returns>
-   private async Task<bool> ApplySchemasForEmptyScopesAsync(
-      IReadOnlyCollection<IDbMigration> discoveredMigrations,
-      IReadOnlySet<string> scopesWithWatermark,
-      bool databaseWasGloballyEmpty,
-      long? targetIdentifier,
-      CancellationToken cancellationToken)
-   {
-      if (_assemblies.Length == 0)
-         return false;
-
-      var schemas = await EmbeddedSchemaDiscovery.ReadAllSchemaContentsAsync(_assemblies, _environment, cancellationToken);
-
-      if (schemas.Count == 0)
-         return false;
-
-      var schemasToApply = new List<(string Content, string ResourceName, Assembly Assembly, IReadOnlyList<SchemaFileMigrationInfo> HeaderLines, IReadOnlyCollection<string> VouchedScopes)>();
-
-      foreach (var (content, resourceName, assembly) in schemas)
-      {
-         if (string.IsNullOrEmpty(content))
-            continue;
-
-         var headerLines = SchemaFileParser.ParseMigrationVersion(content);
-         var vouchedScopes = GetVouchedScopes(assembly, discoveredMigrations);
-
-         if (!SchemaBootstrapSelector.ShouldApplySchema(vouchedScopes, scopesWithWatermark, headerLines, targetIdentifier))
-            continue;
-
-         schemasToApply.Add((content, resourceName, assembly, headerLines, vouchedScopes));
-      }
-
-      if (schemasToApply.Count == 0)
-         return false;
-
-      await _connection.InTransactionAsync(async () =>
-      {
-         // Pre-create the migrations table so schema files that also try to create it
-         // (with or without IF NOT EXISTS) don't conflict within the same transaction.
-         await MigrationsTableManager.EnsureTableAsync(_connection, cancellationToken);
-         _scopeColumnExists = true;
-
-         var headers = new List<SchemaFileHeader>();
-
-         foreach (var (content, resourceName, assembly, headerLines, vouchedScopes) in schemasToApply)
-         {
-            await _connection.Dapper.ExecuteAsync(content, ct: cancellationToken);
-
-            headers.Add(new SchemaFileHeader(
-               resourceName,
-               assembly.GetName().Name ?? assembly.ToString(),
-               headerLines,
-               vouchedScopes
-            ));
-         }
-
-         var selection = SchemaBaselineSelector.SelectBaselines(headers);
-
-         foreach (var rejection in selection.Rejected)
-         {
-            _logger.LogWarning(
-               "Ignoring migration-version header line for scope {Scope} (identifier {Identifier}) in schema resource '{ResourceName}' from assembly '{AssemblyName}': " +
-               "the assembly does not vouch for that scope, so no baseline row is recorded and that scope's migrations run from its own watermark. " +
-               "Declare scope ownership ('scopes' in .mvdmio-migrations.yml) and re-run 'db pull' to remove foreign scopes from the header.",
-               rejection.HeaderLine.Scope,
-               rejection.HeaderLine.Identifier,
-               rejection.ResourceName,
-               rejection.AssemblyName
-            );
-         }
-
-         var baselinesToRecord = SchemaBootstrapSelector.FilterBaselinesToRecord(
-            selection.Baselines,
-            scopesWithWatermark,
-            databaseWasGloballyEmpty);
-
-         foreach (var baseline in baselinesToRecord)
-         {
-            await InsertMigrationRowAsync(baseline.Identifier, baseline.Name, baseline.Scope, cancellationToken);
-         }
-      });
-
-      return true;
-   }
-
-   /// <summary>
-   ///    The scopes a schema file's assembly vouches for: the scopes of migrations discovered from that
-   ///    assembly, plus the assembly's simple name (the default scope, which also covers an assembly that
-   ///    folded all of its migrations into its schema and therefore contributes none to discover).
-   /// </summary>
-   private static IReadOnlyCollection<string> GetVouchedScopes(Assembly assembly, IReadOnlyCollection<IDbMigration> discoveredMigrations)
-   {
-      var scopes = new HashSet<string>(StringComparer.Ordinal);
-
-      var assemblyName = assembly.GetName().Name;
-      if (assemblyName is not null)
-         scopes.Add(assemblyName);
-
-      foreach (var migration in discoveredMigrations)
-      {
-         if (migration.GetType().Assembly == assembly)
-            scopes.Add(migration.Scope);
-      }
-
-      return scopes;
    }
 
    /// <summary>
