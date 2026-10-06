@@ -13,12 +13,20 @@ A `YYYYMMDDHHmm` timestamp that orders a **Migration** within its **Scope**. Uni
 _Avoid_: Version, sequence number.
 
 **Scope**:
-The stable logical timeline a **Migration** belongs to and is watermarked within. Defaults to the declaring assembly's simple name; overridable on `IDbMigration` to survive assembly renames or to deliberately split/share a timeline. Two scopes advance independently — a migration is run if its identifier is ahead of the watermark *for its own scope*, regardless of other scopes.
+The stable logical timeline a **Migration** belongs to, and the unit its **Baseline** and **Watermark** are tracked in. Defaults to the declaring assembly's simple name; overridable on `IDbMigration` to survive assembly renames or to deliberately split/share a timeline. Two scopes advance independently — whether a migration is pending depends only on the rows recorded *for its own scope*, regardless of other scopes.
 _Avoid_: Assembly name (it defaults to that but is not bound to it), namespace, module.
 
+**Baseline**:
+The lowest recorded **Identifier** within a single **Scope**. Every **Migration** at or below it is taken as already present without a row of its own — whether it was folded into a schema-first bootstrap, predates a database adopted part-way, or is simply the first that ran. Above it, a migration is present only when its own row is recorded. A scope with no rows has no baseline, and every migration in it is pending.
+_Avoid_: Floor, cutoff, low-water mark.
+
 **Watermark**:
-The highest executed **Identifier** within a single **Scope**. Migrations with an identifier above their scope's watermark are pending. Tracked per scope, not globally.
+The highest recorded **Identifier** within a single **Scope**. It no longer decides on its own what is pending: a pending migration above it is simply new, and one below it is an **Out-of-order migration**. Tracked per scope, not globally.
 _Avoid_: High-water mark, version, checkpoint.
+
+**Out-of-order migration**:
+A **Migration** with no recorded row of its own whose **Identifier** sits above its scope's **Baseline** but below its scope's **Watermark** — typically one from a branch that merged after a later-numbered migration in the same scope had already run. It is pending like any other and runs late, after migrations numbered above it; it is never skipped.
+_Avoid_: Skipped migration, missed migration, late migration, gap.
 
 **Owned scope**:
 A **Scope** an application declares as its own in the tool configuration (`scopes` in `.mvdmio-migrations.yml`). Schema export writes header watermark lines only for owned scopes, so a schema pulled from a shared database never names another application's timeline. Undeclared means all scopes (legacy behavior).

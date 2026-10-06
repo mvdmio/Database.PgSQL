@@ -1,0 +1,31 @@
+---
+status: accepted
+---
+
+# Decide pending migrations per scope by recorded rows above the baseline
+
+Every migration belongs to a **Scope**, and `DatabaseMigrator` decides what to run one scope at a time. A migration is pending when its scope has no row for its identifier and the identifier is above the scope's **Baseline** — the lowest identifier recorded for that scope. Everything at or below the Baseline counts as present without a row of its own, because schema-first bootstrap records a single row per scope to stand for every migration folded into `schema.sql`. Above the Baseline, a migration counts as present only when it has its own row. So an **Out-of-order migration** — one that merged after a later-numbered migration in its scope had already run — still runs, late, instead of being skipped forever. See [CONTEXT.md](../../CONTEXT.md) for the Scope / Identifier / Baseline / Watermark / Out-of-order migration vocabulary.
+
+## Considered options
+
+- **Rows above the per-scope Baseline (chosen).** It keeps the contract schema-first bootstrap depends on: a baseline row stands for every migration below it. It also stops a later-numbered migration from hiding an earlier one. It needs no new column, because the Baseline is read from rows the table already holds. Bootstrap rows, hand-inserted cutoff rows and rows recorded by older versions all keep their meaning.
+- **Per-scope Watermark (`identifier > MAX(identifier)` per scope).** Rejected: an out-of-order migration sits below the Watermark, so it never runs and nothing reports it. Consumers had to renumber the migration or write a catch-up migration by hand.
+- **One global Watermark over the whole table.** Rejected: a scope whose migrations carry lower identifiers falls below another scope's Watermark and is skipped.
+- **Exact `(scope, identifier)` membership with no lower bound.** Rejected: every migration folded into a bootstrapped `schema.sql` has no row of its own, so it would run again against tables the schema already created.
+- **A column that marks baseline rows.** Rejected: rows recorded before the column existed would still need the lowest-row rule. A hand-inserted cutoff row carries no mark either, so a database adopted that way would run everything below its cutoff again. The column would only close the gap named under Consequences.
+- **Stop the run with an error on an out-of-order migration, or add a setting to choose.** Rejected: an error keeps the manual renumbering this decision removes. A setting would add a parameter to every `DatabaseMigrator` constructor for a choice nobody needs.
+- **Record existing gaps once on upgrade instead of running them.** Rejected: those rows would claim that migrations ran when they never did.
+- **Per-scope target for `MigrateDatabaseToAsync`.** Rejected: the existing `long` identifier stays a **global ceiling** ("advance every scope up to this identifier"). Migrations are up-only (`IDbMigration` has no `DownAsync`), so a global forward ceiling stays coherent and avoids a heavier API nobody has asked for.
+
+## Consequences
+
+- **Late runs change the order.** A database that runs an out-of-order migration late applies it after migrations that other databases applied after it. When the two conflict, the run fails with a `MigrationException` that names the migration. The migrator logs a warning for every out-of-order migration it runs.
+- **Upgrading runs old gaps.** The first run after upgrading runs every out-of-order migration it finds, however old. To keep one from running, delete its file or insert its row by hand.
+- **Accepted gap.** In a scope that was never bootstrapped, a migration numbered below the scope's first row sits below the Baseline and is still skipped.
+- **Accepted limitation.** The schema-file header records only each scope's Watermark. A schema pulled from a database that has not yet run an out-of-order migration folds that migration in without its effect, and a database bootstrapped from that schema never runs it. Migrate a database before pulling a schema from it.
+- **`db cleanup` keeps pending files.** It never deletes a migration file that is still pending in any configured environment, because deleting it would skip the migration for good.
+- **Per-scope empty check for schema-first bootstrap.** Schema-first asks which vouched scopes have no rows yet, not whether the migrations table is empty as a whole. An assembly's embedded schema applies when at least one scope it vouches for has no rows. Assemblies whose every vouched scope already has rows are skipped. `IsDatabaseEmptyAsync` stays a **global** public check (true only when the table is missing or has no rows at all) and does not gate bootstrap. Migrate-to skips only schemas whose headers exceed the target, per assembly.
+- **Schema identity.** Two scopes may share an identifier, so the table has no `PRIMARY KEY (identifier)`. A named `UNIQUE (scope, identifier)` index models identity instead. Identifier collisions across scopes do not occur in practice, because all consumers are controlled and timestamps do not collide. If one ever did, the second insert would fail loudly on the unique index rather than corrupt state.
+- **Nullable scope during a transition.** `scope` is `NULL`-able. New rows always carry a scope. Legacy rows are filled by a **temporary backfill** that matches recorded rows to discovered migrations by identifier and sets scope only where it is `NULL`, so concurrent runners each fill their own part. Rows no runner recognises stay `NULL` and emit one warning. They belong to no scope, so they count toward no scope's Baseline or Watermark. The backfill is `[Obsolete]` and goes in the next major version. At that point `scope` becomes `NOT NULL` and the unique index is promoted to `PRIMARY KEY (scope, identifier)` via `ADD PRIMARY KEY USING INDEX`.
+- **Schema-file header.** The header carries one `-- Migration version: <id> (<name>) [<scope>]` line per scope. A single generalised regex still reads the old scope-less single-line form. Old headers record a `NULL`-scope baseline that the backfill heals, so existing consumers need not regenerate `schema.sql` on upgrade.
+- **Concurrency.** The session-scoped advisory lock (ADR 0001) serialises whole runs: table upgrade, backfill, bootstrap, selection and every migration. No further coordination is needed.
