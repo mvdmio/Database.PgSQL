@@ -82,6 +82,7 @@ Important behavior:
 - The configured project is built during migrate.
 - Migrations are tracked in `"mvdmio"."migrations"`.
 - On an empty database, an embedded schema may be applied first if a matching schema file exists.
+- A migration with no row above its scope's baseline (lowest recorded identifier) is pending, even when it is below the scope's watermark. Such out-of-order migrations run in identifier order and print a `Warning: Running out-of-order migration ...` line each.
 
 ### `db pull`
 

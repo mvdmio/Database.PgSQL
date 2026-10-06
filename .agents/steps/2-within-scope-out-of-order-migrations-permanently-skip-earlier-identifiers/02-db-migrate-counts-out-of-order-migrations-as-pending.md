@@ -1,6 +1,6 @@
 # 02 — `db migrate` counts out-of-order migrations as pending
 
-Status: pending
+Status: built
 Depends on: 01
 
 ## What to build
@@ -28,9 +28,21 @@ Projects: mvdmio.Database.PgSQL.Tool, mvdmio.Database.PgSQL.Tests.Unit, mvdmio.D
 
 ## Acceptance criteria
 
-- [ ] Unit test: with rows whose Watermark sits above a discovered migration that has no row and sits above the Baseline (only an out-of-order migration pending), `db migrate latest` does not report "Database is already up to date" and calls `MigrateDatabaseToLatestAsync` once.
-- [ ] The same holds for `db migrate to` with a target at or above that migration; with a target below it, the tool reports up to date for the target and does not call the migrator.
-- [ ] Existing `MigrationExecutionServiceTests` keep their expectations — a bootstrap-style row above every migration still reports up to date; a same-Identifier row in another Scope still runs the migrator.
-- [ ] The tool holds no copy of the pending rule; it calls `PendingMigrationSelector`.
-- [ ] Tool README describes the `db migrate` warning and "migrate a database before pulling its schema"; the `pgsql-tool-cli` skill notes the out-of-order behaviour.
-- [ ] `dotnet format --verify-no-changes`, `dotnet build` and `dotnet test` on the footprint projects pass, run sequentially.
+- [x] Unit test: with rows whose Watermark sits above a discovered migration that has no row and sits above the Baseline (only an out-of-order migration pending), `db migrate latest` does not report "Database is already up to date" and calls `MigrateDatabaseToLatestAsync` once.
+- [x] The same holds for `db migrate to` with a target at or above that migration; with a target below it, the tool reports up to date for the target and does not call the migrator.
+- [x] Existing `MigrationExecutionServiceTests` keep their expectations — a bootstrap-style row above every migration still reports up to date; a same-Identifier row in another Scope still runs the migrator.
+- [x] The tool holds no copy of the pending rule; it calls `PendingMigrationSelector`.
+- [x] Tool README describes the `db migrate` warning and "migrate a database before pulling its schema"; the `pgsql-tool-cli` skill notes the out-of-order behaviour.
+- [x] `dotnet format --verify-no-changes`, `dotnet build` and `dotnet test` on the footprint projects pass, run sequentially.
+
+## Outcome
+
+- `MigrationExecutionService.ExecuteAsync` now counts pending migrations with `PendingMigrationSelector.SelectPending(alreadyExecuted, targetMigrations, request.TargetIdentifier).Count`. `CountPendingMigrations` is gone. `GetTargetMigrations` is unchanged. The doc comments on `TryReportSchemaPathAsync` ("no rows yet") and `ConsoleMigratorLogger` (names out-of-order warnings) were updated to match.
+- New unit tests in `MigrationExecutionServiceTests`: `ExecuteAsync_LatestWithOnlyOutOfOrderMigrationPending_RunsMigrator`, `ExecuteAsync_TargetAtOrAboveOutOfOrderMigration_RunsMigratorToTarget` (targets 202602161500 and 202602161600) and `ExecuteAsync_TargetBelowOutOfOrderMigration_ReportsUpToDateAndSkipsMigrator`. The existing test `ExecuteAsync_LatestWithScopeWatermarkCoveringAllMigrations_ReportsUpToDateAndSkipsMigrator` is renamed to `...ScopeBaselineCoveringAllMigrations...`. Its expectation is unchanged. Two test comments no longer mention the Watermark rule or `CountPendingMigrations`.
+- The "Found N migration(s), M already applied" line still prints the raw row count, as the Step asks. With out-of-order rows it can read "2 migration(s), 2 already applied" and still go on to apply 2.
+- Tool README: `db migrate latest` describes the Baseline rule, out-of-order migrations and their `Warning:` line. `db migrate to` describes the target ceiling. `db pull` has a "Migrate a database before pulling its schema" paragraph. Two "no watermark yet" phrases now read "no rows yet". `pgsql-tool-cli` skill: one bullet added to the `db migrate latest` "Important behavior" list.
+- Tests ran: the full unit project (225 passed) with `DOTNET_ROLL_FORWARD=Major`. The integration project was built but not run. It has no tests for the Tool's `MigrationExecutionService`.
+- Run recipe: none exists. The rung-4 drive is done by hand with the commands that `02-db-migrate-out-of-order.sh` in the Proof folder lists. That script cannot run in this sandbox as a whole, so each command was run on its own. It uses its own `postgres:16` container on port 55432, and the SecondarySchema fixture project serves as the migrations project.
+
+Safety fact: `db migrate` counts a migration with no row above its Scope's Baseline but below its Watermark as pending and goes on to run the migrator; if false, the tool prints "Database is already up to date" and the out-of-order migration never reaches the migrator, so it is skipped silently (rung 4)
+Proof: `DOTNET_ROLL_FORWARD=Major dotnet run --project src/mvdmio.Database.PgSQL.Tool --framework net10.0 -- migrate latest -e proof` (seeded rows 202505180000 and 202505200000; config `02-mvdmio-migrations.yml`, seed `02-seed.sql`) exit 0 — `Warning: Running out-of-order migration 202505181100 (SecondaryTable) ...`, `Migration complete. 2 migration(s) applied.`, tables `secondary_table` and `secondary_follow_up_table` exist; transcript in `/data/projects/mvdmio/Database.PgSQL/.git/proof/2-within-scope-out-of-order-migrations-permanently-skip-earlier-identifiers/02-db-migrate-out-of-order.txt`. Unit: `DOTNET_ROLL_FORWARD=Major dotnet test test/mvdmio.Database.PgSQL.Tests.Unit/mvdmio.Database.PgSQL.Tests.Unit.csproj --filter FullyQualifiedName~MigrationExecutionServiceTests` exit 0, 14 passed (`02-migrate-execution.txt`)

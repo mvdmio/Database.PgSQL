@@ -52,7 +52,7 @@ internal class MigrationExecutionService
 
       if (!await TryReportSchemaPathAsync(request, environmentName, project, alreadyExecuted, cancellationToken))
       {
-         var pendingCount = CountPendingMigrations(targetMigrations, alreadyExecuted);
+         var pendingCount = PendingMigrationSelector.SelectPending(alreadyExecuted, targetMigrations, request.TargetIdentifier).Count;
 
          if (request.IsLatest)
          {
@@ -88,22 +88,6 @@ internal class MigrationExecutionService
       _reporter.WriteInfo($"Migration complete. {appliedCount} migration(s) applied.");
    }
 
-   /// <summary>
-   ///    Mirrors the migrator's per-scope watermark rule: a migration is pending when its identifier is ahead
-   ///    of the highest executed identifier within its own scope. An identifier-membership check would diverge
-   ///    — an executed row in a different scope must not count a migration as applied, and rows without a
-   ///    scope (legacy, not yet backfilled) are excluded from every watermark.
-   /// </summary>
-   private static int CountPendingMigrations(IReadOnlyList<IDbMigration> targetMigrations, IReadOnlyList<ExecutedMigrationModel> alreadyExecuted)
-   {
-      var watermarks = alreadyExecuted
-         .Where(x => x.Scope is not null)
-         .GroupBy(x => x.Scope!, StringComparer.Ordinal)
-         .ToDictionary(group => group.Key, group => group.Max(x => x.Identifier), StringComparer.Ordinal);
-
-      return targetMigrations.Count(m => !watermarks.TryGetValue(m.Scope, out var watermark) || m.Identifier > watermark);
-   }
-
    private IReadOnlyList<IDbMigration>? GetTargetMigrations(
       MigrateRequest request,
       IReadOnlyList<IDbMigration> migrations
@@ -122,7 +106,7 @@ internal class MigrationExecutionService
 
    /// <summary>
    ///    Reports the schema-first path when this project has a schema file and at least one vouched scope has
-   ///    no watermark yet (the same per-scope rule as the migrator, via <see cref="SchemaBootstrapSelector"/>).
+   ///    no rows yet (the same per-scope rule as the migrator, via <see cref="SchemaBootstrapSelector"/>).
    ///    A globally empty migrations table is just the case where every scope is empty. Returns true when the
    ///    caller should skip the incremental pending-count short-circuit and invoke the migrator — including a
    ///    fully folded schema (zero pending incrementals) on a shared database, and a migrate-to target older
@@ -307,8 +291,8 @@ internal sealed class ConsoleLoggerFactory : ILoggerFactory
 }
 
 /// <summary>
-///    Surfaces migrator warnings (e.g. executed rows that could not be attributed to a scope) on the console,
-///    since the CLI has no logging infrastructure.
+///    Surfaces migrator warnings (e.g. out-of-order migrations, or executed rows that could not be attributed to a
+///    scope) on the console, since the CLI has no logging infrastructure.
 /// </summary>
 internal sealed class ConsoleMigratorLogger : ILogger<DatabaseMigrator>
 {

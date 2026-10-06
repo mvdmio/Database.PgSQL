@@ -54,8 +54,14 @@ library requires: the timestamp becomes the migration's identifier and orders it
 ### `db migrate latest`
 
 Applies all pending migrations. When this project's assembly has an embedded schema and at least one vouched
-scope has no watermark yet, the command reports that it will apply that schema — including on a database that
+scope has no rows yet, the command reports that it will apply that schema — including on a database that
 already has another application's rows — then runs the migrator.
+
+Pending follows the library's rule: a migration with no row of its own runs when it sits above its scope's
+baseline (the lowest identifier recorded for that scope). That includes an out-of-order migration — one numbered
+below the scope's watermark, typically from a branch merged after a later-numbered migration already ran. Such a
+migration counts as pending, so the command does not report "already up to date", and it prints one
+`Warning: Running out-of-order migration ...` line naming each one it runs.
 
 ```bash
 db migrate latest
@@ -65,7 +71,8 @@ db migrate latest --connection-string "Host=localhost;Database=mydb;Username=pos
 
 ### `db migrate to <identifier>`
 
-Applies migrations up to a specific version.
+Applies migrations up to a specific version (inclusive). Out-of-order migrations at or below the target count as
+pending and run with the same warning; ones above the target wait.
 
 ```bash
 db migrate to 202602161430
@@ -84,13 +91,17 @@ Schema files are written into the configured `schemasDirectory` (`Schemas/` by d
 `schema.<environment>.sql` — where the environment is the one `--environment` names, or the first entry in
 `connectionStrings` when it is omitted. Only `--connection-string`, which belongs to no environment, produces a plain
 `schema.sql`. Files in that directory are embedded into the project's assembly automatically, so the library can apply
-them schema-first when this project's vouched scopes have no watermark yet — including on a database that already
+them schema-first when this project's vouched scopes have no rows yet — including on a database that already
 has another application's migration rows — instead of replaying every migration.
 
 `db pull` starts the file with an `AUTO-GENERATED FILE — DO NOT MODIFY` banner: change a migration and re-run
 `db pull` rather than editing the schema file by hand.
 
 The exported header records one `-- Migration version: <id> (<name>) [<scope>]` line per migration scope, so a schema-first bootstrap can establish the correct baseline for every scope.
+
+**Migrate a database before pulling its schema.** The header records only each scope's watermark, not gaps below
+it. A schema pulled from a database that has not yet run an out-of-order migration folds that migration in without
+its effect, and a database bootstrapped from that schema never runs it.
 
 Set `schemas` in `.mvdmio-migrations.yml` to export only specific PostgreSQL schemas. When omitted or empty, `db pull` and `db cleanup` export all user schemas. `public` is only included when listed explicitly.
 

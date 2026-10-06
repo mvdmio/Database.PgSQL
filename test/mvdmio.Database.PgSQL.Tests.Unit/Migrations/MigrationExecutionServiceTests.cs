@@ -67,7 +67,7 @@ public class MigrationExecutionServiceTests
    {
       // An executed row in a DIFFERENT scope shares the identifier of this project's pending migration
       // (legal under UNIQUE (scope, identifier)). The up-to-date short-circuit must follow the migrator's
-      // per-scope watermark rule, not identifier membership, or the migration is silently skipped.
+      // per-scope pending rule, not identifier membership, or the migration is silently skipped.
       var runtime = new FakeMigrationRuntime
       {
          IsDatabaseEmptyResult = false,
@@ -94,7 +94,7 @@ public class MigrationExecutionServiceTests
    }
 
    [Fact]
-   public async Task ExecuteAsync_LatestWithScopeWatermarkCoveringAllMigrations_ReportsUpToDateAndSkipsMigrator()
+   public async Task ExecuteAsync_LatestWithScopeBaselineCoveringAllMigrations_ReportsUpToDateAndSkipsMigrator()
    {
       // A baseline row above every migration's identifier (schema-first bootstrap) covers them all within
       // the scope, even though no row matches any migration identifier exactly.
@@ -118,6 +118,97 @@ public class MigrationExecutionServiceTests
 
       reporter.Infos.Should().Contain("Database is already up to date.");
       runtime.MigrateLatestCallCount.Should().Be(0);
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_LatestWithOnlyOutOfOrderMigrationPending_RunsMigrator()
+   {
+      // 202602161500 has no row and sits above the scope's baseline (202602161400) but below its watermark
+      // (202602161600): it is out-of-order and still pending.
+      var runtime = new FakeMigrationRuntime
+      {
+         IsDatabaseEmptyResult = false,
+         AlreadyExecuted = OutOfOrderRows,
+         FinalExecuted = [.. OutOfOrderRows, new ExecutedMigrationModel(202602161500, "Migration202602161500", DateTime.UtcNow, ThisAssemblyScope)]
+      };
+      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
+      var reporter = new FakeMigrateReporter();
+      var service = new MigrationExecutionService(runtimeFactory, new FakeSchemaResourceService(), reporter);
+
+      await service.ExecuteAsync(
+         MigrateRequest.Latest,
+         "Host=localhost;Database=mydb",
+         "local",
+         CreateOutOfOrderProjectContext(),
+         TestContext.Current.CancellationToken
+      );
+
+      reporter.Infos.Should().NotContain("Database is already up to date.");
+      runtime.MigrateLatestCallCount.Should().Be(1);
+      reporter.Infos.Should().Contain("Migration complete. 1 migration(s) applied.");
+   }
+
+   [Theory]
+   [InlineData(202602161500)]
+   [InlineData(202602161600)]
+   public async Task ExecuteAsync_TargetAtOrAboveOutOfOrderMigration_RunsMigratorToTarget(long target)
+   {
+      var runtime = new FakeMigrationRuntime
+      {
+         IsDatabaseEmptyResult = false,
+         AlreadyExecuted = OutOfOrderRows,
+         FinalExecuted = [.. OutOfOrderRows, new ExecutedMigrationModel(202602161500, "Migration202602161500", DateTime.UtcNow, ThisAssemblyScope)]
+      };
+      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
+      var reporter = new FakeMigrateReporter();
+      var service = new MigrationExecutionService(runtimeFactory, new FakeSchemaResourceService(), reporter);
+
+      await service.ExecuteAsync(
+         MigrateRequest.To(target),
+         "Host=localhost;Database=mydb",
+         "local",
+         CreateOutOfOrderProjectContext(),
+         TestContext.Current.CancellationToken
+      );
+
+      reporter.Infos.Should().NotContain("Database is already up to date for the specified target.");
+      runtime.MigrateToCallCount.Should().Be(1);
+      runtime.MigrateToTarget.Should().Be(target);
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_TargetBelowOutOfOrderMigration_ReportsUpToDateAndSkipsMigrator()
+   {
+      var runtime = new FakeMigrationRuntime
+      {
+         IsDatabaseEmptyResult = false,
+         AlreadyExecuted = OutOfOrderRows
+      };
+      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
+      var reporter = new FakeMigrateReporter();
+      var service = new MigrationExecutionService(runtimeFactory, new FakeSchemaResourceService(), reporter);
+
+      await service.ExecuteAsync(
+         MigrateRequest.To(202602161430),
+         "Host=localhost;Database=mydb",
+         "local",
+         CreateOutOfOrderProjectContext(),
+         TestContext.Current.CancellationToken
+      );
+
+      reporter.Infos.Should().Contain("Database is already up to date for the specified target.");
+      runtime.MigrateToCallCount.Should().Be(0);
+   }
+
+   private static IReadOnlyList<ExecutedMigrationModel> OutOfOrderRows =>
+   [
+      new ExecutedMigrationModel(202602161400, "Migration202602161400", DateTime.UtcNow, ThisAssemblyScope),
+      new ExecutedMigrationModel(202602161600, "Migration202602161600", DateTime.UtcNow, ThisAssemblyScope)
+   ];
+
+   private static MigrationProjectContext CreateOutOfOrderProjectContext()
+   {
+      return CreateProjectContext([new FakeDbMigration(202602161400), new FakeDbMigration(202602161500), new FakeDbMigration(202602161600)]);
    }
 
    [Fact]
@@ -163,8 +254,7 @@ public class MigrationExecutionServiceTests
    [Fact]
    public async Task ExecuteAsync_LatestOnSharedDatabaseWithFoldedSchemaAndEmptyScope_RunsMigratorDespiteZeroPending()
    {
-      // Every incremental is folded into the schema (CountPendingMigrations would be 0 against an empty
-      // watermark). The reporter must still call the migrator so the baseline is applied on a shared database.
+      // Every incremental is folded into the schema, so the pending count is 0. The reporter must still call the migrator so the baseline is applied on a shared database.
       var runtime = new FakeMigrationRuntime
       {
          IsDatabaseEmptyResult = false,
