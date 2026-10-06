@@ -40,7 +40,7 @@ No mocking framework is used — testability comes from interface seams (e.g. `I
 ## Versioning
 
 - The package version is centralized in `Directory.Build.props` as `<PgSqlVersion>` (both the library and the tool inherit it). Bump it **there**, not in the individual `.csproj` files.
-- Semantic versioning: MAJOR = incompatible API change; MINOR = backward-compatible feature; PATCH = backward-compatible fix.
+- Semantic versioning, with a 0.x exception — see [Common tasks](common-tasks.md#bump-the-package-version).
 - `RepositoryUrl` is also set in `Directory.Build.props`.
 
 ## CI/CD

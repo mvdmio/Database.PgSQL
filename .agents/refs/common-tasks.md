@@ -18,12 +18,12 @@ The tool (`mvdmio.Database.PgSQL.Tool`, command `db`) handles: init config, scaf
 1. Core logic lives in `src/mvdmio.Database.PgSQL/Migrations/`. `DatabaseMigrator` orchestrates; favor extracting pure decision logic into separately unit-testable types.
 2. The `mvdmio.migrations` tracking table is created/managed inside the migrator. Schema-table changes must be idempotent and run under the existing advisory lock (ADR 0001).
 3. Add unit tests for pure logic and integration tests (with `TestBase`, and `SecondarySchema` when multiple assemblies are involved) for end-to-end behavior.
-4. Respect `CONTEXT.md` vocabulary (Scope, Identifier, Watermark) and check `docs/adr/` before changing established behavior.
+4. Respect `CONTEXT.md` vocabulary (Scope, Identifier, Baseline, Watermark) and check `docs/adr/` before changing established behavior.
 
 ## Bump the package version
 
 1. Edit `<PgSqlVersion>` in `Directory.Build.props` — this drives the library, the tool and the analyzer, which version-locks to the library because generated code calls into it.
-2. Choose the bump by semver: MAJOR for an incompatible API change, MINOR for a backward-compatible feature, PATCH for a fix.
+2. Choose the bump by semver: MAJOR for an incompatible API change, MINOR for a backward-compatible feature, PATCH for a fix. While the version is 0.x, an incompatible change — API or behaviour — bumps MINOR instead (per-scope watermarks went 0.27.0 → 0.28.0).
 3. Update `README.md` to reflect the change.
 
 ## Add a tool command
