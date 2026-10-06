@@ -31,13 +31,9 @@ Read the relevant file before working in that area:
 
 ## Agent skills
 
-### Issue tracker
+### Tracker
 
-Specs and ideas live as markdown files under `.agents/specs/` and `.agents/ideas/`. See `.agents/refs/issue-tracker.md`.
-
-### Triage labels
-
-Default vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `.agents/refs/triage-labels.md`.
+Work is tracked as GitHub Issues in `mvdmio/Database.PgSQL`, with statuses as labels. See `.agents/refs/tracker.md`.
 
 ### Domain docs
 
