@@ -1150,7 +1150,9 @@ migrations from somewhere other than assembly reflection.
 
 Besides `MigrateDatabaseToLatestAsync`, the migrator offers:
 
-- `MigrateDatabaseToAsync(identifier)` — stop at a specific identifier instead of running everything
+- `MigrateDatabaseToAsync(identifier)` — stop at a specific identifier instead of running everything; the identifier
+  is a global, inclusive ceiling that applies to every scope and to [out-of-order migrations](#out-of-order-migrations)
+  too
 - `RetrieveAlreadyExecutedMigrationsAsync()` — read the migration history
 - `RunAsync(migration)` — run a single migration and record it
 - `IsDatabaseEmptyAsync()` — check whether any migration has ever been applied
@@ -1159,10 +1161,13 @@ Besides `MigrateDatabaseToLatestAsync`, the migrator offers:
 
 Every migration belongs to a **scope** — the logical timeline it is tracked within. The scope defaults to the simple
 name of the assembly that declares the migration, so multi-assembly setups work without changing any migration. The
-migrations table records the scope of each executed migration, and a migration runs when its identifier is ahead of
-the highest executed identifier *within its own scope*. Scopes advance independently: two assemblies migrating the
-same database can never suppress each other's migrations, even when their timestamps interleave. Uniqueness is
-enforced per scope, so the same identifier can exist in two different scopes.
+migrations table records the scope of each executed migration. Within each scope, the lowest recorded identifier is
+the scope's **baseline** and the highest is its **watermark**. A migration runs when its scope has no row for it and
+either the scope has no rows yet or the migration's identifier is above the scope's baseline. Everything at or below
+the baseline counts as present without a row of its own, which is how a [schema bootstrap](#embedded-schema-files) or
+a hand-inserted cutoff row stands for every migration before it. Scopes advance independently: two assemblies
+migrating the same database can never suppress each other's migrations, even when their timestamps interleave.
+Uniqueness is enforced per scope, so the same identifier can exist in two different scopes.
 
 Override `IDbMigration.Scope` to pin a stable scope:
 
@@ -1176,8 +1181,31 @@ public class _202602161430_AddUsersTable : IDbMigration
 ```
 
 > **Renaming an assembly without pinning the scope forks the migration history**: the renamed assembly becomes a new
-> scope with no watermark, and every one of its migrations runs again. Override `Scope` (or keep the assembly name
+> scope with no rows, and every one of its migrations runs again. Override `Scope` (or keep the assembly name
 > stable) when renaming.
+
+### Out-of-Order Migrations
+
+Parallel branches each add migrations, and a branch merged later can carry a migration numbered below one that
+already ran from another branch in the same scope. Such a migration — above its scope's baseline, below its
+watermark, with no row of its own — is an **out-of-order migration**. It is not skipped: it runs at the next migrate,
+in identifier order together with every other pending migration, so you never renumber it or write a catch-up
+migration by hand. Before running it, the migrator logs a warning naming its scope, identifier and name, and the
+scope's watermark.
+
+An out-of-order migration runs like any other, in its own transaction together with its row. If it conflicts with the
+current schema, the run stops with a `MigrationException` naming it; the migrations that ran before it stay
+committed.
+
+- **To keep one from running**, delete its file, or insert its row into `mvdmio.migrations` by hand.
+- **`MigrateDatabaseToAsync(identifier)`** runs an out-of-order migration only when it is at or below the identifier.
+- **One gap remains:** in a scope that was never bootstrapped from a schema file, a migration numbered below the
+  scope's first recorded row stays skipped, because that row is the scope's baseline.
+
+> **Upgrading to 0.40.0:** earlier versions ran only migrations above a scope's watermark. The first migrate on
+> 0.40.0 runs every out-of-order migration it finds, however old, with a warning for each. Before you deploy, check
+> each database for migration files above their scope's baseline that have no row in `mvdmio.migrations`, and delete
+> or record any that must not run.
 
 ### Concurrent Startup
 
@@ -1200,17 +1228,17 @@ created from one schema file instead of replaying years of migrations. Generate 
 [CLI tool](#cli-tool)'s `db pull`.
 
 Schema-first bootstrap is **per scope**. An assembly's embedded `schema.sql` (or environment-specific
-`schema.{env}.sql`) is applied when at least one scope that assembly **vouches for** has no watermark yet —
+`schema.{env}.sql`) is applied when at least one scope that assembly **vouches for** has no rows yet —
 regardless of whether other scopes already have rows in the same database. Assemblies whose every vouched scope
-already has a watermark are left alone. When several assemblies are passed to one `DatabaseMigrator`, each is
+already has rows are left alone. When several assemblies are passed to one `DatabaseMigrator`, each is
 considered independently, in constructor order; assemblies without a matching schema resource are skipped. Schemas
 that do apply run in a single transaction.
 
-A schema file's `-- Migration version: <id> (<name>) [<scope>]` header lines — one per scope — establish the
-baseline, so migrations already folded into a schema file are not re-run while another assembly bootstraps alongside
-it. Header lines without a `[<scope>]` part are accepted too. On a globally empty database they still record as a
-legacy scope-less baseline that the backfill heals; on a populated database only vouched, previously empty scopes
-receive a baseline row.
+A schema file's `-- Migration version: <id> (<name>) [<scope>]` header lines — one per scope — establish each
+scope's baseline row, so migrations already folded into a schema file stay at or below that baseline and are not
+re-run, even while another assembly bootstraps alongside it. Header lines without a `[<scope>]` part are accepted
+too. On a globally empty database they still record as a legacy scope-less baseline that the backfill heals; on a
+populated database only vouched, previously empty scopes receive a baseline row.
 
 A schema file may only establish a baseline for scopes its own assembly **vouches for**: the scopes of migrations
 discovered from that assembly, plus the assembly's simple name. Header lines naming any other scope — typically a
@@ -1232,8 +1260,8 @@ considered when their scopes are empty.
 
 A database whose migration history has no scopes recorded is brought up to date on the first run: existing rows are
 attributed to a scope by matching them against the migrations that were discovered. Rows that no discovered migration
-claims stay scope-less, count towards no scope's watermark, and produce a logged warning so you can set their scope
-yourself. Existing schema files keep working as they are.
+claims stay scope-less, count towards no scope's baseline or watermark, and produce a logged warning so you can set
+their scope yourself. Existing schema files keep working as they are.
 
 > **One case needs manual repair:** a database that was bootstrapped schema-first from **multiple assemblies** without
 > scopes holds a single baseline row (the highest header version across all schemas). Only one scope can be attributed

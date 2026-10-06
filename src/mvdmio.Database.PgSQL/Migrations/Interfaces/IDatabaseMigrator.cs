@@ -13,20 +13,22 @@ public interface IDatabaseMigrator
    Task<IEnumerable<ExecutedMigrationModel>> RetrieveAlreadyExecutedMigrationsAsync(CancellationToken cancellationToken = default);
 
    /// <summary>
-   ///    Run all migrations that have not yet been executed in order. A migration is pending when its identifier
-   ///    is ahead of the highest executed identifier within its own scope.
+   ///    Run all migrations that have not yet been executed in order. A migration is pending when its scope has no
+   ///    row for it and either the scope has no rows or the migration's identifier is above the scope's baseline
+   ///    (the lowest identifier recorded for that scope). A pending migration below the scope's watermark (the
+   ///    highest recorded identifier) is out-of-order: it still runs, preceded by a logged warning.
    ///    Schema-first bootstrap is per scope: an assembly's embedded schema (based on the configured environment)
-   ///    is applied when at least one scope that assembly vouches for has no watermark yet. Assemblies whose
-   ///    vouched scopes already have rows are left alone. After baselines are recorded, remaining migrations past
-   ///    each scope's watermark are run.
+   ///    is applied when at least one scope that assembly vouches for has no rows yet. Assemblies whose
+   ///    vouched scopes already have rows are left alone. After baselines are recorded, the remaining pending
+   ///    migrations are run in identifier order.
    /// </summary>
    Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken = default);
 
    /// <summary>
    ///    Run all pending migrations up to and including the specified identifier. The target is a global ceiling
-   ///    applied per scope: every scope advances up to the given identifier.
+   ///    applied per scope: every scope advances up to the given identifier, out-of-order migrations included.
    ///    Schema-first bootstrap is per scope: an assembly's embedded schema is applied when at least one scope
-   ///    that assembly vouches for has no watermark yet, unless that schema's header contains an identifier above
+   ///    that assembly vouches for has no rows yet, unless that schema's header contains an identifier above
    ///    <paramref name="targetIdentifier"/> — that schema is skipped, while other assemblies are still considered.
    ///    After baselines are recorded, remaining migrations up to the target are run.
    /// </summary>
@@ -41,7 +43,7 @@ public interface IDatabaseMigrator
 
    /// <summary>
    ///    Checks whether the migrations table is missing or has no rows at all. This is a global check: a row
-   ///    belonging to any scope makes the database non-empty. Schema-first bootstrap uses per-scope watermarks
+   ///    belonging to any scope makes the database non-empty. Schema-first bootstrap checks each scope's rows
    ///    instead of this method.
    /// </summary>
    /// <param name="cancellationToken">Cancellation token.</param>

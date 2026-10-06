@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using mvdmio.Database.PgSQL.Exceptions;
 using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers;
@@ -13,7 +14,7 @@ using Testcontainers.PostgreSql;
 namespace mvdmio.Database.PgSQL.Tests.Integration.Migrations;
 
 /// <summary>
-///    End-to-end tests for per-scope migration watermarks: two assemblies migrating the same database advance
+///    End-to-end tests for per-scope pending migrations: two assemblies migrating the same database advance
 ///    independently, legacy scope-less tables are upgraded and backfilled in place, and unattributed rows
 ///    warn instead of silently suppressing migrations. These tests use their own PostgreSQL container.
 /// </summary>
@@ -287,6 +288,90 @@ public class PerScopeMigrationTests : IAsyncLifetime
       (await db.Management.TableExistsAsync("public", "scope_a_two")).Should().BeTrue();
       (await db.Management.TableExistsAsync("public", "scope_b_one")).Should().BeTrue();
       (await db.Management.TableExistsAsync("public", "scope_b_two")).Should().BeFalse();
+   }
+
+   [Fact]
+   public async Task MigrateDatabaseToLatestAsync_WithOutOfOrderMigration_RunsItLateAndWarnsOnce()
+   {
+      // Issue #2: another branch's later-numbered migration ran first; the branch carrying the earlier-numbered
+      // migration merges afterwards. The next run must apply it and warn that it ran out of order.
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      var scopeAOne = new CreateTableMigration(202601010000, "ScopeAOne", "ScopeA", "scope_a_one");
+      var scopeAThree = new CreateTableMigration(202603010000, "ScopeAThree", "ScopeA", "scope_a_three");
+      var lateMergedScopeATwo = new CreateTableMigration(202602010000, "ScopeATwo", "ScopeA", "scope_a_two");
+
+      var firstLoggerFactory = new CapturingLoggerFactory();
+      await new DatabaseMigrator(db, firstLoggerFactory, new FixedMigrationSet(scopeAOne, scopeAThree)).MigrateDatabaseToLatestAsync(CancellationToken);
+
+      var loggerFactory = new CapturingLoggerFactory();
+      var retriever = new FixedMigrationSet(scopeAOne, lateMergedScopeATwo, scopeAThree);
+      var migrator = new DatabaseMigrator(db, loggerFactory, retriever);
+      await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      (await db.Management.TableExistsAsync("public", "scope_a_two")).Should().BeTrue();
+
+      var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
+      executedMigrations.Should().ContainSingle(m => m.Identifier == 202602010000 && m.Scope == "ScopeA");
+
+      firstLoggerFactory.Entries.Should().NotContain(e => e.Level == LogLevel.Warning);
+      var warning = loggerFactory.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning).Subject;
+      warning.Message.Should().Contain("ScopeA").And.Contain("202602010000").And.Contain("ScopeATwo").And.Contain("202603010000");
+   }
+
+   [Fact]
+   public async Task MigrateDatabaseToLatestAsync_WithFoldedMigrationBelowBootstrapBaseline_DoesNotRunIt()
+   {
+      // A folded migration file still present below the bootstrap baseline row must stay ignored, on the
+      // bootstrapping run and on every later run. Running it would create folded_table.
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      var migrations = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly).RetrieveMigrations()
+         .Append(new CreateTableMigration(202505170000, "FoldedTable", "mvdmio.Database.PgSQL.Tests.Integration", "folded_table"))
+         .ToArray();
+      var loggerFactory = new CapturingLoggerFactory();
+
+      for (var run = 0; run < 2; run++)
+      {
+         var migrator = new DatabaseMigrator(db, environment: null, loggerFactory, [TestAssembly], new FixedMigrationSet(migrations));
+         await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
+      }
+
+      (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
+      (await db.Management.TableExistsAsync("public", "complex_table")).Should().BeTrue();
+      (await db.Management.TableExistsAsync("public", "folded_table")).Should().BeFalse();
+      loggerFactory.Entries.Should().NotContain(e => e.Level == LogLevel.Warning);
+   }
+
+   [Fact]
+   public async Task MigrateDatabaseToLatestAsync_WithFailingOutOfOrderMigration_ThrowsAndKeepsEarlierMigrations()
+   {
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      var scopeAOne = new CreateTableMigration(202601010000, "ScopeAOne", "ScopeA", "scope_a_one");
+      var scopeAFive = new CreateTableMigration(202605010000, "ScopeAFive", "ScopeA", "scope_a_five");
+      await new DatabaseMigrator(db, NullLoggerFactory.Instance, new FixedMigrationSet(scopeAOne, scopeAFive)).MigrateDatabaseToLatestAsync(CancellationToken);
+
+      var retriever = new FixedMigrationSet(
+         scopeAOne,
+         new CreateTableMigration(202602010000, "ScopeATwo", "ScopeA", "scope_a_two"),
+         new CreateTableMigration(202603010000, "ScopeAThreeConflicts", "ScopeA", "scope_a_five"),
+         scopeAFive,
+         new CreateTableMigration(202606010000, "ScopeASix", "ScopeA", "scope_a_six"));
+      var migrator = new DatabaseMigrator(db, NullLoggerFactory.Instance, retriever);
+
+      var act = () => migrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      var exception = await act.Should().ThrowAsync<MigrationException>();
+      exception.Which.Migration.Identifier.Should().Be(202603010000);
+
+      (await db.Management.TableExistsAsync("public", "scope_a_two")).Should().BeTrue();
+      (await db.Management.TableExistsAsync("public", "scope_a_six")).Should().BeFalse();
+
+      var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
+      executedMigrations.Should().Contain(m => m.Identifier == 202602010000 && m.Scope == "ScopeA");
+      executedMigrations.Should().NotContain(m => m.Identifier == 202603010000);
+      executedMigrations.Should().NotContain(m => m.Identifier == 202606010000);
    }
 
    private sealed class FixedMigrationSet : IMigrationRetriever

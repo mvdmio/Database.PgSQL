@@ -11,9 +11,10 @@ using System.Reflection;
 namespace mvdmio.Database.PgSQL.Migrations;
 
 /// <summary>
-///    Class for running database migrations. Migrations are tracked per scope: a migration runs when its
-///    identifier is ahead of the highest executed identifier within its own scope, so the timelines of
-///    different assemblies advance independently.
+///    Class for running database migrations. Migrations are tracked per scope: a migration runs when its scope has
+///    no row for it and its identifier is above the scope's baseline (the lowest identifier recorded for that scope),
+///    so the timelines of different assemblies advance independently. A migration below the scope's watermark (the
+///    highest recorded identifier) still runs, late, and is preceded by a logged warning.
 /// </summary>
 [PublicAPI]
 public sealed class DatabaseMigrator : IDatabaseMigrator
@@ -74,7 +75,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    Optional environment name for schema discovery. If specified, looks for an embedded
    ///    schema.{environment}.sql resource (case-insensitive). Falls back to schema.sql if not found.
    ///    An assembly's embedded schema is applied when at least one scope that assembly vouches for has no
-   ///    watermark yet.
+   ///    rows yet.
    /// </param>
    /// <param name="loggerFactory">The logger factory to use for logging migration warnings and diagnostics.</param>
    /// <param name="assembliesContainingMigrations">
@@ -106,7 +107,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    ///    Optional environment name for schema discovery. If specified, looks for an embedded
    ///    schema.{environment}.sql resource (case-insensitive). Falls back to schema.sql if not found.
    ///    An assembly's embedded schema is applied when at least one scope that assembly vouches for has no
-   ///    watermark yet.
+   ///    rows yet.
    /// </param>
    /// <param name="loggerFactory">The logger factory to use for logging migration warnings and diagnostics.</param>
    /// <param name="assembliesForSchemaDiscovery">
@@ -173,7 +174,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 
    /// <summary>
    ///    Runs the full migration orchestration under a session-scoped advisory lock so that concurrently-starting
-   ///    instances apply migrations exactly once. The lock is acquired before the per-scope watermark read, held
+   ///    instances apply migrations exactly once. The lock is acquired before the executed-rows read, held
    ///    across schema application, the table upgrade, the scope backfill, and the entire migration loop, and
    ///    released in a <c>finally</c>.
    /// </summary>
@@ -198,7 +199,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 
          if (tableExisted)
          {
-            // Upgrade and backfill before the per-scope empty check so legacy scope-less rows become watermarks
+            // Upgrade and backfill before the per-scope empty check so legacy scope-less rows count toward their scope
             // and a schema for an already-attributed scope is not re-applied.
             await MigrationsTableManager.EnsureTableAsync(_connection, cancellationToken);
             _scopeColumnExists = true;
@@ -238,9 +239,20 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 
          var pendingMigrations = PendingMigrationSelector.SelectPending(executedMigrations, discoveredMigrations, targetIdentifier);
 
-         foreach (var migration in pendingMigrations)
+         foreach (var pending in pendingMigrations)
          {
-            await RunAsync(migration, cancellationToken);
+            if (pending.IsOutOfOrder)
+            {
+               _logger.LogWarning(
+                  "Running out-of-order migration {Identifier} ({Name}) in scope {Scope}: it is below the scope's watermark {Watermark}, so it runs later than its identifier suggests.",
+                  pending.Migration.Identifier,
+                  pending.Migration.Name,
+                  pending.Migration.Scope,
+                  pending.ScopeWatermark
+               );
+            }
+
+            await RunAsync(pending.Migration, cancellationToken);
          }
       }
       finally
@@ -362,7 +374,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
       {
          _logger.LogWarning(
             "Could not attribute {UnattributedCount} executed migration row(s) to a scope: {UnattributedRows}. " +
-            "These rows are excluded from every scope's watermark; set their scope manually in \"mvdmio\".\"migrations\".",
+            "These rows count toward no scope's baseline or watermark; set their scope manually in \"mvdmio\".\"migrations\".",
             result.Unattributed.Count,
             string.Join(", ", result.Unattributed.Select(x => $"{x.Identifier} ({x.Name})"))
          );

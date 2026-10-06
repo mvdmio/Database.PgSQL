@@ -7,7 +7,7 @@ namespace mvdmio.Database.PgSQL.Migrations;
 ///    establish. A schema file may only establish a baseline for a scope its own assembly vouches for — the
 ///    scopes of migrations discovered from that assembly, plus the assembly's simple name (the default scope).
 ///    Header lines naming any other scope are rejected, so a foreign header line (e.g. from a schema pulled off
-///    a shared database) can never fabricate a watermark that silently suppresses another assembly's migrations.
+///    a shared database) can never fabricate a baseline that silently suppresses another assembly's migrations.
 /// </summary>
 internal static class SchemaBaselineSelector
 {

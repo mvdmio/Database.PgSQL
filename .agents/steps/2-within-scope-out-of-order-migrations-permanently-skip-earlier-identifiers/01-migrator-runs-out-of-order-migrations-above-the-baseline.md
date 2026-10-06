@@ -1,6 +1,6 @@
 # 01 — Migrator runs out-of-order migrations above the Baseline
 
-Status: pending
+Status: done
 Depends on: none
 
 ## What to build
@@ -66,3 +66,17 @@ Projects: mvdmio.Database.PgSQL, mvdmio.Database.PgSQL.Tool, mvdmio.Database.PgS
 - [ ] Library README covers the Baseline rule, out-of-order migrations, the warning, keeping a migration from running, the target ceiling, the accepted gap and the 0.40.0 upgrade note; root README summary is accurate.
 - [ ] `<PgSqlVersion>` is 0.40.0.
 - [ ] `dotnet format --verify-no-changes`, `dotnet build` and `dotnet test` on the footprint projects pass, run sequentially.
+
+## Outcome
+
+- `PendingMigrationSelector.SelectPending` keeps its parameters and now returns `IReadOnlyList<PendingMigration>`. `PendingMigration(IDbMigration Migration, bool IsOutOfOrder, long? ScopeWatermark)` is an internal record in its own file, `src/mvdmio.Database.PgSQL/Migrations/PendingMigration.cs`, which the footprint did not name. Steps 02 and 03 call the selector as it is.
+- `DatabaseMigrator.MigrateAsync` logs one warning before each out-of-order migration: `Running out-of-order migration {Identifier} ({Name}) in scope {Scope}: it is below the scope's watermark {Watermark}, ...`. The backfill warning now says the unattributed rows "count toward no scope's baseline or watermark". The public constructors' XML docs now say "has no rows yet" instead of "has no watermark yet". Only the doc text changed.
+- The Issue #2 replay unit test needs a baseline row below `202610061205`. With only `202610061205` and `202610061300` recorded, `202610061205` is the Baseline, so `202610061047` falls in the accepted gap. The replay test therefore adds a `202609010000` baseline row. The accepted-gap test uses the bare two-row case.
+- Library README: Migration Scopes now states the Baseline rule. A new `### Out-of-Order Migrations` section covers the warning, failure, how to keep a migration from running, the target ceiling, the accepted gap and the 0.40.0 upgrade note. The embedded-schema section, the rename callout and the scope-less section are reworded to match. The root README bullet is still accurate and is unchanged. `<PgSqlVersion>` is 0.40.0.
+- Unit tests ran with `DOTNET_ROLL_FORWARD=Major`, because this host has the .NET 10 runtime but not .NET 9.
+- Checker: `PendingMigration` is now `PendingMigration(IDbMigration Migration, long? ScopeWatermark)`, with `IsOutOfOrder` a computed property (`ScopeWatermark` set and `Migration.Identifier` below it), so the two can never disagree. Callers read `IsOutOfOrder` and `ScopeWatermark` as before; build one with only the migration and the watermark.
+- Checker: the public XML docs on `IDatabaseMigrator` (`MigrateDatabaseToLatestAsync`, `MigrateDatabaseToAsync`, `IsDatabaseEmptyAsync`) and `IDbMigration.Scope` now describe the Baseline rule. The rejected-header warning in `SchemaBootstrapApplier` now says the scope's migrations "run according to its own recorded rows"; doc and comment wording in `SchemaBaselineSelector` and `DatabaseMigrator` matches. `CONTEXT.md` ("Vouched scope") still says "no Watermark yet" where the docs now say "no rows yet"; same meaning, left as the Step's read-only rule says.
+- Checker: the Tool's `MigrationExecutionService` still carries its own Watermark rule and stale doc comment; Step 02 replaces it.
+
+Safety fact: a migration above its Scope's Baseline but below its Watermark with no row of its own is selected and run, while one at or below the Baseline is not; if false, out-of-order migrations stay silently skipped or folded migrations re-run against a bootstrapped schema and fail (rung 3)
+Proof: `dotnet test test/mvdmio.Database.PgSQL.Tests.Integration/mvdmio.Database.PgSQL.Tests.Integration.csproj --filter FullyQualifiedName~PerScopeMigrationTests -v n` exit 0 — Total tests: 10, Passed: 10, including `WithOutOfOrderMigration_RunsItLateAndWarnsOnce` (table `scope_a_two` exists, one warning) and `WithFoldedMigrationBelowBootstrapBaseline_DoesNotRunIt` (`folded_table` absent); output in `/data/projects/mvdmio/Database.PgSQL/.git/proof/2-within-scope-out-of-order-migrations-permanently-skip-earlier-identifiers/01-per-scope-integration.txt`

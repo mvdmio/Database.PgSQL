@@ -82,7 +82,7 @@ internal static class SchemaBootstrapApplier
          {
             logger.LogWarning(
                "Ignoring migration-version header line for scope {Scope} (identifier {Identifier}) in schema resource '{ResourceName}' from assembly '{AssemblyName}': " +
-               "the assembly does not vouch for that scope, so no baseline row is recorded and that scope's migrations run from its own watermark. " +
+               "the assembly does not vouch for that scope, so no baseline row is recorded and that scope's migrations run according to its own recorded rows. " +
                "Declare scope ownership ('scopes' in .mvdmio-migrations.yml) and re-run 'db pull' to remove foreign scopes from the header.",
                rejection.HeaderLine.Scope,
                rejection.HeaderLine.Identifier,

@@ -28,9 +28,9 @@ public interface IDbMigration
    string Name => MigrationClassNameParser.ParseName(GetType().Name);
 
    /// <summary>
-   ///    Scope this migration belongs to. Migrations are watermarked per scope: a migration runs when its
-   ///    <see cref="Identifier" /> is ahead of the highest executed identifier <i>within its own scope</i>,
-   ///    independent of other scopes. Defaults to the declaring assembly's simple name. Override this to keep
+   ///    Scope this migration belongs to. Migrations are tracked per scope: a migration runs when its scope has no
+   ///    row for it and its <see cref="Identifier" /> is above the lowest identifier recorded <i>within its own
+   ///    scope</i> (or the scope has no rows yet), independent of other scopes. Defaults to the declaring assembly's simple name. Override this to keep
    ///    a stable scope across an assembly rename — renaming the assembly without overriding the scope forks
    ///    the migration history and re-runs every migration.
    /// </summary>
