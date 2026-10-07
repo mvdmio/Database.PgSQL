@@ -109,7 +109,7 @@ First builds the configured project and loads its migrations, like `db migrate`;
 For every configured environment:
 - pulls a fresh schema file
 - reads the migration version from the schema header
-- reads the environment's `mvdmio.migrations` rows
+- reads the environment's `mvdmio.migrations` rows as recorded (no scope backfill, so run `db migrate` first on an environment migrated before scopes were recorded, or every file matching a discovered migration stays)
 
 Then it:
 - finds the lowest migration version still needed anywhere

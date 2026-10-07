@@ -62,23 +62,24 @@ internal static partial class MigrationCleanupPlanner
       var filesToDelete = new List<string>();
       var pendingFilesKept = new List<PendingMigrationFile>();
 
-      var candidates = Directory
+      var files = Directory
          .GetFiles(migrationsDirectoryPath, "*.cs", SearchOption.AllDirectories)
-         .Select(path => (Path: path, IsMigration: TryParseMigrationIdentifier(Path.GetFileNameWithoutExtension(path), out var identifier), Identifier: identifier))
-         .Where(x => x.IsMigration && x.Identifier < lowestMigrationIdentifier)
-         .OrderBy(x => x.Path, StringComparer.OrdinalIgnoreCase);
+         .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
 
-      foreach (var candidate in candidates)
+      foreach (var path in files)
       {
+         if (!TryParseMigrationIdentifier(Path.GetFileNameWithoutExtension(path), out var identifier) || identifier >= lowestMigrationIdentifier)
+            continue;
+
          var pendingEnvironments = pendingIdentifiersByEnvironment
-            .Where(x => x.Identifiers.Contains(candidate.Identifier))
+            .Where(x => x.Identifiers.Contains(identifier))
             .Select(x => x.Name)
             .ToArray();
 
          if (pendingEnvironments.Length == 0)
-            filesToDelete.Add(candidate.Path);
+            filesToDelete.Add(path);
          else
-            pendingFilesKept.Add(new PendingMigrationFile(candidate.Path, pendingEnvironments));
+            pendingFilesKept.Add(new PendingMigrationFile(path, pendingEnvironments));
       }
 
       return new(lowestMigrationIdentifier, filesToDelete.ToArray(), pendingFilesKept.ToArray(), null);

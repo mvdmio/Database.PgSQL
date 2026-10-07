@@ -75,9 +75,7 @@ internal static class CleanupCommand
             // Rows are read as recorded, not backfilled: a row without a scope counts toward nothing, which can
             // only keep more files.
             await using var runtime = runtimeFactory.Create(connectionString, environmentName, project);
-            var executedMigrations = await runtime.IsDatabaseEmptyAsync(cancellationToken)
-               ? []
-               : (await runtime.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
+            var executedMigrations = await runtime.RetrieveRecordedMigrationsAsync(cancellationToken);
             environments.Add(new CleanupEnvironment(environmentName, lowestMigrationInfo?.Identifier, executedMigrations));
 
             if (lowestMigrationInfo is null)

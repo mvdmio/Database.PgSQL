@@ -21,6 +21,7 @@ public class MigrationCleanupPlannerTests : IDisposable
 
       plan.LowestMigrationIdentifier.Should().BeNull();
       plan.FilesToDelete.Should().BeEmpty();
+      plan.PendingFilesKept.Should().BeEmpty();
       plan.SkipReason.Should().Be("No environments configured.");
    }
 
@@ -31,6 +32,7 @@ public class MigrationCleanupPlannerTests : IDisposable
 
       plan.LowestMigrationIdentifier.Should().BeNull();
       plan.FilesToDelete.Should().BeEmpty();
+      plan.PendingFilesKept.Should().BeEmpty();
       plan.SkipReason.Should().Be("At least one environment has no recorded migration version.");
    }
 
@@ -43,6 +45,7 @@ public class MigrationCleanupPlannerTests : IDisposable
 
       plan.LowestMigrationIdentifier.Should().Be(202602161430);
       plan.FilesToDelete.Should().BeEmpty();
+      plan.PendingFilesKept.Should().BeEmpty();
       plan.SkipReason.Should().BeNull();
    }
 

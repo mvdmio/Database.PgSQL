@@ -1,6 +1,6 @@
 # 03 — `db cleanup` keeps migration files still pending in any environment
 
-Status: built
+Status: done
 Depends on: 01, 02
 
 ## What to build
@@ -48,7 +48,7 @@ Projects: mvdmio.Database.PgSQL, mvdmio.Database.PgSQL.Tool, mvdmio.Database.PgS
 - [x] Existing planner tests keep their skip reasons, bound and deletion results for files nothing marks pending.
 - [x] `db cleanup` loads the migrations project before rewriting any schema file, reads every configured environment's rows, and prints a line for each file kept because it is still pending.
 - [x] Tool README, root README CLI table and `pgsql-tool-cli` skill describe the new cleanup rule.
-- [ ] `dotnet format --verify-no-changes`, `dotnet build` and `dotnet test` for the whole solution pass, run sequentially.
+- [x] `dotnet format --verify-no-changes`, `dotnet build` and `dotnet test` for the whole solution pass, run sequentially.
 
 ## Outcome
 
@@ -59,6 +59,9 @@ Projects: mvdmio.Database.PgSQL, mvdmio.Database.PgSQL.Tool, mvdmio.Database.PgS
 - Docs: the tool README `### db cleanup` has a new paragraph and list on the pending rule. The root README `db cleanup` row now reads "Refresh schema files; delete migrations no environment still needs". The `pgsql-tool-cli` skill's `### db cleanup` adds the build step, the row read and the keep rule.
 - This session cannot write to the Proof folder or run a proof script as a whole. The script, seeds and transcript are in this session's scratchpad, `/tmp/claude-1000/-data-projects-mvdmio-Database-PgSQL/8b337ed6-dfe2-45f4-a85a-ff7512540a43/scratchpad/proof03/` (`03-db-cleanup-keeps-pending.sh`, `03-seed-dev.sql`, `03-seed-prod.sql`, `03-db-cleanup-keeps-pending.txt`). Each command was run on its own, against a postgres:16 container on port 55433 that has since been removed.
 - Run recipe: none exists, and none was written; the drive follows Step 02's hand-run pattern.
+- Checker fixes: the "empty database has no rows" read now lives in one helper, `MigrationRuntimeExtensions.RetrieveRecordedMigrationsAsync` (`src/mvdmio.Database.PgSQL.Tool/Migrations/MigrationRuntimeExtensions.cs`), used by both `CleanupCommand` and `MigrationExecutionService`. The planner walks files with a `foreach` in place of the tuple query, and the skip-path tests also assert `PendingFilesKept` is empty. The tool README and the skill now say that cleanup does not backfill scopes, so an environment migrated before scopes were recorded keeps every matching file until `db migrate` runs there.
+- Checker kept the Step's reading that a file below the bound whose identifier matches no discovered migration is deleted: the built project defines no migration for it, so nothing can be pending, and the Spec's "The pending check only removes files from the delete list" holds.
+- Checker full run, sequential: `dotnet format --verify-no-changes` exit 0, `dotnet build` succeeded, Unit 228, Analyzers 169, Integration 275, OData 134, Packaging 13 passed, 0 failed (Unit and Analyzers with `DOTNET_ROLL_FORWARD=Major`). The proof script, seeds and transcript are now in the Proof folder.
 
-Safety fact: `db cleanup` keeps a migration file below the deletion bound when a migration with its identifier is still pending (for example out-of-order) in any configured environment; if false, cleanup deletes the file and the late migration is lost for good (rung 4)
-Proof: `DOTNET_ROLL_FORWARD=Major dotnet run --project src/mvdmio.Database.PgSQL.Tool --framework net10.0 -- cleanup`, run against a fresh postgres:16 with database envdev holding every fixture row and envprod holding only 202505180000 and 202505200000 (steps in `03-db-cleanup-keeps-pending.sh`), exit 0 — `Kept .../_202505181100_SecondaryTable.cs: still pending in prod`, `Kept .../_202505190000_SecondaryFollowUp.cs: still pending in prod`, `Deleted .../_202505170000_Removed.cs`; transcript `/tmp/claude-1000/-data-projects-mvdmio-Database-PgSQL/8b337ed6-dfe2-45f4-a85a-ff7512540a43/scratchpad/proof03/03-db-cleanup-keeps-pending.txt` (belongs in the Proof folder, which this session cannot write)
+Safety fact: `db cleanup` keeps a migration file below the deletion bound when a migration with its identifier is still pending (for example out-of-order) in any configured environment, and still deletes a below-bound file no environment needs; if false, cleanup deletes the file and the late migration is lost for good (rung 4)
+Proof: Checker re-ran `03-db-cleanup-keeps-pending.sh` one command at a time on the fixed code: postgres:16, envdev with all four rows, envprod with only 202505180000 and 202505200000, then `DOTNET_ROLL_FORWARD=Major dotnet run --project src/mvdmio.Database.PgSQL.Tool --framework net10.0 -- cleanup`, exit 0 — `Kept .../_202505181100_SecondaryTable.cs: still pending in prod`, `Kept .../_202505190000_SecondaryFollowUp.cs: still pending in prod`, `Deleted .../_202505170000_Removed.cs`, both fixture files left; transcript `/data/projects/mvdmio/Database.PgSQL/.git/proof/2-within-scope-out-of-order-migrations-permanently-skip-earlier-identifiers/03-db-cleanup-keeps-pending.txt`

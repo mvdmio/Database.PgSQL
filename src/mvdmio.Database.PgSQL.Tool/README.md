@@ -120,7 +120,7 @@ db cleanup
 Cleanup never deletes a migration file that is still pending in any configured environment, so it cannot turn an out-of-order migration into a lost one:
 
 - It first builds the configured `project` and loads its migrations, the same way `db migrate` does. A build failure stops cleanup before any schema file is rewritten or any file deleted.
-- For each environment it reads the rows in `mvdmio.migrations` and decides which migrations are still pending there, with the same rule `db migrate` uses. An environment with no migrations table, or an empty one, has every migration pending.
+- For each environment it reads the rows in `mvdmio.migrations` and decides which migrations are still pending there, with the same rule `db migrate` uses. An environment with no migrations table, or an empty one, has every migration pending. Cleanup reads the rows as recorded and does not fill in missing scopes, so an environment last migrated before scopes were recorded has every migration pending too; run `db migrate` there first.
 - A file name carries an identifier but no scope, so a file matches every discovered migration with that identifier. Cleanup keeps the file when any of them is pending in any environment, and prints `Kept <file>: still pending in <environments>` for it.
 - Files that every environment already has are deleted as before. A file below the bound whose identifier matches no discovered migration is deleted as before too.
 

@@ -45,10 +45,7 @@ internal class MigrationExecutionService
       _reporter.WriteInfo(string.Empty);
 
       await using var runtime = _runtimeFactory.Create(connectionString, environmentName, project);
-      var isDatabaseEmpty = await runtime.IsDatabaseEmptyAsync(cancellationToken);
-      var alreadyExecuted = isDatabaseEmpty
-         ? []
-         : (await runtime.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
+      var alreadyExecuted = await runtime.RetrieveRecordedMigrationsAsync(cancellationToken);
 
       if (!await TryReportSchemaPathAsync(request, environmentName, project, alreadyExecuted, cancellationToken))
       {
