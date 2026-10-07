@@ -11,10 +11,9 @@ using System.Reflection;
 namespace mvdmio.Database.PgSQL.Migrations;
 
 /// <summary>
-///    Class for running database migrations. Migrations are tracked per scope: a migration runs when its scope has
-///    no row for it and its identifier is above the scope's baseline (the lowest identifier recorded for that scope),
-///    so the timelines of different assemblies advance independently. A migration below the scope's watermark (the
-///    highest recorded identifier) still runs, late, and is preceded by a logged warning.
+///    Class for running database migrations. Migrations are tracked per scope, so the timelines of different
+///    assemblies advance independently. <see cref="IDatabaseMigrator.MigrateDatabaseToLatestAsync" /> states which
+///    migrations are pending.
 /// </summary>
 [PublicAPI]
 public sealed class DatabaseMigrator : IDatabaseMigrator

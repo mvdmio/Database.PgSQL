@@ -148,14 +148,7 @@ public class PendingMigrationSelectorTests
          Executed(202610061300, "OtherBranchTwo", "mvdmio.Compliance.Db")
       };
 
-      var discovered = new IDbMigration[]
-      {
-         Migration(202610061047, "VoiceCallReplacesMeetingSession", "mvdmio.Compliance.Db"),
-         Migration(202610061205, "OtherBranchOne", "mvdmio.Compliance.Db"),
-         Migration(202610061300, "OtherBranchTwo", "mvdmio.Compliance.Db")
-      };
-
-      var pending = PendingMigrationSelector.SelectPending(executed, discovered);
+      var pending = PendingMigrationSelector.SelectPending(executed, ComplianceMigrations);
 
       var selected = pending.Should().ContainSingle().Subject;
       selected.Migration.Identifier.Should().Be(202610061047);
@@ -193,14 +186,7 @@ public class PendingMigrationSelectorTests
          Executed(202610061300, "OtherBranchTwo", "mvdmio.Compliance.Db")
       };
 
-      var discovered = new IDbMigration[]
-      {
-         Migration(202610061047, "VoiceCallReplacesMeetingSession", "mvdmio.Compliance.Db"),
-         Migration(202610061205, "OtherBranchOne", "mvdmio.Compliance.Db"),
-         Migration(202610061300, "OtherBranchTwo", "mvdmio.Compliance.Db")
-      };
-
-      var pending = PendingMigrationSelector.SelectPending(executed, discovered);
+      var pending = PendingMigrationSelector.SelectPending(executed, ComplianceMigrations);
 
       pending.Should().BeEmpty();
    }
@@ -283,6 +269,14 @@ public class PendingMigrationSelectorTests
          (202604010000L, false),
          (202606010000L, false));
    }
+
+   // Issue #2's migrations: 202610061047 from one branch, 202610061205 and 202610061300 from another.
+   private static IDbMigration[] ComplianceMigrations =>
+   [
+      Migration(202610061047, "VoiceCallReplacesMeetingSession", "mvdmio.Compliance.Db"),
+      Migration(202610061205, "OtherBranchOne", "mvdmio.Compliance.Db"),
+      Migration(202610061300, "OtherBranchTwo", "mvdmio.Compliance.Db")
+   ];
 
    private static ExecutedMigrationModel Executed(long identifier, string name, string? scope)
    {

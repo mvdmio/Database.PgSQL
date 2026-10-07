@@ -28,11 +28,11 @@ public interface IDbMigration
    string Name => MigrationClassNameParser.ParseName(GetType().Name);
 
    /// <summary>
-   ///    Scope this migration belongs to. Migrations are tracked per scope: a migration runs when its scope has no
-   ///    row for it and its <see cref="Identifier" /> is above the lowest identifier recorded <i>within its own
-   ///    scope</i> (or the scope has no rows yet), independent of other scopes. Defaults to the declaring assembly's simple name. Override this to keep
-   ///    a stable scope across an assembly rename — renaming the assembly without overriding the scope forks
-   ///    the migration history and re-runs every migration.
+   ///    Scope this migration belongs to. Migrations are tracked per scope: whether this migration runs depends only
+   ///    on the rows recorded <i>within its own scope</i>, independent of other scopes (see
+   ///    <see cref="IDatabaseMigrator.MigrateDatabaseToLatestAsync" /> for the rule). Defaults to the declaring
+   ///    assembly's simple name. Override this to keep a stable scope across an assembly rename — renaming the
+   ///    assembly without overriding the scope forks the migration history and re-runs every migration.
    /// </summary>
    string Scope => GetType().Assembly.GetName().Name ?? throw new InvalidOperationException($"Cannot determine default scope for migration '{GetType().FullName}': the declaring assembly has no simple name. Override {nameof(Scope)} explicitly.");
 

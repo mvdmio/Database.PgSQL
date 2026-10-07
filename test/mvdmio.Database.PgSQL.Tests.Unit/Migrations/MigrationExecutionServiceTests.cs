@@ -123,25 +123,7 @@ public class MigrationExecutionServiceTests
    [Fact]
    public async Task ExecuteAsync_LatestWithOnlyOutOfOrderMigrationPending_RunsMigrator()
    {
-      // 202602161500 has no row and sits above the scope's baseline (202602161400) but below its watermark
-      // (202602161600): it is out-of-order and still pending.
-      var runtime = new FakeMigrationRuntime
-      {
-         IsDatabaseEmptyResult = false,
-         AlreadyExecuted = OutOfOrderRows,
-         FinalExecuted = OutOfOrderRowsAfterRun
-      };
-      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
-      var reporter = new FakeMigrateReporter();
-      var service = new MigrationExecutionService(runtimeFactory, new FakeSchemaResourceService(), reporter);
-
-      await service.ExecuteAsync(
-         MigrateRequest.Latest,
-         "Host=localhost;Database=mydb",
-         "local",
-         CreateOutOfOrderProjectContext(),
-         TestContext.Current.CancellationToken
-      );
+      var (runtime, reporter) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.Latest);
 
       reporter.Infos.Should().NotContain("Database is already up to date.");
       runtime.MigrateLatestCallCount.Should().Be(1);
@@ -153,23 +135,7 @@ public class MigrationExecutionServiceTests
    [InlineData(202602161600)]
    public async Task ExecuteAsync_TargetAtOrAboveOutOfOrderMigration_RunsMigratorToTarget(long target)
    {
-      var runtime = new FakeMigrationRuntime
-      {
-         IsDatabaseEmptyResult = false,
-         AlreadyExecuted = OutOfOrderRows,
-         FinalExecuted = OutOfOrderRowsAfterRun
-      };
-      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
-      var reporter = new FakeMigrateReporter();
-      var service = new MigrationExecutionService(runtimeFactory, new FakeSchemaResourceService(), reporter);
-
-      await service.ExecuteAsync(
-         MigrateRequest.To(target),
-         "Host=localhost;Database=mydb",
-         "local",
-         CreateOutOfOrderProjectContext(),
-         TestContext.Current.CancellationToken
-      );
+      var (runtime, reporter) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.To(target));
 
       reporter.Infos.Should().NotContain("Database is already up to date for the specified target.");
       runtime.MigrateToCallCount.Should().Be(1);
@@ -179,22 +145,7 @@ public class MigrationExecutionServiceTests
    [Fact]
    public async Task ExecuteAsync_TargetBelowOutOfOrderMigration_ReportsUpToDateAndSkipsMigrator()
    {
-      var runtime = new FakeMigrationRuntime
-      {
-         IsDatabaseEmptyResult = false,
-         AlreadyExecuted = OutOfOrderRows
-      };
-      var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
-      var reporter = new FakeMigrateReporter();
-      var service = new MigrationExecutionService(runtimeFactory, new FakeSchemaResourceService(), reporter);
-
-      await service.ExecuteAsync(
-         MigrateRequest.To(202602161430),
-         "Host=localhost;Database=mydb",
-         "local",
-         CreateOutOfOrderProjectContext(),
-         TestContext.Current.CancellationToken
-      );
+      var (runtime, reporter) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.To(202602161430));
 
       reporter.Infos.Should().Contain("Database is already up to date for the specified target.");
       runtime.MigrateToCallCount.Should().Be(0);
@@ -428,21 +379,30 @@ public class MigrationExecutionServiceTests
       );
    }
 
-   private static IReadOnlyList<ExecutedMigrationModel> OutOfOrderRows =>
-   [
-      new ExecutedMigrationModel(202602161400, "Migration202602161400", DateTime.UtcNow, ThisAssemblyScope),
-      new ExecutedMigrationModel(202602161600, "Migration202602161600", DateTime.UtcNow, ThisAssemblyScope)
-   ];
-
-   private static IReadOnlyList<ExecutedMigrationModel> OutOfOrderRowsAfterRun =>
-   [
-      .. OutOfOrderRows,
-      new ExecutedMigrationModel(202602161500, "Migration202602161500", DateTime.UtcNow, ThisAssemblyScope)
-   ];
-
-   private static MigrationProjectContext CreateOutOfOrderProjectContext()
+   /// <summary>
+   ///    Runs the service against a scope whose rows are 202602161400 (baseline) and 202602161600 (watermark).
+   ///    202602161500 has no row and sits between them: it is out-of-order and still pending.
+   /// </summary>
+   private static async Task<(FakeMigrationRuntime Runtime, FakeMigrateReporter Reporter)> ExecuteWithOutOfOrderMigrationAsync(MigrateRequest request)
    {
-      return CreateProjectContext([new FakeDbMigration(202602161400), new FakeDbMigration(202602161500), new FakeDbMigration(202602161600)]);
+      ExecutedMigrationModel[] rows =
+      [
+         new(202602161400, "Migration202602161400", DateTime.UtcNow, ThisAssemblyScope),
+         new(202602161600, "Migration202602161600", DateTime.UtcNow, ThisAssemblyScope)
+      ];
+      var runtime = new FakeMigrationRuntime
+      {
+         IsDatabaseEmptyResult = false,
+         AlreadyExecuted = rows,
+         FinalExecuted = [.. rows, new(202602161500, "Migration202602161500", DateTime.UtcNow, ThisAssemblyScope)]
+      };
+      var reporter = new FakeMigrateReporter();
+      var service = new MigrationExecutionService(new FakeMigrationRuntimeFactory { Runtime = runtime }, new FakeSchemaResourceService(), reporter);
+      var project = CreateProjectContext([new FakeDbMigration(202602161400), new FakeDbMigration(202602161500), new FakeDbMigration(202602161600)]);
+
+      await service.ExecuteAsync(request, "Host=localhost;Database=mydb", "local", project, TestContext.Current.CancellationToken);
+
+      return (runtime, reporter);
    }
 
    private sealed class FakeMigrationRuntimeFactory : IMigrationRuntimeFactory

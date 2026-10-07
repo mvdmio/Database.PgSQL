@@ -15,7 +15,8 @@ public interface IDatabaseMigrator
    /// <summary>
    ///    Run all migrations that have not yet been executed in order. A migration is pending when its scope has no
    ///    row for it and either the scope has no rows or the migration's identifier is above the scope's baseline
-   ///    (the lowest identifier recorded for that scope). A pending migration below the scope's watermark (the
+   ///    (the lowest identifier recorded for that scope). Everything at or below the baseline counts as present, so
+   ///    migrations folded into a bootstrap schema never run. A pending migration below the scope's watermark (the
    ///    highest recorded identifier) is out-of-order: it still runs, preceded by a logged warning.
    ///    Schema-first bootstrap is per scope: an assembly's embedded schema (based on the configured environment)
    ///    is applied when at least one scope that assembly vouches for has no rows yet. Assemblies whose
