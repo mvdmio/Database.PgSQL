@@ -2,6 +2,7 @@ using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.Models;
 using mvdmio.Database.PgSQL.Tool.Cleanup;
 using mvdmio.Database.PgSQL.Tool.Configuration;
+using mvdmio.Database.PgSQL.Tool.Migrations;
 using mvdmio.Database.PgSQL.Tool.Pull;
 using System.CommandLine;
 
@@ -32,7 +33,11 @@ internal static class CleanupCommand
          var migrationsDirectory = ToolPathResolver.GetMigrationsDirectoryPath(config);
          Directory.CreateDirectory(schemasDirectory);
 
-         var environmentMigrationIdentifiers = new List<long?>();
+         // Build the project before touching any environment, so a build failure rewrites no schema file and
+         // deletes nothing.
+         var project = new MigrationProjectLoader().Load(ToolPathResolver.GetProjectPath(config));
+         var runtimeFactory = new DatabaseMigrationRuntimeFactory();
+         var environments = new List<CleanupEnvironment>();
 
          foreach (KeyValuePair<string, string> environment in config.ConnectionStrings)
          {
@@ -66,7 +71,14 @@ internal static class CleanupCommand
             var lowestMigrationInfo = migrationInfos.Count == 0
                ? (SchemaFileMigrationInfo?)null
                : migrationInfos.MinBy(x => x.Identifier);
-            environmentMigrationIdentifiers.Add(lowestMigrationInfo?.Identifier);
+
+            // Rows are read as recorded, not backfilled: a row without a scope counts toward nothing, which can
+            // only keep more files.
+            await using var runtime = runtimeFactory.Create(connectionString, environmentName, project);
+            var executedMigrations = await runtime.IsDatabaseEmptyAsync(cancellationToken)
+               ? []
+               : (await runtime.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
+            environments.Add(new CleanupEnvironment(environmentName, lowestMigrationInfo?.Identifier, executedMigrations));
 
             if (lowestMigrationInfo is null)
                Console.WriteLine($"  Wrote {schemaPath} (no recorded migration version)");
@@ -76,7 +88,7 @@ internal static class CleanupCommand
 
          Console.WriteLine();
 
-         var plan = MigrationCleanupPlanner.Plan(migrationsDirectory, environmentMigrationIdentifiers);
+         var plan = MigrationCleanupPlanner.Plan(migrationsDirectory, project.Migrations, environments);
 
          if (plan.SkipReason is not null)
          {
@@ -87,9 +99,14 @@ internal static class CleanupCommand
 
          Console.WriteLine($"Lowest migration version across environments: {plan.LowestMigrationIdentifier}");
 
+         foreach (var pendingFile in plan.PendingFilesKept)
+            Console.WriteLine($"Kept {pendingFile.Path}: still pending in {string.Join(", ", pendingFile.PendingEnvironments)}");
+
          if (plan.FilesToDelete.Length == 0)
          {
-            Console.WriteLine("No migration files are older than the lowest environment version.");
+            Console.WriteLine(plan.PendingFilesKept.Length == 0
+               ? "No migration files are older than the lowest environment version."
+               : "No migration files were deleted.");
             return;
          }
 

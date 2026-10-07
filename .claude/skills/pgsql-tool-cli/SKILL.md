@@ -104,11 +104,17 @@ db pull --connection-string "Host=localhost;Database=mydb;Username=postgres;Pass
 
 ### `db cleanup`
 
+First builds the configured project and loads its migrations, like `db migrate`; a build failure stops cleanup before anything is written or deleted.
+
 For every configured environment:
 - pulls a fresh schema file
 - reads the migration version from the schema header
+- reads the environment's `mvdmio.migrations` rows
+
+Then it:
 - finds the lowest migration version still needed anywhere
 - deletes migration source files older than that version
+- keeps any of those files whose migration is still pending (for example out-of-order) in at least one environment, and prints `Kept <file>: still pending in <environments>`
 
 Cleanup is skipped if any environment has no recorded migration version.
 

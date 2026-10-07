@@ -171,7 +171,7 @@ Core-backed endpoint.
 | `db migrate latest`          | Apply all pending migrations                                      |
 | `db migrate to <identifier>` | Apply migrations up to a specific identifier                      |
 | `db pull`                    | Export the current database schema to a schema file                |
-| `db cleanup`                 | Refresh schema files and delete migrations they have superseded    |
+| `db cleanup`                 | Refresh schema files; delete migrations no environment still needs |
 | `db copy --from x --to y`    | Copy all table data between configured environments                |
 
 Every command reads connection strings and project layout from `.mvdmio-migrations.yml`. The commands that talk to a

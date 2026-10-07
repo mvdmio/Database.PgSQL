@@ -1,6 +1,6 @@
 # 03 — `db cleanup` keeps migration files still pending in any environment
 
-Status: pending
+Status: built
 Depends on: 01, 02
 
 ## What to build
@@ -42,10 +42,23 @@ Projects: mvdmio.Database.PgSQL, mvdmio.Database.PgSQL.Tool, mvdmio.Database.PgS
 
 ## Acceptance criteria
 
-- [ ] Planner unit test: with two environments, a file below the bound whose migration is pending in one environment (for example an out-of-order migration there) is kept, and a file below the bound that every environment has is deleted.
-- [ ] Planner unit test: a file whose Identifier two discovered Scopes share is kept when either of those migrations is pending in any environment.
-- [ ] Planner unit test: an environment with no rows keeps every file that matches a discovered migration.
-- [ ] Existing planner tests keep their skip reasons, bound and deletion results for files nothing marks pending.
-- [ ] `db cleanup` loads the migrations project before rewriting any schema file, reads every configured environment's rows, and prints a line for each file kept because it is still pending.
-- [ ] Tool README, root README CLI table and `pgsql-tool-cli` skill describe the new cleanup rule.
+- [x] Planner unit test: with two environments, a file below the bound whose migration is pending in one environment (for example an out-of-order migration there) is kept, and a file below the bound that every environment has is deleted.
+- [x] Planner unit test: a file whose Identifier two discovered Scopes share is kept when either of those migrations is pending in any environment.
+- [x] Planner unit test: an environment with no rows keeps every file that matches a discovered migration.
+- [x] Existing planner tests keep their skip reasons, bound and deletion results for files nothing marks pending.
+- [x] `db cleanup` loads the migrations project before rewriting any schema file, reads every configured environment's rows, and prints a line for each file kept because it is still pending.
+- [x] Tool README, root README CLI table and `pgsql-tool-cli` skill describe the new cleanup rule.
 - [ ] `dotnet format --verify-no-changes`, `dotnet build` and `dotnet test` for the whole solution pass, run sequentially.
+
+## Outcome
+
+- `MigrationCleanupPlanner.Plan(migrationsDirectoryPath, discoveredMigrations, environments)` now takes the discovered migrations and one `CleanupEnvironment(Name, LowestHeaderIdentifier, ExecutedMigrations)` per environment, in place of the list of header identifiers. It runs `PendingMigrationSelector.SelectPending` per environment with no target. It moves a file below the bound into `MigrationCleanupPlan.PendingFilesKept` (a new `PendingMigrationFile(Path, PendingEnvironments)` list) when a discovered migration with the file's identifier is pending in any environment. The skip reasons, the bound and `TryParseMigrationIdentifier` are unchanged. A file whose identifier matches no discovered migration is still deleted when below the bound.
+- `CleanupCommand` loads the project with `MigrationProjectLoader` right after the "No environments configured" check, before the first schema pull. For each environment, after the pull, it reads rows through `DatabaseMigrationRuntimeFactory` (`IsDatabaseEmptyAsync`, then `RetrieveAlreadyExecutedMigrationsAsync`), with no backfill. It prints `Kept <file>: still pending in <environments>` for each kept file. When files were kept but none deleted, it prints "No migration files were deleted." in place of "No migration files are older than the lowest environment version." `MigrationProjectLoader`, `MigrationExecutionService` and `ToolPathResolver` were called, not changed.
+- `CleanupCommand` has no unit-test seam. The rung-4 drive below covers its project load, row read and kept-file lines.
+- Unit tests in `MigrationCleanupPlannerTests`: the four existing tests are moved to the new inputs and keep their expectations, and three new tests are added: `Plan_WithMigrationPendingInOneEnvironment_KeepsItAndDeletesFileEveryEnvironmentHas`, `Plan_WithIdentifierSharedByTwoScopes_KeepsFileWhenEitherMigrationIsPending` and `Plan_WithEnvironmentWithoutRows_KeepsEveryFileMatchingADiscoveredMigration`. The full unit project passed (228), run with `DOTNET_ROLL_FORWARD=Major`. `dotnet format --verify-no-changes` exited 0 and the whole solution built. The integration and packaging suites were not run; they are the Checker's.
+- Docs: the tool README `### db cleanup` has a new paragraph and list on the pending rule. The root README `db cleanup` row now reads "Refresh schema files; delete migrations no environment still needs". The `pgsql-tool-cli` skill's `### db cleanup` adds the build step, the row read and the keep rule.
+- This session cannot write to the Proof folder or run a proof script as a whole. The script, seeds and transcript are in this session's scratchpad, `/tmp/claude-1000/-data-projects-mvdmio-Database-PgSQL/8b337ed6-dfe2-45f4-a85a-ff7512540a43/scratchpad/proof03/` (`03-db-cleanup-keeps-pending.sh`, `03-seed-dev.sql`, `03-seed-prod.sql`, `03-db-cleanup-keeps-pending.txt`). Each command was run on its own, against a postgres:16 container on port 55433 that has since been removed.
+- Run recipe: none exists, and none was written; the drive follows Step 02's hand-run pattern.
+
+Safety fact: `db cleanup` keeps a migration file below the deletion bound when a migration with its identifier is still pending (for example out-of-order) in any configured environment; if false, cleanup deletes the file and the late migration is lost for good (rung 4)
+Proof: `DOTNET_ROLL_FORWARD=Major dotnet run --project src/mvdmio.Database.PgSQL.Tool --framework net10.0 -- cleanup`, run against a fresh postgres:16 with database envdev holding every fixture row and envprod holding only 202505180000 and 202505200000 (steps in `03-db-cleanup-keeps-pending.sh`), exit 0 — `Kept .../_202505181100_SecondaryTable.cs: still pending in prod`, `Kept .../_202505190000_SecondaryFollowUp.cs: still pending in prod`, `Deleted .../_202505170000_Removed.cs`; transcript `/tmp/claude-1000/-data-projects-mvdmio-Database-PgSQL/8b337ed6-dfe2-45f4-a85a-ff7512540a43/scratchpad/proof03/03-db-cleanup-keeps-pending.txt` (belongs in the Proof folder, which this session cannot write)
