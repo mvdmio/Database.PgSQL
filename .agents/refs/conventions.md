@@ -6,6 +6,7 @@ A comprehensive `.editorconfig` governs formatting. Run `dotnet format` before b
 
 - Prefer small diffs over broad refactors.
 - Avoid speculative abstractions — add them when a second caller actually appears.
+- The `db` tool calls the library's internal logic (it sees internals through `InternalsVisibleTo`) instead of restating a library rule. The tool's own copy of the pending-migration rule drifted from the migrator's and hid out-of-order migrations.
 - This library ships to NuGet, so treat the public API as a contract: preserve its shape unless the change is an intentional, called-out break (a breaking version bump).
 - Keep files under roughly 500 lines (test files may exceed this). **Do not split a class into `partial` files to dodge the limit — refactor properly instead.**
 

@@ -75,3 +75,4 @@ TDD is the expectation: write tests before implementing, and always add/modify t
 - By fully-qualified name (class/namespace substring):
   `dotnet test test/mvdmio.Database.PgSQL.Tests.Integration/mvdmio.Database.PgSQL.Tests.Integration.csproj --filter "FullyQualifiedName~SchemaFirst"`
 - Keep `dotnet` steps sequential — never run build and test (or two test runs) in parallel, to avoid file locks. Before committing, run in order: `dotnet format` → `dotnet build` → `dotnet test`.
+- The Unit and Analyzers projects target net9.0. On a machine without the .NET 9 runtime, prefix the test command with `DOTNET_ROLL_FORWARD=Major` so they run on the newer runtime.
