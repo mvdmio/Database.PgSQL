@@ -129,7 +129,7 @@ public class MigrationExecutionServiceTests
       {
          IsDatabaseEmptyResult = false,
          AlreadyExecuted = OutOfOrderRows,
-         FinalExecuted = [.. OutOfOrderRows, new ExecutedMigrationModel(202602161500, "Migration202602161500", DateTime.UtcNow, ThisAssemblyScope)]
+         FinalExecuted = OutOfOrderRowsAfterRun
       };
       var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
       var reporter = new FakeMigrateReporter();
@@ -157,7 +157,7 @@ public class MigrationExecutionServiceTests
       {
          IsDatabaseEmptyResult = false,
          AlreadyExecuted = OutOfOrderRows,
-         FinalExecuted = [.. OutOfOrderRows, new ExecutedMigrationModel(202602161500, "Migration202602161500", DateTime.UtcNow, ThisAssemblyScope)]
+         FinalExecuted = OutOfOrderRowsAfterRun
       };
       var runtimeFactory = new FakeMigrationRuntimeFactory { Runtime = runtime };
       var reporter = new FakeMigrateReporter();
@@ -198,17 +198,6 @@ public class MigrationExecutionServiceTests
 
       reporter.Infos.Should().Contain("Database is already up to date for the specified target.");
       runtime.MigrateToCallCount.Should().Be(0);
-   }
-
-   private static IReadOnlyList<ExecutedMigrationModel> OutOfOrderRows =>
-   [
-      new ExecutedMigrationModel(202602161400, "Migration202602161400", DateTime.UtcNow, ThisAssemblyScope),
-      new ExecutedMigrationModel(202602161600, "Migration202602161600", DateTime.UtcNow, ThisAssemblyScope)
-   ];
-
-   private static MigrationProjectContext CreateOutOfOrderProjectContext()
-   {
-      return CreateProjectContext([new FakeDbMigration(202602161400), new FakeDbMigration(202602161500), new FakeDbMigration(202602161600)]);
    }
 
    [Fact]
@@ -254,7 +243,8 @@ public class MigrationExecutionServiceTests
    [Fact]
    public async Task ExecuteAsync_LatestOnSharedDatabaseWithFoldedSchemaAndEmptyScope_RunsMigratorDespiteZeroPending()
    {
-      // Every incremental is folded into the schema, so the pending count is 0. The reporter must still call the migrator so the baseline is applied on a shared database.
+      // Every incremental is folded into the schema, so the pending count is 0. The reporter must still call
+      // the migrator so the baseline is applied on a shared database.
       var runtime = new FakeMigrationRuntime
       {
          IsDatabaseEmptyResult = false,
@@ -436,6 +426,23 @@ public class MigrationExecutionServiceTests
          new FakeMigrationRetriever(migrations),
          migrations
       );
+   }
+
+   private static IReadOnlyList<ExecutedMigrationModel> OutOfOrderRows =>
+   [
+      new ExecutedMigrationModel(202602161400, "Migration202602161400", DateTime.UtcNow, ThisAssemblyScope),
+      new ExecutedMigrationModel(202602161600, "Migration202602161600", DateTime.UtcNow, ThisAssemblyScope)
+   ];
+
+   private static IReadOnlyList<ExecutedMigrationModel> OutOfOrderRowsAfterRun =>
+   [
+      .. OutOfOrderRows,
+      new ExecutedMigrationModel(202602161500, "Migration202602161500", DateTime.UtcNow, ThisAssemblyScope)
+   ];
+
+   private static MigrationProjectContext CreateOutOfOrderProjectContext()
+   {
+      return CreateProjectContext([new FakeDbMigration(202602161400), new FakeDbMigration(202602161500), new FakeDbMigration(202602161600)]);
    }
 
    private sealed class FakeMigrationRuntimeFactory : IMigrationRuntimeFactory
