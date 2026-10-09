@@ -75,4 +75,33 @@ public class DatabaseConnectionFactoryTests
 
       act.Should().Throw<ObjectDisposedException>();
    }
+
+   [Fact]
+   public void BuildDataSource_WithoutKeywords_CapsThePoolAtTen()
+   {
+      using var factory = new DatabaseConnectionFactory();
+
+      var dataSource = factory.BuildDataSource(CONNECTION_STRING);
+
+      new NpgsqlConnectionStringBuilder(dataSource.ConnectionString).MaxPoolSize.Should().Be(10);
+   }
+
+   [Fact]
+   public void BuildDataSource_WithABuilderActionSettingCapAndName_TheActionOverridesTheDefaults()
+   {
+      using var factory = new DatabaseConnectionFactory();
+
+      var dataSource = factory.BuildDataSource(
+         CONNECTION_STRING,
+         builder =>
+         {
+            builder.ConnectionStringBuilder.MaxPoolSize = 37;
+            builder.ConnectionStringBuilder.ApplicationName = "Action.App";
+         }
+      );
+
+      var reported = new NpgsqlConnectionStringBuilder(dataSource.ConnectionString);
+      reported.MaxPoolSize.Should().Be(37);
+      reported.ApplicationName.Should().Be("Action.App");
+   }
 }

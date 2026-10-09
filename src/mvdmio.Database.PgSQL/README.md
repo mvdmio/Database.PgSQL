@@ -83,6 +83,36 @@ A `DatabaseConnection` wraps a single connection, so use one per unit of work ra
 concurrent operations. `Open()`/`Close()` (and their async overloads) let you hold the connection open across several
 operations when you want to avoid the open/close cycle per call.
 
+### Pool Size and Name
+
+Every data source the library builds — through the [factory](#connection-factory) or through
+`new DatabaseConnection(connectionString)` — gets two defaults:
+
+| Setting             | Default                                                        |
+|---------------------|----------------------------------------------------------------|
+| `Maximum Pool Size` | 10 connections                                                 |
+| `Application Name`  | the entry assembly's name, for example `MyCompany.Orders.Web` |
+
+A `Maximum Pool Size` or `Application Name` keyword in the connection string beats the default, each value on its own.
+A per-call `Action<NpgsqlDataSourceBuilder>` runs after the defaults, so it can override them too. When the program has
+no entry assembly, the name stays unset.
+
+The name shows in `pg_stat_activity.application_name`, so you can see which program holds the server's connections.
+It is also the data source's `Name`, which Npgsql uses as the pool name in its traces, logs and metrics. Postgres cuts an
+`application_name` longer than 63 bytes.
+
+**The default cap changed from 100 to 10 in 0.41.0.** Npgsql's own default lets each pool grow to 100 connections.
+Several programs that share one Postgres server, each with a pool or two, can then ask for more connections than the
+server's `max_connections` allows, and the server refuses new ones with `53300: sorry, too many clients already`. A
+program that returns each connection to the pool as soon as its statement ends rarely needs more than 10.
+
+If a program fails with Npgsql's "The connection pool has been exhausted" error after upgrading, set a higher cap in its
+connection string:
+
+```text
+Host=localhost;Database=mydb;Username=postgres;Password=secret;Maximum Pool Size=50
+```
+
 ### Connection Factory
 
 `DatabaseConnectionFactory` caches one `NpgsqlDataSource` per connection string, so pooling is shared by every
@@ -97,9 +127,12 @@ await using var db = factory.BuildConnection(connectionString);
 var dataSource = factory.BuildDataSource(connectionString);
 ```
 
-Data sources from the factory are built with dynamic JSON serialization enabled and with Npgsql's `IncludeErrorDetail`
-and `LogParameters` turned on, which the plain `new DatabaseConnection(connectionString)` constructor does not do.
-Both `BuildConnection` and `BuildDataSource` take an optional `Action<NpgsqlDataSourceBuilder>` to configure the rest.
+Data sources from the factory cap their pool at 10 connections and are named after the entry assembly, unless the
+connection string says otherwise; see [Pool Size and Name](#pool-size-and-name). Both paths enable dynamic JSON
+serialization. The factory also turns on Npgsql's `IncludeErrorDetail` and `LogParameters`, which the plain
+`new DatabaseConnection(connectionString)` constructor does not do. Both `BuildConnection` and `BuildDataSource` take an
+optional `Action<NpgsqlDataSourceBuilder>` to configure the rest. It runs after the defaults, but only for the caller that
+builds the data source first: the factory caches one data source per connection string.
 
 Connections from the factory do not dispose the shared data source, so disposing one does not affect the others.
 Dispose the factory only after everything using its connections has finished.

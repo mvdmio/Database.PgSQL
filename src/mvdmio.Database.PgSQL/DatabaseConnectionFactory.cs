@@ -1,4 +1,5 @@
 using JetBrains.Annotations;
+using mvdmio.Database.PgSQL.Internal;
 using Npgsql;
 using System.Collections.Concurrent;
 
@@ -9,9 +10,15 @@ namespace mvdmio.Database.PgSQL;
 ///    Data sources are cached per connection string and built lazily exactly once, so the factory is safe to call concurrently.
 /// </summary>
 /// <remarks>
+///    Every data source the factory builds caps its pool at 10 connections and is named after the entry assembly. The name
+///    shows in <c>pg_stat_activity.application_name</c> and is Npgsql's pool name in traces, logs and metrics. A
+///    <c>Maximum Pool Size</c> or <c>Application Name</c> keyword in the connection string beats the default, each value
+///    on its own. When there is no entry assembly, the name stays unset.
+///    <para>
 ///    Dispose only after all in-flight operations using data sources from this factory have completed.
 ///    Disposing the factory concurrently with active use (e.g. while another thread is calling <see cref="BuildConnection" /> or
 ///    <see cref="BuildDataSource" />, or while a <see cref="DatabaseConnection" /> handed out by this factory is still in use) is not supported.
+///    </para>
 /// </remarks>
 [PublicAPI]
 public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
@@ -22,9 +29,13 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
    /// <summary>
    ///   Builds a new data source for the given connection string.
    ///   Data sources are cached, so multiple calls with the same connection string will return the same instance.
+   ///   The data source gets the factory's default pool cap and name; see <see cref="DatabaseConnectionFactory" />.
    /// </summary>
    /// <param name="connectionString">The PostgreSQL connection string.</param>
-   /// <param name="builderAction">An optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>.</param>
+   /// <param name="builderAction">
+   ///    An optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>. It runs after the defaults are applied,
+   ///    so it can override them. It only runs when the data source is first built for this connection string.
+   /// </param>
    /// <returns>A <see cref="DatabaseConnection"/> instance for the specified connection string.</returns>
    public NpgsqlDataSource BuildDataSource(string connectionString, Action<NpgsqlDataSourceBuilder>? builderAction = null)
    {
@@ -33,9 +44,13 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
 
    /// <summary>
    ///    Creates a new database wrapper for the given connection string.
+   ///    Its data source gets the factory's default pool cap and name; see <see cref="DatabaseConnectionFactory" />.
    /// </summary>
    /// <param name="connectionString">The PostgreSQL connection string.</param>
-   /// <param name="builderAction">An optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>.</param>
+   /// <param name="builderAction">
+   ///    An optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>. It runs after the defaults are applied,
+   ///    so it can override them. It only runs when the data source is first built for this connection string.
+   /// </param>
    /// <returns>A <see cref="DatabaseConnection"/> instance for the specified connection string.</returns>
    public DatabaseConnection BuildConnection(string connectionString, Action<NpgsqlDataSourceBuilder>? builderAction = null)
    {
@@ -83,6 +98,7 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
             };
 
             dataSourceBuilder.EnableDynamicJson();
+            PoolDefaults.Apply(dataSourceBuilder, cs);
 
             builderAction?.Invoke(dataSourceBuilder);
             return dataSourceBuilder.Build();

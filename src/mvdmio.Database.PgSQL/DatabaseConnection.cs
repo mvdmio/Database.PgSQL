@@ -5,6 +5,7 @@ using mvdmio.Database.PgSQL.Connectors.Bulk;
 using mvdmio.Database.PgSQL.Connectors.Linq;
 using mvdmio.Database.PgSQL.Dapper;
 using mvdmio.Database.PgSQL.Exceptions;
+using mvdmio.Database.PgSQL.Internal;
 using Npgsql;
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
@@ -46,15 +47,22 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
 
    /// <summary>
    ///    Create a new database connection for a database that is reachable with the given connection string.
+   ///    The connection builds and owns its data source, which caps its pool at 10 connections and is named after the entry
+   ///    assembly. A <c>Maximum Pool Size</c> or <c>Application Name</c> keyword in the connection string beats the default.
    /// </summary>
    /// <param name="connectionString">The PostgreSQL connection string.</param>
    public DatabaseConnection(string connectionString) : this(connectionString, _ => { }) { }
 
    /// <summary>
    ///    Create a new database connection for a database that is reachable with the given connection string.
+   ///    The connection builds and owns its data source, which caps its pool at 10 connections and is named after the entry
+   ///    assembly. A <c>Maximum Pool Size</c> or <c>Application Name</c> keyword in the connection string beats the default.
    /// </summary>
    /// <param name="connectionString">The PostgreSQL connection string.</param>
-   /// <param name="builderAction">An optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>.</param>
+   /// <param name="builderAction">
+   ///    An optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>. It runs after the defaults are applied,
+   ///    so it can override them.
+   /// </param>
    public DatabaseConnection(string connectionString, Action<NpgsqlDataSourceBuilder> builderAction)
       : this(BuildDataSource(connectionString, builderAction))
    {
@@ -706,11 +714,16 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    ///    a consumer took stops changing what a JSON column does. Aligned by enabling it in both rather than by removing
    ///    it from one: enabling it only widens what a parameter may hold, whereas taking it away could break a caller
    ///    already relying on it.
+   ///    <para>
+   ///       The pool cap and name come from <see cref="PoolDefaults" />, the same rule the factory uses, so no pool the
+   ///       library builds escapes the cap. <c>IncludeErrorDetail</c> and <c>LogParameters</c> stay factory-only.
+   ///    </para>
    /// </remarks>
    private static NpgsqlDataSource BuildDataSource(string connectionString, Action<NpgsqlDataSourceBuilder> builderAction)
    {
       var builder = new NpgsqlDataSourceBuilder(connectionString);
       builder.EnableDynamicJson();
+      PoolDefaults.Apply(builder, connectionString);
       builderAction.Invoke(builder);
       return builder.Build();
    }
