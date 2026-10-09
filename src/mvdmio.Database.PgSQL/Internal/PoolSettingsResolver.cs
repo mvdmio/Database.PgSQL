@@ -33,20 +33,20 @@ internal static class PoolSettingsResolver
    /// </summary>
    /// <param name="connectionString">The caller's connection string.</param>
    /// <param name="entryAssemblyName">The entry assembly's simple name, or <see langword="null" /> when there is none.</param>
-   /// <param name="settings">The factory's explicit settings, or <see langword="null" /> when there are none.</param>
+   /// <param name="settings">The factory's settings. A value left unset there falls through to the keyword or the default.</param>
    /// <returns>
    ///    The cap and the name to apply. The name is <see langword="null" /> when nothing should be set. An explicit name
    ///    is returned exactly as given, even when it is empty.
    /// </returns>
-   public static PoolSettings Resolve(string connectionString, string? entryAssemblyName, DatabaseConnectionFactorySettings? settings)
+   public static PoolSettings Resolve(string connectionString, string? entryAssemblyName, DatabaseConnectionFactorySettings settings)
    {
       var raw = new DbConnectionStringBuilder { ConnectionString = connectionString };
       var parsed = new NpgsqlConnectionStringBuilder(connectionString);
 
-      var maxPoolSize = settings?.MaxPoolSize
+      var maxPoolSize = settings.MaxPoolSize
          ?? (HasAny(raw, _maxPoolSizeKeywords) ? parsed.MaxPoolSize : DEFAULT_MAX_POOL_SIZE);
 
-      if (settings?.ApplicationName is { } explicitName)
+      if (settings.ApplicationName is { } explicitName)
          return new PoolSettings(maxPoolSize, explicitName);
 
       var name = HasAny(raw, _applicationNameKeywords) ? parsed.ApplicationName : entryAssemblyName;

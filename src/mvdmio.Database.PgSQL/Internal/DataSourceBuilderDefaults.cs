@@ -21,9 +21,9 @@ internal static class DataSourceBuilderDefaults
    ///    <c>Application Name</c> and the builder's <see cref="NpgsqlDataSourceBuilder.Name" />, so the two always agree.
    /// </summary>
    /// <param name="connectionString">The caller's connection string.</param>
-   /// <param name="settings">The factory's explicit settings, or <see langword="null" /> when there are none.</param>
+   /// <param name="settings">The factory's settings. A value left unset there falls through to the keyword or the default.</param>
    /// <returns>A builder with the shared defaults applied, ready for the caller's own configuration.</returns>
-   public static NpgsqlDataSourceBuilder Create(string connectionString, DatabaseConnectionFactorySettings? settings)
+   public static NpgsqlDataSourceBuilder Create(string connectionString, DatabaseConnectionFactorySettings settings)
    {
       var builder = new NpgsqlDataSourceBuilder(connectionString);
       builder.EnableDynamicJson();

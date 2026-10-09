@@ -711,13 +711,14 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
 
    /// <remarks>
    ///    The builder comes from <see cref="DataSourceBuilderDefaults" />, as the factory's builders do, so dynamic JSON and
-   ///    the pool cap and name match the factory's and no pool the library builds escapes the cap. This path takes no
-   ///    <see cref="DatabaseConnectionFactorySettings" />, so only a keyword or the builder action changes the defaults.
+   ///    the pool cap and name match the factory's and no pool the library builds escapes the cap. This path passes empty
+   ///    <see cref="DatabaseConnectionFactorySettings" />, as a factory built without settings does, so only a keyword or
+   ///    the builder action changes the defaults.
    ///    <c>IncludeErrorDetail</c> and <c>LogParameters</c> stay factory-only.
    /// </remarks>
    private static NpgsqlDataSource BuildDataSource(string connectionString, Action<NpgsqlDataSourceBuilder> builderAction)
    {
-      var builder = DataSourceBuilderDefaults.Create(connectionString, settings: null);
+      var builder = DataSourceBuilderDefaults.Create(connectionString, new DatabaseConnectionFactorySettings());
       builderAction.Invoke(builder);
       return builder.Build();
    }

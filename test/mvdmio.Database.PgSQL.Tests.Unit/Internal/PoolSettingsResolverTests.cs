@@ -8,10 +8,12 @@ public class PoolSettingsResolverTests
    private const string BASE_CONNECTION_STRING = "Host=localhost;Database=test;Username=test;Password=test";
    private const string ENTRY_ASSEMBLY_NAME = "Some.Entry.App";
 
+   private static readonly DatabaseConnectionFactorySettings _noSettings = new();
+
    [Fact]
    public void Resolve_WithNoKeywords_GivesCapOfTenAndTheEntryAssemblyName()
    {
-      var result = PoolSettingsResolver.Resolve(BASE_CONNECTION_STRING, ENTRY_ASSEMBLY_NAME, settings: null);
+      var result = PoolSettingsResolver.Resolve(BASE_CONNECTION_STRING, ENTRY_ASSEMBLY_NAME, _noSettings);
 
       result.Should().Be(new PoolSettings(10, ENTRY_ASSEMBLY_NAME));
    }
@@ -19,7 +21,7 @@ public class PoolSettingsResolverTests
    [Fact]
    public void Resolve_WithoutEntryAssembly_LeavesTheNameUnset()
    {
-      var result = PoolSettingsResolver.Resolve(BASE_CONNECTION_STRING, null, settings: null);
+      var result = PoolSettingsResolver.Resolve(BASE_CONNECTION_STRING, null, _noSettings);
 
       result.Should().Be(new PoolSettings(10, null));
    }
@@ -33,7 +35,7 @@ public class PoolSettingsResolverTests
    [InlineData("MAXPOOLSIZE")]
    public void Resolve_WithACapKeyword_KeywordBeatsTheDefaultCapAndKeepsTheDefaultName(string keyword)
    {
-      var result = PoolSettingsResolver.Resolve($"{BASE_CONNECTION_STRING};{keyword}=42", ENTRY_ASSEMBLY_NAME, settings: null);
+      var result = PoolSettingsResolver.Resolve($"{BASE_CONNECTION_STRING};{keyword}=42", ENTRY_ASSEMBLY_NAME, _noSettings);
 
       result.Should().Be(new PoolSettings(42, ENTRY_ASSEMBLY_NAME));
    }
@@ -47,7 +49,7 @@ public class PoolSettingsResolverTests
    [InlineData("APPLICATIONNAME")]
    public void Resolve_WithANameKeyword_KeywordBeatsTheDefaultNameAndKeepsTheDefaultCap(string keyword)
    {
-      var result = PoolSettingsResolver.Resolve($"{BASE_CONNECTION_STRING};{keyword}=Keyword.App", ENTRY_ASSEMBLY_NAME, settings: null);
+      var result = PoolSettingsResolver.Resolve($"{BASE_CONNECTION_STRING};{keyword}=Keyword.App", ENTRY_ASSEMBLY_NAME, _noSettings);
 
       result.Should().Be(new PoolSettings(10, "Keyword.App"));
    }
@@ -55,7 +57,7 @@ public class PoolSettingsResolverTests
    [Fact]
    public void Resolve_WithACapKeywordEqualToNpgsqlsDefault_KeepsTheKeywordValue()
    {
-      var result = PoolSettingsResolver.Resolve($"{BASE_CONNECTION_STRING};Maximum Pool Size=100", ENTRY_ASSEMBLY_NAME, settings: null);
+      var result = PoolSettingsResolver.Resolve($"{BASE_CONNECTION_STRING};Maximum Pool Size=100", ENTRY_ASSEMBLY_NAME, _noSettings);
 
       result.MaxPoolSize.Should().Be(100);
    }
@@ -65,7 +67,7 @@ public class PoolSettingsResolverTests
    [Fact]
    public void Resolve_WithAnEmptyNameKeyword_TreatsItAsAbsent()
    {
-      var result = PoolSettingsResolver.Resolve($"{BASE_CONNECTION_STRING};Application Name=", ENTRY_ASSEMBLY_NAME, settings: null);
+      var result = PoolSettingsResolver.Resolve($"{BASE_CONNECTION_STRING};Application Name=", ENTRY_ASSEMBLY_NAME, _noSettings);
 
       result.Should().Be(new PoolSettings(10, ENTRY_ASSEMBLY_NAME));
    }
@@ -73,7 +75,7 @@ public class PoolSettingsResolverTests
    [Fact]
    public void Resolve_WithAnEmptyNameKeywordAndNoEntryAssembly_LeavesTheNameUnset()
    {
-      var result = PoolSettingsResolver.Resolve($"{BASE_CONNECTION_STRING};Application Name=", null, settings: null);
+      var result = PoolSettingsResolver.Resolve($"{BASE_CONNECTION_STRING};Application Name=", null, _noSettings);
 
       result.Should().Be(new PoolSettings(10, null));
    }
@@ -81,7 +83,7 @@ public class PoolSettingsResolverTests
    [Fact]
    public void Resolve_WithAnEmptyCapKeyword_TreatsItAsAbsent()
    {
-      var result = PoolSettingsResolver.Resolve($"{BASE_CONNECTION_STRING};Maximum Pool Size=", ENTRY_ASSEMBLY_NAME, settings: null);
+      var result = PoolSettingsResolver.Resolve($"{BASE_CONNECTION_STRING};Maximum Pool Size=", ENTRY_ASSEMBLY_NAME, _noSettings);
 
       result.Should().Be(new PoolSettings(10, ENTRY_ASSEMBLY_NAME));
    }
@@ -148,14 +150,6 @@ public class PoolSettingsResolverTests
       var result = PoolSettingsResolver.Resolve(BASE_CONNECTION_STRING, ENTRY_ASSEMBLY_NAME, settings);
 
       result.Should().Be(new PoolSettings(2, ENTRY_ASSEMBLY_NAME));
-   }
-
-   [Fact]
-   public void Resolve_WithEmptySettings_BehavesAsWithoutSettings()
-   {
-      var result = PoolSettingsResolver.Resolve(BASE_CONNECTION_STRING, ENTRY_ASSEMBLY_NAME, new DatabaseConnectionFactorySettings());
-
-      result.Should().Be(new PoolSettings(10, ENTRY_ASSEMBLY_NAME));
    }
 
    [Fact]
