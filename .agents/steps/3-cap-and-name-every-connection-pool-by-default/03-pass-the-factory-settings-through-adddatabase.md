@@ -1,6 +1,6 @@
 # 03 — Pass the factory settings through AddDatabase
 
-Status: pending
+Status: built
 Depends on: 01, 02
 
 ## What to build
@@ -42,3 +42,15 @@ Projects: mvdmio.Database.PgSQL, mvdmio.Database.PgSQL.Tool, mvdmio.Database.PgS
 - [ ] The existing `ServiceCollectionExtensionsTests` still pass. The plain overload still registers by type through `TryAdd`.
 - [ ] The package README's two "Dependency Injection" sections cover the overload, the order rule and the last-call-wins rule.
 - [ ] Whole solution: `dotnet format --verify-no-changes` exits zero, `dotnet build` succeeds, and `dotnet test` passes, run one after another.
+
+## Outcome
+
+Safety fact: `AddDatabase(settings)` leaves exactly one singleton `DatabaseConnectionFactory` registration, built from the last settings passed, whether `AddDatabase()` (and so the generated `AddXxx()`) ran before or after it — so the resolved factory's connections show the settings' name in `pg_stat_activity.application_name` and its pool is exhausted at the settings' cap; if false, an app's DI-registered cap and name are silently dropped by `TryAdd` order and its pools fall back to the defaults (rung 3)
+Proof: `dotnet test test/mvdmio.Database.PgSQL.Tests.Integration/mvdmio.Database.PgSQL.Tests.Integration.csproj --filter "FullyQualifiedName~ConnectionPoolTests"` exit 0 — Passed: 13, Failed: 0 (`FactoryRegisteredWithSettings{Before,After}ThePlainOverload_UsesTheSettings`, `FactoryRegisteredWithSettingsTwice_UsesTheLastSettings`); registration shape: `DOTNET_ROLL_FORWARD=Major dotnet test test/mvdmio.Database.PgSQL.Tests.Unit/mvdmio.Database.PgSQL.Tests.Unit.csproj --filter "FullyQualifiedName~ServiceCollectionExtensionsTests|FullyQualifiedName~DatabaseConnectionFactoryTests"` exit 0 — Passed: 19, Failed: 0. The Proof folder refuses writes from this worktree-isolated session, so the Proof names the commands.
+Merge risk: easy — reverting the commit removes the new public overload; nothing is persisted and no release is published until the run lands; affects consumers that adopt `AddDatabase(settings)`
+
+Notes:
+- The overload removes every `DatabaseConnectionFactory` registration (`RemoveAll`) and adds a singleton delegate `_ => new DatabaseConnectionFactory(settings)`; the settings type itself is not registered, so `AddDatabase()`'s by-type registration still picks the parameterless constructor.
+- The generated `ServiceCollectionExtensions.AddDatabase(services)` call stays unambiguous (different arity); the whole solution builds with 0 errors.
+- Unit tests check the registration shape by invoking the descriptor's `ImplementationFactory` and reading `Application Name` off the built data source's connection string, so the Unit project needs no `Microsoft.Extensions.DependencyInjection` reference; only the Integration project got it (10.0.3), with a row in `.agents/refs/dependencies.md`.
+- The XML doc names `AddDatabase()` in `<c>` rather than a `cref`: a cref to a C# 14 extension member does not resolve (CS1574).

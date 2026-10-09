@@ -181,6 +181,19 @@ services.AddScoped(sp => sp.GetRequiredService<DatabaseConnectionFactory>()
 lifetime and connection string. A scoped registration gives each request its own connection while all of them share
 the factory's pool.
 
+To give the factory a pool cap and name (see [Connection Factory](#connection-factory)), pass the settings:
+
+```csharp
+services.AddDatabase(new DatabaseConnectionFactorySettings
+{
+   MaxPoolSize = 20,
+   ApplicationName = "MyApp.Web",
+});
+```
+
+`AddDatabase(settings)` replaces any factory registered before it, so it works before or after `AddDatabase()` and the
+generated `AddXxx()` methods. When two callers pass different settings, the last call wins.
+
 Nothing has to be registered for enums: a [generated repository](#generated-repositories) states each enum column's
 storage on the column itself, and hand-written SQL reads one back from a `text` column without setup. See
 [Type Handling](#type-handling) for what to do when you write one.
@@ -1165,7 +1178,8 @@ services.AddScoped(sp => sp.GetRequiredService<DatabaseConnectionFactory>()
    .BuildConnection(configuration.GetConnectionString("Database")!));
 ```
 
-Then inject `IUserRepository` wherever you need it.
+Then inject `IUserRepository` wherever you need it. To set the pool cap and name, call
+[`AddDatabase(settings)`](#dependency-injection) as well — before or after `AddMyAppData()`.
 
 ## Migrations
 

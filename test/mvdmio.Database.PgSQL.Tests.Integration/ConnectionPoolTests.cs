@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 using Npgsql;
 using System.Diagnostics.Metrics;
@@ -146,6 +147,51 @@ public class ConnectionPoolTests
       (await ReadOwnApplicationNameAsync(db)).Should().Be(ENTRY_ASSEMBLY_NAME);
 
       await AssertExhaustedAtAsync(factory.BuildDataSource(connectionString), 2);
+   }
+
+   [Fact]
+   public async Task FactoryRegisteredWithSettingsBeforeThePlainOverload_UsesTheSettings()
+   {
+      var name = $"pool-di-before-{Guid.NewGuid():N}";
+      var services = new ServiceCollection();
+      services.AddDatabase(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = name });
+      services.AddDatabase();
+
+      await AssertResolvedFactoryUsesAsync(services, name, 2);
+   }
+
+   [Fact]
+   public async Task FactoryRegisteredWithSettingsAfterThePlainOverload_UsesTheSettings()
+   {
+      var name = $"pool-di-after-{Guid.NewGuid():N}";
+      var services = new ServiceCollection();
+      services.AddDatabase();
+      services.AddDatabase(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = name });
+
+      await AssertResolvedFactoryUsesAsync(services, name, 2);
+   }
+
+   [Fact]
+   public async Task FactoryRegisteredWithSettingsTwice_UsesTheLastSettings()
+   {
+      var name = $"pool-di-last-{Guid.NewGuid():N}";
+      var services = new ServiceCollection();
+      services.AddDatabase(new DatabaseConnectionFactorySettings { MaxPoolSize = 4, ApplicationName = "pool-di-first-loses" });
+      services.AddDatabase(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = name });
+
+      await AssertResolvedFactoryUsesAsync(services, name, 2);
+   }
+
+   private async Task AssertResolvedFactoryUsesAsync(ServiceCollection services, string name, int cap)
+   {
+      await using var provider = services.BuildServiceProvider();
+      var factory = provider.GetRequiredService<DatabaseConnectionFactory>();
+      var connectionString = $"{_fixture.DbContainer.GetConnectionString()};Timeout=1";
+
+      await using (var db = factory.BuildConnection(connectionString))
+         (await ReadOwnApplicationNameAsync(db)).Should().Be(name);
+
+      await AssertExhaustedAtAsync(factory.BuildDataSource(connectionString), cap);
    }
 
    private static async Task<string> ReadOwnApplicationNameAsync(DatabaseConnection db)

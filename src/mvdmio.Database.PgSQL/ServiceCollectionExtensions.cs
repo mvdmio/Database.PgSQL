@@ -26,6 +26,26 @@ public static class ServiceCollectionExtensions
       }
 
       /// <summary>
+      ///   Adds the mvdmio.Database.PgSQL package dependencies to the <see cref="IServiceCollection"/>, with a
+      ///   <see cref="DatabaseConnectionFactory"/> built with the given <paramref name="settings"/>.
+      /// </summary>
+      /// <remarks>
+      ///   Replaces any <see cref="DatabaseConnectionFactory"/> registered before, so it may run before or after
+      ///   <c>AddDatabase()</c> and the generated <c>AddXxx()</c> methods. When it runs more than once, the last call wins.
+      /// </remarks>
+      /// <param name="settings">The pool cap and name every data source of the factory gets.</param>
+      /// <returns>The service collection for chaining.</returns>
+      /// <exception cref="ArgumentNullException"><paramref name="settings"/> is <see langword="null"/>.</exception>
+      public IServiceCollection AddDatabase(DatabaseConnectionFactorySettings settings)
+      {
+         ArgumentNullException.ThrowIfNull(settings);
+
+         services.RemoveAll<DatabaseConnectionFactory>();
+         services.AddSingleton(_ => new DatabaseConnectionFactory(settings));
+         return services;
+      }
+
+      /// <summary>
       ///   Add Dapper type handlers for all enums in the specified assemblies.
       /// </summary>
       /// <param name="assemblies">The assemblies to scan for enum types.</param>
