@@ -13,3 +13,6 @@
 
 **/*.dbmdl
 **/*.jfm
+
+# Claude Code worktrees for /implement runs
+.claude/worktrees/
