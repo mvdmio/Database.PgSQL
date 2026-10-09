@@ -104,4 +104,67 @@ public class DatabaseConnectionFactoryTests
       reported.MaxPoolSize.Should().Be(37);
       reported.ApplicationName.Should().Be("Action.App");
    }
+
+   [Fact]
+   public void Constructor_WithNullSettings_ThrowsArgumentNullException()
+   {
+      var act = () => new DatabaseConnectionFactory(null!);
+
+      act.Should().Throw<ArgumentNullException>().WithParameterName("settings");
+   }
+
+   [Fact]
+   public void BuildDataSource_WithSettings_AppliesThemOverTheKeywords()
+   {
+      using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = "Setting.App" });
+
+      var dataSource = factory.BuildDataSource($"{CONNECTION_STRING};Maximum Pool Size=5;Application Name=Keyword.App");
+
+      var reported = new NpgsqlConnectionStringBuilder(dataSource.ConnectionString);
+      reported.MaxPoolSize.Should().Be(2);
+      reported.ApplicationName.Should().Be("Setting.App");
+   }
+
+   [Fact]
+   public void BuildDataSource_WithSettingsAndABuilderActionThatSetsNothing_StillAppliesTheSettings()
+   {
+      using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = "Setting.App" });
+
+      var dataSource = factory.BuildDataSource(CONNECTION_STRING, _ => { });
+
+      var reported = new NpgsqlConnectionStringBuilder(dataSource.ConnectionString);
+      reported.MaxPoolSize.Should().Be(2);
+      reported.ApplicationName.Should().Be("Setting.App");
+   }
+
+   [Fact]
+   public void BuildConnection_WithSettings_AppliesThemToTheDataSource()
+   {
+      using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = "Setting.App" });
+
+      using var db = factory.BuildConnection(CONNECTION_STRING);
+
+      var reported = new NpgsqlConnectionStringBuilder(factory.BuildDataSource(CONNECTION_STRING).ConnectionString);
+      reported.MaxPoolSize.Should().Be(2);
+      reported.ApplicationName.Should().Be("Setting.App");
+   }
+
+   [Fact]
+   public void BuildDataSource_WithSettingsAndABuilderActionSettingCapAndName_TheActionOverridesTheSettings()
+   {
+      using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = "Setting.App" });
+
+      var dataSource = factory.BuildDataSource(
+         CONNECTION_STRING,
+         builder =>
+         {
+            builder.ConnectionStringBuilder.MaxPoolSize = 37;
+            builder.ConnectionStringBuilder.ApplicationName = "Action.App";
+         }
+      );
+
+      var reported = new NpgsqlConnectionStringBuilder(dataSource.ConnectionString);
+      reported.MaxPoolSize.Should().Be(37);
+      reported.ApplicationName.Should().Be("Action.App");
+   }
 }

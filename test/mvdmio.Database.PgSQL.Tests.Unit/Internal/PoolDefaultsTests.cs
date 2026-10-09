@@ -85,4 +85,97 @@ public class PoolDefaultsTests
 
       result.Should().Be(new PoolSettings(10, ENTRY_ASSEMBLY_NAME));
    }
+
+   [Fact]
+   public void Resolve_WithExplicitCapAndName_SettingsBeatTheKeywords()
+   {
+      var settings = new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = "Setting.App" };
+
+      var result = PoolDefaults.Resolve(
+         $"{BASE_CONNECTION_STRING};Maximum Pool Size=5;Application Name=Keyword.App",
+         ENTRY_ASSEMBLY_NAME,
+         settings
+      );
+
+      result.Should().Be(new PoolSettings(2, "Setting.App"));
+   }
+
+   [Fact]
+   public void Resolve_WithExplicitCapAndName_SettingsBeatTheDefaults()
+   {
+      var settings = new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = "Setting.App" };
+
+      var result = PoolDefaults.Resolve(BASE_CONNECTION_STRING, ENTRY_ASSEMBLY_NAME, settings);
+
+      result.Should().Be(new PoolSettings(2, "Setting.App"));
+   }
+
+   [Fact]
+   public void Resolve_WithOnlyAnExplicitName_KeepsTheKeywordCap()
+   {
+      var settings = new DatabaseConnectionFactorySettings { ApplicationName = "Setting.App" };
+
+      var result = PoolDefaults.Resolve($"{BASE_CONNECTION_STRING};Maximum Pool Size=5", ENTRY_ASSEMBLY_NAME, settings);
+
+      result.Should().Be(new PoolSettings(5, "Setting.App"));
+   }
+
+   [Fact]
+   public void Resolve_WithOnlyAnExplicitName_KeepsTheDefaultCap()
+   {
+      var settings = new DatabaseConnectionFactorySettings { ApplicationName = "Setting.App" };
+
+      var result = PoolDefaults.Resolve(BASE_CONNECTION_STRING, ENTRY_ASSEMBLY_NAME, settings);
+
+      result.Should().Be(new PoolSettings(10, "Setting.App"));
+   }
+
+   [Fact]
+   public void Resolve_WithOnlyAnExplicitCap_KeepsTheKeywordName()
+   {
+      var settings = new DatabaseConnectionFactorySettings { MaxPoolSize = 2 };
+
+      var result = PoolDefaults.Resolve($"{BASE_CONNECTION_STRING};Application Name=Keyword.App", ENTRY_ASSEMBLY_NAME, settings);
+
+      result.Should().Be(new PoolSettings(2, "Keyword.App"));
+   }
+
+   [Fact]
+   public void Resolve_WithOnlyAnExplicitCap_KeepsTheEntryAssemblyName()
+   {
+      var settings = new DatabaseConnectionFactorySettings { MaxPoolSize = 2 };
+
+      var result = PoolDefaults.Resolve(BASE_CONNECTION_STRING, ENTRY_ASSEMBLY_NAME, settings);
+
+      result.Should().Be(new PoolSettings(2, ENTRY_ASSEMBLY_NAME));
+   }
+
+   [Fact]
+   public void Resolve_WithEmptySettings_BehavesAsWithoutSettings()
+   {
+      var result = PoolDefaults.Resolve(BASE_CONNECTION_STRING, ENTRY_ASSEMBLY_NAME, new DatabaseConnectionFactorySettings());
+
+      result.Should().Be(new PoolSettings(10, ENTRY_ASSEMBLY_NAME));
+   }
+
+   [Fact]
+   public void Resolve_WithAnExplicitNameAndNoEntryAssembly_UsesTheExplicitName()
+   {
+      var settings = new DatabaseConnectionFactorySettings { ApplicationName = "Setting.App" };
+
+      var result = PoolDefaults.Resolve(BASE_CONNECTION_STRING, null, settings);
+
+      result.Should().Be(new PoolSettings(10, "Setting.App"));
+   }
+
+   // A value that is set is used exactly as given, so an explicit empty name beats the keyword and the default.
+   [Fact]
+   public void Resolve_WithAnExplicitEmptyName_KeepsItAsGiven()
+   {
+      var settings = new DatabaseConnectionFactorySettings { ApplicationName = "" };
+
+      var result = PoolDefaults.Resolve($"{BASE_CONNECTION_STRING};Application Name=Keyword.App", ENTRY_ASSEMBLY_NAME, settings);
+
+      result.Should().Be(new PoolSettings(10, ""));
+   }
 }

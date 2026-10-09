@@ -94,6 +94,7 @@ Every data source the library builds — through the [factory](#connection-facto
 | `Application Name`  | the entry assembly's name, for example `MyCompany.Orders.Web` |
 
 A `Maximum Pool Size` or `Application Name` keyword in the connection string beats the default, each value on its own.
+A factory's settings beat both; see [Connection Factory](#connection-factory).
 A per-call `Action<NpgsqlDataSourceBuilder>` runs after the defaults, so it can override them too. An action that sets
 `ConnectionStringBuilder.ApplicationName` should set the builder's `Name` to the same value, or Npgsql's pool name keeps
 the default. When the program has no entry assembly, the name stays unset.
@@ -129,11 +130,38 @@ var dataSource = factory.BuildDataSource(connectionString);
 ```
 
 Data sources from the factory cap their pool at 10 connections and are named after the entry assembly, unless the
-connection string says otherwise; see [Pool Size and Name](#pool-size-and-name). Both paths enable dynamic JSON
+factory's settings or the connection string say otherwise; see [Pool Size and Name](#pool-size-and-name). Both paths enable dynamic JSON
 serialization. The factory also turns on Npgsql's `IncludeErrorDetail` and `LogParameters`, which the plain
 `new DatabaseConnection(connectionString)` constructor does not do. Both `BuildConnection` and `BuildDataSource` take an
 optional `Action<NpgsqlDataSourceBuilder>` to configure the rest. It runs after the defaults, but only for the caller that
 builds the data source first: the factory caches one data source per connection string.
+
+To give every data source a factory builds its own cap and name, pass `DatabaseConnectionFactorySettings` to its
+constructor:
+
+```csharp
+await using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings
+{
+   MaxPoolSize = 20,
+   ApplicationName = "MyCompany.Orders.Web"
+});
+```
+
+Each value is decided on its own, in this order:
+
+1. The factory's setting.
+2. A `Maximum Pool Size` or `Application Name` keyword in the connection string.
+3. The default: 10 connections, and the entry assembly's name.
+
+A value the settings leave unset (`null`) falls through to the next one. The name sets both `Application Name` and the
+data source's `Name`, so `pg_stat_activity` and Npgsql's pool name agree. Npgsql checks the values when it builds the
+data source, so a cap it refuses, such as a negative one, fails there with Npgsql's own error.
+
+Set the cap and the name on the factory rather than through the per-call `Action<NpgsqlDataSourceBuilder>`. The factory
+builds one data source per connection string, and only the action of the caller that builds it first takes effect. When
+a shared package builds the first connection, a later caller's action is silently ignored. The factory's settings apply
+whichever caller builds first. A library that builds its own factory can give its pool its own name the same way, so its
+connections can be told apart from the host program's in `pg_stat_activity`.
 
 Connections from the factory do not dispose the shared data source, so disposing one does not affect the others.
 Dispose the factory only after everything using its connections has finished.

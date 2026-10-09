@@ -5,8 +5,8 @@ using System.Reflection;
 namespace mvdmio.Database.PgSQL.Internal;
 
 /// <summary>
-///    The pool cap and the name the library gives every data source it builds, and how a connection string keyword beats
-///    them. Both the factory and the directly constructed <see cref="DatabaseConnection" /> go through here, so the two
+///    The pool cap and the name the library gives every data source it builds, and how an explicit factory setting and a
+///    connection string keyword beat them. Both the factory and the directly constructed <see cref="DatabaseConnection" /> go through here, so the two
 ///    paths cannot drift apart.
 /// </summary>
 /// <remarks>
@@ -27,19 +27,28 @@ internal static class PoolDefaults
    private static readonly string[] _applicationNameKeywords = ["Application Name", "ApplicationName"];
 
    /// <summary>
-   ///    Works out the cap and the name for a data source. Each value is decided on its own: a keyword in the connection
-   ///    string wins whatever its value, and the default applies only when the keyword is absent. A keyword with an
-   ///    empty value counts as absent, because the connection string parser drops it.
+   ///    Works out the cap and the name for a data source. Each value is decided on its own: an explicit factory setting
+   ///    wins, next a keyword in the connection string whatever its value, and the default applies only when neither is
+   ///    present. A keyword with an empty value counts as absent, because the connection string parser drops it.
    /// </summary>
    /// <param name="connectionString">The caller's connection string.</param>
    /// <param name="entryAssemblyName">The entry assembly's simple name, or <see langword="null" /> when there is none.</param>
-   /// <returns>The cap and the name to apply. The name is <see langword="null" /> when nothing should be set.</returns>
-   public static PoolSettings Resolve(string connectionString, string? entryAssemblyName)
+   /// <param name="settings">The factory's explicit settings, or <see langword="null" /> when there are none.</param>
+   /// <returns>
+   ///    The cap and the name to apply. The name is <see langword="null" /> when nothing should be set. An explicit name
+   ///    is returned exactly as given, even when it is empty.
+   /// </returns>
+   public static PoolSettings Resolve(string connectionString, string? entryAssemblyName, DatabaseConnectionFactorySettings? settings = null)
    {
       var raw = new DbConnectionStringBuilder { ConnectionString = connectionString };
       var parsed = new NpgsqlConnectionStringBuilder(connectionString);
 
-      var maxPoolSize = HasAny(raw, _maxPoolSizeKeywords) ? parsed.MaxPoolSize : DEFAULT_MAX_POOL_SIZE;
+      var maxPoolSize = settings?.MaxPoolSize
+         ?? (HasAny(raw, _maxPoolSizeKeywords) ? parsed.MaxPoolSize : DEFAULT_MAX_POOL_SIZE);
+
+      if (settings?.ApplicationName is { } explicitName)
+         return new PoolSettings(maxPoolSize, explicitName);
+
       var name = HasAny(raw, _applicationNameKeywords) ? parsed.ApplicationName : entryAssemblyName;
 
       return new PoolSettings(maxPoolSize, string.IsNullOrEmpty(name) ? null : name);
@@ -47,21 +56,25 @@ internal static class PoolDefaults
 
    /// <summary>
    ///    Applies the resolved cap and name to a data source builder: the name goes to both the connection string's
-   ///    <c>Application Name</c> and the builder's <see cref="NpgsqlDataSourceBuilder.Name" />.
+   ///    <c>Application Name</c> and the builder's <see cref="NpgsqlDataSourceBuilder.Name" />. An empty name only clears
+   ///    <c>Application Name</c> and leaves the builder's <see cref="NpgsqlDataSourceBuilder.Name" /> unset.
    /// </summary>
    /// <param name="builder">A builder created from the caller's connection string.</param>
    /// <param name="connectionString">The caller's connection string.</param>
-   public static void Apply(NpgsqlDataSourceBuilder builder, string connectionString)
+   /// <param name="settings">The factory's explicit settings, or <see langword="null" /> when there are none.</param>
+   public static void Apply(NpgsqlDataSourceBuilder builder, string connectionString, DatabaseConnectionFactorySettings? settings = null)
    {
-      var settings = Resolve(connectionString, Assembly.GetEntryAssembly()?.GetName().Name);
+      var resolved = Resolve(connectionString, Assembly.GetEntryAssembly()?.GetName().Name, settings);
 
-      builder.ConnectionStringBuilder.MaxPoolSize = settings.MaxPoolSize;
+      builder.ConnectionStringBuilder.MaxPoolSize = resolved.MaxPoolSize;
 
-      if (settings.Name is null)
+      if (resolved.Name is null)
          return;
 
-      builder.ConnectionStringBuilder.ApplicationName = settings.Name;
-      builder.Name = settings.Name;
+      builder.ConnectionStringBuilder.ApplicationName = resolved.Name;
+
+      if (resolved.Name.Length > 0)
+         builder.Name = resolved.Name;
    }
 
    private static bool HasAny(DbConnectionStringBuilder raw, string[] keywords)

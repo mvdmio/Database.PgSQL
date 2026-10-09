@@ -6,8 +6,8 @@ using System.Diagnostics.Metrics;
 namespace mvdmio.Database.PgSQL.Tests.Integration;
 
 /// <summary>
-///    That every data source the library builds caps its pool and names it after the entry assembly, unless a connection
-///    string keyword says otherwise, as Postgres and Npgsql show it from outside.
+///    That every data source the library builds caps its pool and names it after the entry assembly, unless a factory
+///    setting or a connection string keyword says otherwise, as Postgres and Npgsql show it from outside.
 /// </summary>
 /// <remarks>
 ///    Not derived from <c>TestBase</c>: the point is the data source each test builds itself. Under xUnit v3 the test
@@ -111,6 +111,41 @@ public class ConnectionPoolTests
       await using var db = new DatabaseConnection($"{_fixture.DbContainer.GetConnectionString()};Application Name={name}");
 
       await AssertPublishesCapUnderPoolNameAsync(db, name, 10);
+   }
+
+   [Fact]
+   public async Task DataSourceFromAFactoryWithSettings_SettingsBeatTheKeywords()
+   {
+      var name = $"pool-setting-{Guid.NewGuid():N}";
+      await using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = name });
+      var connectionString = $"{_fixture.DbContainer.GetConnectionString()};Timeout=1;Maximum Pool Size=5;Application Name=pool-keyword-loses";
+
+      await using var db = factory.BuildConnection(connectionString);
+      (await ReadOwnApplicationNameAsync(db)).Should().Be(name);
+
+      await AssertExhaustedAtAsync(factory.BuildDataSource(connectionString), 2);
+   }
+
+   [Fact]
+   public async Task DataSourceFromAFactoryWithSettings_PublishesItsCapUnderTheSettingsName()
+   {
+      var name = $"pool-setting-metrics-{Guid.NewGuid():N}";
+      await using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings { MaxPoolSize = 4, ApplicationName = name });
+      await using var db = factory.BuildConnection($"{_fixture.DbContainer.GetConnectionString()};Application Name=pool-keyword-loses");
+
+      await AssertPublishesCapUnderPoolNameAsync(db, name, 4);
+   }
+
+   [Fact]
+   public async Task DataSourceFromAFactoryWithOnlyACapSetting_KeepsTheEntryAssemblyName()
+   {
+      await using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings { MaxPoolSize = 2 });
+      var connectionString = $"{_fixture.DbContainer.GetConnectionString()};Timeout=1";
+
+      await using var db = factory.BuildConnection(connectionString);
+      (await ReadOwnApplicationNameAsync(db)).Should().Be(ENTRY_ASSEMBLY_NAME);
+
+      await AssertExhaustedAtAsync(factory.BuildDataSource(connectionString), 2);
    }
 
    private static async Task<string> ReadOwnApplicationNameAsync(DatabaseConnection db)

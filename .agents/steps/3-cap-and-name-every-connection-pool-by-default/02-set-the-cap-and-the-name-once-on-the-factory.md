@@ -1,6 +1,6 @@
 # 02 — Set the cap and the name once on the factory
 
-Status: pending
+Status: built
 Depends on: 01
 
 ## What to build
@@ -55,3 +55,17 @@ Projects: mvdmio.Database.PgSQL, mvdmio.Database.PgSQL.Tests.Unit, mvdmio.Databa
 - [ ] `ServiceCollectionExtensionsTests` still pass.
 - [ ] The package README shows the settings, the precedence, and why to set them on the factory.
 - [ ] `dotnet format --verify-no-changes` exits zero, `dotnet build` succeeds, and the tests of every listed project pass, run one after another.
+
+## Outcome
+
+Safety fact: a `DatabaseConnectionFactory` built with `DatabaseConnectionFactorySettings` gives every data source it builds the setting's cap and name — over the connection string's keywords and the defaults, each value on its own, whether or not the first caller passes a per-call action — so `pg_stat_activity.application_name` and Npgsql's pool name show the setting and the pool is exhausted at the setting's cap; if false, an app's or library's own cap and name are silently lost to whichever caller built the data source first, the gap the Spec names (rung 3)
+Proof: `dotnet test test/mvdmio.Database.PgSQL.Tests.Integration/mvdmio.Database.PgSQL.Tests.Integration.csproj --filter "FullyQualifiedName~ConnectionPoolTests|FullyQualifiedName~DataSourceConstructionTests"` exit 0 — Passed: 12, Failed: 0 (incl. `DataSourceFromAFactoryWithSettings_SettingsBeatTheKeywords`: setting 2 vs keyword 5, exhausted at 2, setting's name in `pg_stat_activity`; `..._PublishesItsCapUnderTheSettingsName`: `db.client.connection.pool.name` equals the setting). Precedence per value: `DOTNET_ROLL_FORWARD=Major dotnet test test/mvdmio.Database.PgSQL.Tests.Unit/mvdmio.Database.PgSQL.Tests.Unit.csproj --filter "FullyQualifiedName~PoolDefaultsTests|FullyQualifiedName~DatabaseConnectionFactoryTests|FullyQualifiedName~ServiceCollectionExtensionsTests"` exit 0 — Passed: 40, Failed: 0. The Proof folder refused writes from this worktree-isolated session, so the Proof names the commands.
+Merge risk: easy — reverting the commit removes the new public type and constructor; nothing is persisted and no release is published until the run lands; affects consumers that adopt `DatabaseConnectionFactorySettings` (Step 03's `AddDatabase` overload builds on it)
+
+Notes for later steps:
+- `DatabaseConnectionFactorySettings` (`src/mvdmio.Database.PgSQL/DatabaseConnectionFactorySettings.cs`): sealed `[PublicAPI]` class, `int? MaxPoolSize { get; init; }`, `string? ApplicationName { get; init; }`. The parameterless factory constructor chains to `DatabaseConnectionFactory(new DatabaseConnectionFactorySettings())`; the settings constructor throws `ArgumentNullException` (param `settings`).
+- `PoolDefaults.Resolve(connectionString, entryAssemblyName, settings = null)` and `PoolDefaults.Apply(builder, connectionString, settings = null)` take the settings as the highest-precedence input. `DatabaseConnection`'s private `BuildDataSource` passes `settings: null`.
+- Drift: an explicit `ApplicationName = ""` is used as given — it beats the keyword and the default, sets `Application Name` to empty, and leaves `NpgsqlDataSourceBuilder.Name` unset (Step 01's rule: `Name` stays unset when the winning name is empty). Pinned by `PoolDefaultsTests.Resolve_WithAnExplicitEmptyName_KeepsItAsGiven`.
+- DI: `ServiceCollectionExtensionsTests` stay green with two public constructors; Microsoft's container picks the parameterless one because the settings type is not registered. Step 03 should register the factory as an instance or a delegate rather than registering `DatabaseConnectionFactorySettings` itself, or `AddDatabase()`'s by-type registration would start picking the settings constructor.
+- README: "Connection Factory" now shows the settings, the precedence list, why the factory beats the per-call action, and the own-name-for-a-library point; "Pool Size and Name" links to it. "Dependency Injection" is still untouched (Step 03's).
+- The Unit project targets net9.0; on this host prefix its test command with `DOTNET_ROLL_FORWARD=Major`, as `.agents/refs/testing.md` says.

@@ -47,16 +47,16 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
 
    /// <summary>
    ///    Create a new database connection for a database that is reachable with the given connection string.
-   ///    The connection builds and owns its data source, with the same default pool cap and name as
-   ///    <see cref="DatabaseConnectionFactory" /> gives its data sources.
+   ///    The connection builds and owns its data source, with the same default pool cap and name as a
+   ///    <see cref="DatabaseConnectionFactory" /> built without settings gives its data sources.
    /// </summary>
    /// <param name="connectionString">The PostgreSQL connection string.</param>
    public DatabaseConnection(string connectionString) : this(connectionString, _ => { }) { }
 
    /// <summary>
    ///    Create a new database connection for a database that is reachable with the given connection string.
-   ///    The connection builds and owns its data source, with the same default pool cap and name as
-   ///    <see cref="DatabaseConnectionFactory" /> gives its data sources.
+   ///    The connection builds and owns its data source, with the same default pool cap and name as a
+   ///    <see cref="DatabaseConnectionFactory" /> built without settings gives its data sources.
    /// </summary>
    /// <param name="connectionString">The PostgreSQL connection string.</param>
    /// <param name="builderAction">
@@ -716,14 +716,16 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    ///    already relying on it.
    ///    <para>
    ///       The pool cap and name come from <see cref="PoolDefaults" />, the same rule the factory uses, so no pool the
-   ///       library builds escapes the cap. <c>IncludeErrorDetail</c> and <c>LogParameters</c> stay factory-only.
+   ///       library builds escapes the cap. This path takes no <see cref="DatabaseConnectionFactorySettings" />, so only a
+   ///       keyword or the builder action changes the defaults. <c>IncludeErrorDetail</c> and <c>LogParameters</c> stay
+   ///       factory-only.
    ///    </para>
    /// </remarks>
    private static NpgsqlDataSource BuildDataSource(string connectionString, Action<NpgsqlDataSourceBuilder> builderAction)
    {
       var builder = new NpgsqlDataSourceBuilder(connectionString);
       builder.EnableDynamicJson();
-      PoolDefaults.Apply(builder, connectionString);
+      PoolDefaults.Apply(builder, connectionString, settings: null);
       builderAction.Invoke(builder);
       return builder.Build();
    }
