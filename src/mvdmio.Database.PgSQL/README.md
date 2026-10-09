@@ -191,8 +191,9 @@ services.AddDatabase(new DatabaseConnectionFactorySettings
 });
 ```
 
-`AddDatabase(settings)` replaces any factory registered before it, so it works before or after `AddDatabase()` and the
-generated `AddXxx()` methods. When two callers pass different settings, the last call wins.
+`AddDatabase(settings)` replaces any factory registered before it, including one you registered yourself, so it works
+before or after `AddDatabase()` and the generated `AddXxx()` methods. When two callers pass different settings, the last
+call wins.
 
 Nothing has to be registered for enums: a [generated repository](#generated-repositories) states each enum column's
 storage on the column itself, and hand-written SQL reads one back from a `text` column without setup. See

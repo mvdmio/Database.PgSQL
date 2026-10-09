@@ -176,7 +176,7 @@ public class ConnectionPoolTests
    {
       var name = $"pool-di-last-{Guid.NewGuid():N}";
       var services = new ServiceCollection();
-      services.AddDatabase(new DatabaseConnectionFactorySettings { MaxPoolSize = 4, ApplicationName = "pool-di-first-loses" });
+      services.AddDatabase(new DatabaseConnectionFactorySettings { MaxPoolSize = 4, ApplicationName = $"pool-di-first-{Guid.NewGuid():N}" });
       services.AddDatabase(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = name });
 
       await AssertResolvedFactoryUsesAsync(services, name, 2);
