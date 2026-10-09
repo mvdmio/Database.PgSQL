@@ -112,16 +112,9 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
          connectionString,
          cs => new Lazy<NpgsqlDataSource>(() =>
          {
-            var dataSourceBuilder = new NpgsqlDataSourceBuilder(cs)
-            {
-               ConnectionStringBuilder = {
-                  IncludeErrorDetail = true,
-                  LogParameters = true
-               }
-            };
-
-            dataSourceBuilder.EnableDynamicJson();
-            PoolSettingsResolver.Apply(dataSourceBuilder, cs, _settings);
+            var dataSourceBuilder = DataSourceBuilderDefaults.Create(cs, _settings);
+            dataSourceBuilder.ConnectionStringBuilder.IncludeErrorDetail = true;
+            dataSourceBuilder.ConnectionStringBuilder.LogParameters = true;
 
             builderAction?.Invoke(dataSourceBuilder);
             return dataSourceBuilder.Build();

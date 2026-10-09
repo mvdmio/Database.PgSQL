@@ -1,13 +1,13 @@
 using Npgsql;
 using System.Data.Common;
-using System.Reflection;
 
 namespace mvdmio.Database.PgSQL.Internal;
 
 /// <summary>
 ///    Decides the pool cap and the name of every data source the library builds: an explicit factory setting, then a
 ///    connection string keyword, then the library's default. Both the factory and the directly constructed
-///    <see cref="DatabaseConnection" /> go through here, so the two paths cannot drift apart.
+///    <see cref="DatabaseConnection" /> reach it through <see cref="DataSourceBuilderDefaults" />, so the two paths cannot
+///    drift apart.
 /// </summary>
 /// <remarks>
 ///    Npgsql's own cap is 100 connections per pool. Several programs that share one Postgres server can then ask for more
@@ -38,7 +38,7 @@ internal static class PoolSettingsResolver
    ///    The cap and the name to apply. The name is <see langword="null" /> when nothing should be set. An explicit name
    ///    is returned exactly as given, even when it is empty.
    /// </returns>
-   public static PoolSettings Resolve(string connectionString, string? entryAssemblyName, DatabaseConnectionFactorySettings? settings = null)
+   public static PoolSettings Resolve(string connectionString, string? entryAssemblyName, DatabaseConnectionFactorySettings? settings)
    {
       var raw = new DbConnectionStringBuilder { ConnectionString = connectionString };
       var parsed = new NpgsqlConnectionStringBuilder(connectionString);
@@ -52,26 +52,6 @@ internal static class PoolSettingsResolver
       var name = HasAny(raw, _applicationNameKeywords) ? parsed.ApplicationName : entryAssemblyName;
 
       return new PoolSettings(maxPoolSize, string.IsNullOrEmpty(name) ? null : name);
-   }
-
-   /// <summary>
-   ///    Applies the resolved cap and name to a data source builder: the name goes to both the connection string's
-   ///    <c>Application Name</c> and the builder's <see cref="NpgsqlDataSourceBuilder.Name" />, so the two always agree.
-   /// </summary>
-   /// <param name="builder">A builder created from the caller's connection string.</param>
-   /// <param name="connectionString">The caller's connection string.</param>
-   /// <param name="settings">The factory's explicit settings, or <see langword="null" /> when there are none.</param>
-   public static void Apply(NpgsqlDataSourceBuilder builder, string connectionString, DatabaseConnectionFactorySettings? settings)
-   {
-      var resolved = Resolve(connectionString, Assembly.GetEntryAssembly()?.GetName().Name, settings);
-
-      builder.ConnectionStringBuilder.MaxPoolSize = resolved.MaxPoolSize;
-
-      if (resolved.ApplicationName is null)
-         return;
-
-      builder.ConnectionStringBuilder.ApplicationName = resolved.ApplicationName;
-      builder.Name = resolved.ApplicationName;
    }
 
    private static bool HasAny(DbConnectionStringBuilder raw, string[] keywords)

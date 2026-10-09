@@ -64,13 +64,7 @@ public class ConnectionPoolTests
    {
       await using var db = new DatabaseConnection(_fixture.DbContainer.GetConnectionString());
 
-      await db.OpenAsync(CancellationToken);
-      var reported = new NpgsqlConnectionStringBuilder(db.Connection!.ConnectionString);
-      var applicationName = await ReadOwnApplicationNameAsync(db);
-      await db.CloseAsync(CancellationToken);
-
-      applicationName.Should().Be(ENTRY_ASSEMBLY_NAME);
-      reported.MaxPoolSize.Should().Be(10);
+      await AssertOpenConnectionUsesAsync(db, ENTRY_ASSEMBLY_NAME, 10);
    }
 
    [Fact]
@@ -86,13 +80,7 @@ public class ConnectionPoolTests
          }
       );
 
-      await db.OpenAsync(CancellationToken);
-      var reported = new NpgsqlConnectionStringBuilder(db.Connection!.ConnectionString);
-      var applicationName = await ReadOwnApplicationNameAsync(db);
-      await db.CloseAsync(CancellationToken);
-
-      applicationName.Should().Be(name);
-      reported.MaxPoolSize.Should().Be(3);
+      await AssertOpenConnectionUsesAsync(db, name, 3);
    }
 
    [Fact]
@@ -202,6 +190,17 @@ public class ConnectionPoolTests
          (await ReadOwnApplicationNameAsync(db)).Should().Be(name);
 
       await AssertExhaustedAtAsync(factory.BuildDataSource(connectionString), cap);
+   }
+
+   private static async Task AssertOpenConnectionUsesAsync(DatabaseConnection db, string name, int cap)
+   {
+      await db.OpenAsync(CancellationToken);
+      var reported = new NpgsqlConnectionStringBuilder(db.Connection!.ConnectionString);
+      var applicationName = await ReadOwnApplicationNameAsync(db);
+      await db.CloseAsync(CancellationToken);
+
+      applicationName.Should().Be(name);
+      reported.MaxPoolSize.Should().Be(cap);
    }
 
    private static async Task<string> ReadOwnApplicationNameAsync(DatabaseConnection db)

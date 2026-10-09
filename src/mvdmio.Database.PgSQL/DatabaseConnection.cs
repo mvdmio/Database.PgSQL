@@ -710,22 +710,14 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    }
 
    /// <remarks>
-   ///    Dynamic JSON is enabled here as well as in <see cref="DatabaseConnectionFactory" />, so which construction path
-   ///    a consumer took stops changing what a JSON column does. Aligned by enabling it in both rather than by removing
-   ///    it from one: enabling it only widens what a parameter may hold, whereas taking it away could break a caller
-   ///    already relying on it.
-   ///    <para>
-   ///       The pool cap and name come from <see cref="PoolSettingsResolver" />, the same rule the factory uses, so no
-   ///       pool the library builds escapes the cap. This path takes no <see cref="DatabaseConnectionFactorySettings" />,
-   ///       so only a keyword or the builder action changes the defaults. <c>IncludeErrorDetail</c> and
-   ///       <c>LogParameters</c> stay factory-only.
-   ///    </para>
+   ///    The builder comes from <see cref="DataSourceBuilderDefaults" />, as the factory's builders do, so dynamic JSON and
+   ///    the pool cap and name match the factory's and no pool the library builds escapes the cap. This path takes no
+   ///    <see cref="DatabaseConnectionFactorySettings" />, so only a keyword or the builder action changes the defaults.
+   ///    <c>IncludeErrorDetail</c> and <c>LogParameters</c> stay factory-only.
    /// </remarks>
    private static NpgsqlDataSource BuildDataSource(string connectionString, Action<NpgsqlDataSourceBuilder> builderAction)
    {
-      var builder = new NpgsqlDataSourceBuilder(connectionString);
-      builder.EnableDynamicJson();
-      PoolSettingsResolver.Apply(builder, connectionString, settings: null);
+      var builder = DataSourceBuilderDefaults.Create(connectionString, settings: null);
       builderAction.Invoke(builder);
       return builder.Build();
    }

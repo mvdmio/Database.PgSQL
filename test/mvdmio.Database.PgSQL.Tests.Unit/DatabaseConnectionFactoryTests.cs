@@ -100,9 +100,7 @@ public class DatabaseConnectionFactoryTests
          }
       );
 
-      var reported = new NpgsqlConnectionStringBuilder(dataSource.ConnectionString);
-      reported.MaxPoolSize.Should().Be(37);
-      reported.ApplicationName.Should().Be("Action.App");
+      AssertReportedCapAndName(dataSource, 37, "Action.App");
    }
 
    [Fact]
@@ -120,9 +118,7 @@ public class DatabaseConnectionFactoryTests
 
       var dataSource = factory.BuildDataSource($"{CONNECTION_STRING};Maximum Pool Size=5;Application Name=Keyword.App");
 
-      var reported = new NpgsqlConnectionStringBuilder(dataSource.ConnectionString);
-      reported.MaxPoolSize.Should().Be(2);
-      reported.ApplicationName.Should().Be("Setting.App");
+      AssertReportedCapAndName(dataSource, 2, "Setting.App");
    }
 
    [Fact]
@@ -132,9 +128,7 @@ public class DatabaseConnectionFactoryTests
 
       var dataSource = factory.BuildDataSource(CONNECTION_STRING, _ => { });
 
-      var reported = new NpgsqlConnectionStringBuilder(dataSource.ConnectionString);
-      reported.MaxPoolSize.Should().Be(2);
-      reported.ApplicationName.Should().Be("Setting.App");
+      AssertReportedCapAndName(dataSource, 2, "Setting.App");
    }
 
    [Fact]
@@ -144,9 +138,7 @@ public class DatabaseConnectionFactoryTests
 
       using var db = factory.BuildConnection(CONNECTION_STRING);
 
-      var reported = new NpgsqlConnectionStringBuilder(factory.BuildDataSource(CONNECTION_STRING).ConnectionString);
-      reported.MaxPoolSize.Should().Be(2);
-      reported.ApplicationName.Should().Be("Setting.App");
+      AssertReportedCapAndName(factory.BuildDataSource(CONNECTION_STRING), 2, "Setting.App");
    }
 
    [Fact]
@@ -156,9 +148,7 @@ public class DatabaseConnectionFactoryTests
 
       using var db = factory.BuildConnection(CONNECTION_STRING, _ => { });
 
-      var reported = new NpgsqlConnectionStringBuilder(factory.BuildDataSource(CONNECTION_STRING).ConnectionString);
-      reported.MaxPoolSize.Should().Be(2);
-      reported.ApplicationName.Should().Be("Setting.App");
+      AssertReportedCapAndName(factory.BuildDataSource(CONNECTION_STRING), 2, "Setting.App");
    }
 
    [Fact]
@@ -185,8 +175,13 @@ public class DatabaseConnectionFactoryTests
          }
       );
 
+      AssertReportedCapAndName(dataSource, 37, "Action.App");
+   }
+
+   private static void AssertReportedCapAndName(NpgsqlDataSource dataSource, int cap, string name)
+   {
       var reported = new NpgsqlConnectionStringBuilder(dataSource.ConnectionString);
-      reported.MaxPoolSize.Should().Be(37);
-      reported.ApplicationName.Should().Be("Action.App");
+      reported.MaxPoolSize.Should().Be(cap);
+      reported.ApplicationName.Should().Be(name);
    }
 }
