@@ -16,12 +16,18 @@ public static class ServiceCollectionExtensions
    extension(IServiceCollection services)
    {
       /// <summary>
-      ///   Adds the mvdmio.Database.PgSQL package dependencies to the <see cref="IServiceCollection"/>.
+      ///   Adds the mvdmio.Database.PgSQL package dependencies to the <see cref="IServiceCollection"/>, with a
+      ///   <see cref="DatabaseConnectionFactory"/> that uses the default pool cap and name.
       /// </summary>
+      /// <remarks>
+      ///   Leaves a <see cref="DatabaseConnectionFactory"/> registered before in place. A
+      ///   <see cref="DatabaseConnectionFactorySettings"/> registered in the container does not change the factory; pass
+      ///   the settings to <c>AddDatabase(settings)</c> instead.
+      /// </remarks>
       /// <returns>The service collection for chaining.</returns>
       public IServiceCollection AddDatabase()
       {
-         services.TryAddSingleton<DatabaseConnectionFactory>();
+         services.TryAddSingleton(_ => new DatabaseConnectionFactory());
          return services;
       }
 

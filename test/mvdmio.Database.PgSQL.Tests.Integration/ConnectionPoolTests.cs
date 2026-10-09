@@ -182,6 +182,16 @@ public class ConnectionPoolTests
       await AssertResolvedFactoryUsesAsync(services, name, 2);
    }
 
+   [Fact]
+   public async Task FactoryRegisteredByThePlainOverload_WithASettingsServiceRegistered_UsesTheDefaults()
+   {
+      var services = new ServiceCollection();
+      services.AddSingleton(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = $"pool-di-service-{Guid.NewGuid():N}" });
+      services.AddDatabase();
+
+      await AssertResolvedFactoryUsesAsync(services, ENTRY_ASSEMBLY_NAME, 10);
+   }
+
    private async Task AssertResolvedFactoryUsesAsync(ServiceCollection services, string name, int cap)
    {
       await using var provider = services.BuildServiceProvider();

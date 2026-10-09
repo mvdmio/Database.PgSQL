@@ -12,7 +12,7 @@ public class ServiceCollectionExtensionsTests
 
       services.AddDatabase();
 
-      services.Should().ContainSingle(x => x.ServiceType == typeof(DatabaseConnectionFactory) && x.ImplementationType == typeof(DatabaseConnectionFactory));
+      services.Should().ContainSingle(x => x.ServiceType == typeof(DatabaseConnectionFactory));
    }
 
    [Fact]

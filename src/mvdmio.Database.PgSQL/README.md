@@ -181,7 +181,9 @@ services.AddScoped(sp => sp.GetRequiredService<DatabaseConnectionFactory>()
 lifetime and connection string. A scoped registration gives each request its own connection while all of them share
 the factory's pool.
 
-To give the factory a pool cap and name (see [Connection Factory](#connection-factory)), pass the settings:
+To give the factory a pool cap and name (see [Connection Factory](#connection-factory)), pass the settings to
+`AddDatabase`. Registering `DatabaseConnectionFactorySettings` in the container yourself does not change the factory
+`AddDatabase()` builds; it keeps the defaults.
 
 ```csharp
 services.AddDatabase(new DatabaseConnectionFactorySettings
