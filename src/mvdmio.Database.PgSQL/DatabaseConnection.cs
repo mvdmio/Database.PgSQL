@@ -715,17 +715,17 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
    ///    it from one: enabling it only widens what a parameter may hold, whereas taking it away could break a caller
    ///    already relying on it.
    ///    <para>
-   ///       The pool cap and name come from <see cref="PoolDefaults" />, the same rule the factory uses, so no pool the
-   ///       library builds escapes the cap. This path takes no <see cref="DatabaseConnectionFactorySettings" />, so only a
-   ///       keyword or the builder action changes the defaults. <c>IncludeErrorDetail</c> and <c>LogParameters</c> stay
-   ///       factory-only.
+   ///       The pool cap and name come from <see cref="PoolSettingsResolver" />, the same rule the factory uses, so no
+   ///       pool the library builds escapes the cap. This path takes no <see cref="DatabaseConnectionFactorySettings" />,
+   ///       so only a keyword or the builder action changes the defaults. <c>IncludeErrorDetail</c> and
+   ///       <c>LogParameters</c> stay factory-only.
    ///    </para>
    /// </remarks>
    private static NpgsqlDataSource BuildDataSource(string connectionString, Action<NpgsqlDataSourceBuilder> builderAction)
    {
       var builder = new NpgsqlDataSourceBuilder(connectionString);
       builder.EnableDynamicJson();
-      PoolDefaults.Apply(builder, connectionString, settings: null);
+      PoolSettingsResolver.Apply(builder, connectionString, settings: null);
       builderAction.Invoke(builder);
       return builder.Build();
    }

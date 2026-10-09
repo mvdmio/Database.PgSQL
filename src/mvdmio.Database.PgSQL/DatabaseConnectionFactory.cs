@@ -36,7 +36,7 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
 
    /// <summary>
    ///    Creates a factory that gives every data source it builds the given pool cap and name, whichever caller builds it
-   ///    first. A value the settings leave unset falls back to the connection string's keyword, then to the default.
+   ///    first. See <see cref="DatabaseConnectionFactorySettings" /> for how each value combines with the connection string.
    /// </summary>
    /// <param name="settings">The pool cap and name to apply to every data source.</param>
    /// <exception cref="ArgumentNullException"><paramref name="settings" /> is <see langword="null" />.</exception>
@@ -55,7 +55,8 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
    /// <param name="connectionString">The PostgreSQL connection string.</param>
    /// <param name="builderAction">
    ///    An optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>. It runs after the factory's settings
-   ///    and defaults are applied, so it can override them. It only runs when the data source is first built for this connection string.
+   ///    and defaults are applied, so it can override them. It only runs when the data source is first built for this
+   ///    connection string.
    /// </param>
    /// <returns>A <see cref="DatabaseConnection"/> instance for the specified connection string.</returns>
    public NpgsqlDataSource BuildDataSource(string connectionString, Action<NpgsqlDataSourceBuilder>? builderAction = null)
@@ -70,7 +71,8 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
    /// <param name="connectionString">The PostgreSQL connection string.</param>
    /// <param name="builderAction">
    ///    An optional action to configure the <see cref="NpgsqlDataSourceBuilder"/>. It runs after the factory's settings
-   ///    and defaults are applied, so it can override them. It only runs when the data source is first built for this connection string.
+   ///    and defaults are applied, so it can override them. It only runs when the data source is first built for this
+   ///    connection string.
    /// </param>
    /// <returns>A <see cref="DatabaseConnection"/> instance for the specified connection string.</returns>
    public DatabaseConnection BuildConnection(string connectionString, Action<NpgsqlDataSourceBuilder>? builderAction = null)
@@ -119,7 +121,7 @@ public sealed class DatabaseConnectionFactory : IDisposable, IAsyncDisposable
             };
 
             dataSourceBuilder.EnableDynamicJson();
-            PoolDefaults.Apply(dataSourceBuilder, cs, _settings);
+            PoolSettingsResolver.Apply(dataSourceBuilder, cs, _settings);
 
             builderAction?.Invoke(dataSourceBuilder);
             return dataSourceBuilder.Build();

@@ -5,16 +5,16 @@ using System.Reflection;
 namespace mvdmio.Database.PgSQL.Internal;
 
 /// <summary>
-///    The pool cap and the name the library gives every data source it builds, and how an explicit factory setting and a
-///    connection string keyword beat them. Both the factory and the directly constructed <see cref="DatabaseConnection" /> go through here, so the two
-///    paths cannot drift apart.
+///    Decides the pool cap and the name of every data source the library builds: an explicit factory setting, then a
+///    connection string keyword, then the library's default. Both the factory and the directly constructed
+///    <see cref="DatabaseConnection" /> go through here, so the two paths cannot drift apart.
 /// </summary>
 /// <remarks>
 ///    Npgsql's own cap is 100 connections per pool. Several programs that share one Postgres server can then ask for more
 ///    connections than its <c>max_connections</c> allows, which is why the library caps every pool lower by default and
 ///    names it, so <c>pg_stat_activity</c> shows which program holds the slots.
 /// </remarks>
-internal static class PoolDefaults
+internal static class PoolSettingsResolver
 {
    /// <summary>
    ///    The cap on a pool's connections when the connection string sets none.
@@ -56,25 +56,22 @@ internal static class PoolDefaults
 
    /// <summary>
    ///    Applies the resolved cap and name to a data source builder: the name goes to both the connection string's
-   ///    <c>Application Name</c> and the builder's <see cref="NpgsqlDataSourceBuilder.Name" />. An empty name only clears
-   ///    <c>Application Name</c> and leaves the builder's <see cref="NpgsqlDataSourceBuilder.Name" /> unset.
+   ///    <c>Application Name</c> and the builder's <see cref="NpgsqlDataSourceBuilder.Name" />, so the two always agree.
    /// </summary>
    /// <param name="builder">A builder created from the caller's connection string.</param>
    /// <param name="connectionString">The caller's connection string.</param>
    /// <param name="settings">The factory's explicit settings, or <see langword="null" /> when there are none.</param>
-   public static void Apply(NpgsqlDataSourceBuilder builder, string connectionString, DatabaseConnectionFactorySettings? settings = null)
+   public static void Apply(NpgsqlDataSourceBuilder builder, string connectionString, DatabaseConnectionFactorySettings? settings)
    {
       var resolved = Resolve(connectionString, Assembly.GetEntryAssembly()?.GetName().Name, settings);
 
       builder.ConnectionStringBuilder.MaxPoolSize = resolved.MaxPoolSize;
 
-      if (resolved.Name is null)
+      if (resolved.ApplicationName is null)
          return;
 
-      builder.ConnectionStringBuilder.ApplicationName = resolved.Name;
-
-      if (resolved.Name.Length > 0)
-         builder.Name = resolved.Name;
+      builder.ConnectionStringBuilder.ApplicationName = resolved.ApplicationName;
+      builder.Name = resolved.ApplicationName;
    }
 
    private static bool HasAny(DbConnectionStringBuilder raw, string[] keywords)
@@ -87,5 +84,5 @@ internal static class PoolDefaults
 ///    The cap and the name to give one data source.
 /// </summary>
 /// <param name="MaxPoolSize">The maximum number of connections in the pool.</param>
-/// <param name="Name">The application and pool name, or <see langword="null" /> to leave it unset.</param>
-internal readonly record struct PoolSettings(int MaxPoolSize, string? Name);
+/// <param name="ApplicationName">The application and pool name, or <see langword="null" /> to leave it unset.</param>
+internal readonly record struct PoolSettings(int MaxPoolSize, string? ApplicationName);

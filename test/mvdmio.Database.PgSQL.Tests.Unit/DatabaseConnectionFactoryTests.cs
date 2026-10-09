@@ -150,6 +150,28 @@ public class DatabaseConnectionFactoryTests
    }
 
    [Fact]
+   public void BuildConnection_WithSettingsAndABuilderActionThatSetsNothing_StillAppliesTheSettings()
+   {
+      using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = "Setting.App" });
+
+      using var db = factory.BuildConnection(CONNECTION_STRING, _ => { });
+
+      var reported = new NpgsqlConnectionStringBuilder(factory.BuildDataSource(CONNECTION_STRING).ConnectionString);
+      reported.MaxPoolSize.Should().Be(2);
+      reported.ApplicationName.Should().Be("Setting.App");
+   }
+
+   [Fact]
+   public void BuildDataSource_WithAnExplicitEmptyName_BuildsWithTheNameCleared()
+   {
+      using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings { ApplicationName = "" });
+
+      var dataSource = factory.BuildDataSource($"{CONNECTION_STRING};Application Name=Keyword.App");
+
+      new NpgsqlConnectionStringBuilder(dataSource.ConnectionString).ApplicationName.Should().BeNullOrEmpty();
+   }
+
+   [Fact]
    public void BuildDataSource_WithSettingsAndABuilderActionSettingCapAndName_TheActionOverridesTheSettings()
    {
       using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = "Setting.App" });
