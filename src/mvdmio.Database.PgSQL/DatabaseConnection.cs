@@ -47,16 +47,16 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
 
    /// <summary>
    ///    Create a new database connection for a database that is reachable with the given connection string.
-   ///    The connection builds and owns its data source, which caps its pool at 10 connections and is named after the entry
-   ///    assembly. A <c>Maximum Pool Size</c> or <c>Application Name</c> keyword in the connection string beats the default.
+   ///    The connection builds and owns its data source, with the same default pool cap and name as
+   ///    <see cref="DatabaseConnectionFactory" /> gives its data sources.
    /// </summary>
    /// <param name="connectionString">The PostgreSQL connection string.</param>
    public DatabaseConnection(string connectionString) : this(connectionString, _ => { }) { }
 
    /// <summary>
    ///    Create a new database connection for a database that is reachable with the given connection string.
-   ///    The connection builds and owns its data source, which caps its pool at 10 connections and is named after the entry
-   ///    assembly. A <c>Maximum Pool Size</c> or <c>Application Name</c> keyword in the connection string beats the default.
+   ///    The connection builds and owns its data source, with the same default pool cap and name as
+   ///    <see cref="DatabaseConnectionFactory" /> gives its data sources.
    /// </summary>
    /// <param name="connectionString">The PostgreSQL connection string.</param>
    /// <param name="builderAction">

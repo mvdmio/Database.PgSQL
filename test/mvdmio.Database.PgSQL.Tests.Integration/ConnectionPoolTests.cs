@@ -73,30 +73,44 @@ public class ConnectionPoolTests
    }
 
    [Fact]
-   public async Task DataSourceFromTheFactory_DiagnosticNameEqualsThePoolName()
+   public async Task DirectlyConstructedConnection_WithABuilderActionSettingCapAndName_TheActionOverridesTheDefaults()
+   {
+      var name = $"pool-direct-action-{Guid.NewGuid():N}";
+      await using var db = new DatabaseConnection(
+         _fixture.DbContainer.GetConnectionString(),
+         builder =>
+         {
+            builder.ConnectionStringBuilder.MaxPoolSize = 3;
+            builder.ConnectionStringBuilder.ApplicationName = name;
+         }
+      );
+
+      await db.OpenAsync(CancellationToken);
+      var reported = new NpgsqlConnectionStringBuilder(db.Connection!.ConnectionString);
+      var applicationName = await ReadOwnApplicationNameAsync(db);
+      await db.CloseAsync(CancellationToken);
+
+      applicationName.Should().Be(name);
+      reported.MaxPoolSize.Should().Be(3);
+   }
+
+   [Fact]
+   public async Task DataSourceFromTheFactory_PublishesItsCapUnderThePoolName()
    {
       var name = $"pool-metrics-{Guid.NewGuid():N}";
       await using var factory = new DatabaseConnectionFactory();
       await using var db = factory.BuildConnection($"{_fixture.DbContainer.GetConnectionString()};Application Name={name}");
 
-      await db.OpenAsync(CancellationToken);
-      var maxByPool = ObserveMaxConnectionsByPoolName();
-      await db.CloseAsync(CancellationToken);
-
-      maxByPool.Should().ContainKey(name).WhoseValue.Should().Be(10);
+      await AssertPublishesCapUnderPoolNameAsync(db, name, 10);
    }
 
    [Fact]
-   public async Task DirectlyConstructedConnection_DiagnosticNameEqualsThePoolName()
+   public async Task DirectlyConstructedConnection_PublishesItsCapUnderThePoolName()
    {
       var name = $"pool-direct-metrics-{Guid.NewGuid():N}";
       await using var db = new DatabaseConnection($"{_fixture.DbContainer.GetConnectionString()};Application Name={name}");
 
-      await db.OpenAsync(CancellationToken);
-      var maxByPool = ObserveMaxConnectionsByPoolName();
-      await db.CloseAsync(CancellationToken);
-
-      maxByPool.Should().ContainKey(name).WhoseValue.Should().Be(10);
+      await AssertPublishesCapUnderPoolNameAsync(db, name, 10);
    }
 
    private static async Task<string> ReadOwnApplicationNameAsync(DatabaseConnection db)
@@ -127,16 +141,25 @@ public class ConnectionPoolTests
       }
    }
 
+   private static async Task AssertPublishesCapUnderPoolNameAsync(DatabaseConnection db, string poolName, int cap)
+   {
+      await db.OpenAsync(CancellationToken);
+      var maxByPool = ObserveMaxConnectionsByPoolName();
+      await db.CloseAsync(CancellationToken);
+
+      maxByPool.Should().ContainKey(poolName).WhoseValue.Should().Be(cap);
+   }
+
    // Npgsql publishes each pool's cap as db.client.connection.max, tagged with the data source's diagnostic name.
    private static Dictionary<string, long> ObserveMaxConnectionsByPoolName()
    {
       var maxByPool = new Dictionary<string, long>();
 
       using var listener = new MeterListener();
-      listener.InstrumentPublished = (instrument, l) =>
+      listener.InstrumentPublished = (instrument, meterListener) =>
       {
          if (instrument.Meter.Name == "Npgsql" && instrument.Name == "db.client.connection.max")
-            l.EnableMeasurementEvents(instrument);
+            meterListener.EnableMeasurementEvents(instrument);
       };
       listener.SetMeasurementEventCallback<int>((_, value, tags, _) => Record(maxByPool, value, tags));
       listener.SetMeasurementEventCallback<long>((_, value, tags, _) => Record(maxByPool, value, tags));

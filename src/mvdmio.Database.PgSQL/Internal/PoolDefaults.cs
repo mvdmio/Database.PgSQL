@@ -28,7 +28,8 @@ internal static class PoolDefaults
 
    /// <summary>
    ///    Works out the cap and the name for a data source. Each value is decided on its own: a keyword in the connection
-   ///    string wins whatever its value, and the default applies only when the keyword is absent.
+   ///    string wins whatever its value, and the default applies only when the keyword is absent. A keyword with an
+   ///    empty value counts as absent, because the connection string parser drops it.
    /// </summary>
    /// <param name="connectionString">The caller's connection string.</param>
    /// <param name="entryAssemblyName">The entry assembly's simple name, or <see langword="null" /> when there is none.</param>

@@ -1,6 +1,6 @@
 # 01 — Cap and name every pool by default
 
-Status: built
+Status: done
 Depends on: none
 
 ## What to build
@@ -59,8 +59,8 @@ Projects: mvdmio.Database.PgSQL, mvdmio.Database.PgSQL.Tool, mvdmio.Database.PgS
 
 ## Outcome
 
-Safety fact: every data source the library builds — factory and both `DatabaseConnection(string, ...)` constructors — caps its pool at 10 and names it after the entry assembly unless a connection string keyword says otherwise; if false, pools grow to Npgsql's 100 and connections show an empty `application_name`, which is the 2026-10-04 `53300` incident again (rung 3)
-Proof: `dotnet test test/mvdmio.Database.PgSQL.Tests.Integration/mvdmio.Database.PgSQL.Tests.Integration.csproj --filter "FullyQualifiedName~ConnectionPoolTests|FullyQualifiedName~DataSourceConstructionTests"` exit 0 — Passed! - Failed: 0, Passed: 8, Total: 8 (the Proof folder refused writes from this worktree-isolated session, so the command stands on its own)
+Safety fact: every data source the library builds — factory and both `DatabaseConnection(string, ...)` constructors — caps its pool at 10 and names it after the entry assembly unless a connection string keyword or a per-call builder action says otherwise; if false, pools grow to Npgsql's 100 and connections show an empty `application_name`, which is the 2026-10-04 `53300` incident again (rung 3)
+Proof: `dotnet test test/mvdmio.Database.PgSQL.Tests.Integration/mvdmio.Database.PgSQL.Tests.Integration.csproj --filter "FullyQualifiedName~ConnectionPoolTests|FullyQualifiedName~DataSourceConstructionTests"` exit 0 — Passed!  - Failed: 0, Passed: 9, Skipped: 0, Total: 9 (the 11th open on a default factory pool throws "pool has been exhausted"; `pg_stat_activity.application_name` reads `mvdmio.Database.PgSQL.Tests.Integration`)
 Merge risk: easy — reverting the commit restores Npgsql's defaults; nothing is persisted; affects every consumer that upgrades to 0.41.0 (a program that needs more than 10 concurrent connections per pool hits pool exhaustion until it sets `Maximum Pool Size`)
 
 Notes for later steps:
@@ -68,3 +68,4 @@ Notes for later steps:
 - Drift: an empty keyword (`Application Name=`) counts as absent, not as "present whatever its value". ADO.NET's `DbConnectionStringBuilder` — which Npgsql's own parsing uses — drops a keyword with an empty value, so neither the library nor Npgsql can see it. The default name applies in that case; pinned by `PoolDefaultsTests.Resolve_WithAnEmptyNameKeyword_TreatsItAsAbsent`.
 - The entry assembly under xUnit v3 is confirmed as `mvdmio.Database.PgSQL.Tests.Integration`. Npgsql 10's metric tag is `db.client.connection.pool.name` on instrument `db.client.connection.max`; `ConnectionPoolTests.ObserveMaxConnectionsByPoolName` reads it with a `MeterListener`.
 - README: a new "Pool Size and Name" subsection under "Connections" carries the defaults, precedence, the 100-to-10 change and the fix; "Connection Factory" links to it. "Dependency Injection" is untouched (Step 03's).
+- Checker: an action that sets only `ConnectionStringBuilder.ApplicationName` leaves `builder.Name` (the pool name) at the default; the README says so. `ConnectionPoolTests` now also covers the per-call action on the direct `DatabaseConnection` constructor, and `.agents/refs/testing.md` records that pool tests need not inherit `TestBase`. Step 02 should keep the `DatabaseConnection` constructor docs pointing at `DatabaseConnectionFactory` rather than restating the defaults.

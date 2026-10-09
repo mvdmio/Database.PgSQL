@@ -94,8 +94,9 @@ Every data source the library builds — through the [factory](#connection-facto
 | `Application Name`  | the entry assembly's name, for example `MyCompany.Orders.Web` |
 
 A `Maximum Pool Size` or `Application Name` keyword in the connection string beats the default, each value on its own.
-A per-call `Action<NpgsqlDataSourceBuilder>` runs after the defaults, so it can override them too. When the program has
-no entry assembly, the name stays unset.
+A per-call `Action<NpgsqlDataSourceBuilder>` runs after the defaults, so it can override them too. An action that sets
+`ConnectionStringBuilder.ApplicationName` should set the builder's `Name` to the same value, or Npgsql's pool name keeps
+the default. When the program has no entry assembly, the name stays unset.
 
 The name shows in `pg_stat_activity.application_name`, so you can see which program holds the server's connections.
 It is also the data source's `Name`, which Npgsql uses as the pool name in its traces, logs and metrics. Postgres cuts an
