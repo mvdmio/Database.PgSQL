@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-10-17: InTransaction now reports the original failure
+When the database connection breaks inside `InTransaction`, `InTransactionAsync`, or `InTransactionAsync<T>`, the call now throws the exception your action saw. Before, the failed rollback hid it behind an `ObjectDisposedException`. The `DatabaseConnection` also stays usable afterwards: `RollbackTransaction` and `RollbackTransactionAsync` now always clear the transaction, so the next query or transaction starts on a fresh connection.
+
 ## 2026-10-09: Connection pools now capped and named
 Every connection pool the library builds now holds at most 10 connections, down from 100, so that several programs can share one Postgres server without using up its connection limit. Each connection also shows the name of the program's entry assembly in `pg_stat_activity.application_name`. A program that needs more connections can add `Maximum Pool Size` to its connection string, or set the cap and the name once with `DatabaseConnectionFactorySettings` on the connection factory or in `AddDatabase`.
 

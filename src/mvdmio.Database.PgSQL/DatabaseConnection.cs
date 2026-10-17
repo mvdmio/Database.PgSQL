@@ -415,9 +415,16 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
          if (Transaction is null)
             throw new InvalidOperationException("No transaction active");
 
-         Transaction.Rollback();
-         Transaction.Dispose();
-         Transaction = null;
+         try
+         {
+            Transaction.Rollback();
+         }
+         finally
+         {
+            // Clear the transaction even when the rollback throws, so a broken connection does not stay stuck on a dead transaction.
+            Transaction.Dispose();
+            Transaction = null;
+         }
       }
       finally
       {
@@ -445,9 +452,16 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
          if (Transaction is null)
             throw new InvalidOperationException("No transaction active");
 
-         await Transaction.RollbackAsync(ct);
-         await Transaction.DisposeAsync();
-         Transaction = null;
+         try
+         {
+            await Transaction.RollbackAsync(ct);
+         }
+         finally
+         {
+            // Clear the transaction even when the rollback throws, so a broken connection does not stay stuck on a dead transaction.
+            await Transaction.DisposeAsync();
+            Transaction = null;
+         }
       }
       finally
       {
@@ -475,7 +489,16 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       catch
       {
          if (transactionStarted)
-            RollbackTransaction();
+         {
+            try
+            {
+               RollbackTransaction();
+            }
+            catch
+            {
+               // Rollback failed too; the action's own exception is what the caller needs.
+            }
+         }
 
          throw;
       }
@@ -498,7 +521,16 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       catch
       {
          if (transactionStarted)
-            await RollbackTransactionAsync();
+         {
+            try
+            {
+               await RollbackTransactionAsync();
+            }
+            catch
+            {
+               // Rollback failed too; the action's own exception is what the caller needs.
+            }
+         }
 
          throw;
       }
@@ -523,7 +555,16 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       catch
       {
          if (transactionStarted)
-            await RollbackTransactionAsync();
+         {
+            try
+            {
+               await RollbackTransactionAsync();
+            }
+            catch
+            {
+               // Rollback failed too; the action's own exception is what the caller needs.
+            }
+         }
 
          throw;
       }

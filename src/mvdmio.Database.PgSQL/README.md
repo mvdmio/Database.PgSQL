@@ -295,6 +295,9 @@ var orderId = await db.InTransactionAsync(async () =>
 );
 ```
 
+If the delegate throws, the transaction is rolled back and that same exception reaches you. When the rollback itself fails
+too, usually because the connection broke, the rollback error is dropped so it cannot hide the original failure.
+
 Transactions do not nest: an `InTransactionAsync` call inside another one joins the outer transaction, and only the
 outermost call commits or rolls back. Every operation on the same `DatabaseConnection` — including
 [generated repositories](#generated-repositories) — automatically runs inside whatever transaction that connection
@@ -314,10 +317,21 @@ try
 }
 catch
 {
-   await db.RollbackTransactionAsync(ct);
+   try
+   {
+      await db.RollbackTransactionAsync(ct);
+   }
+   catch
+   {
+      // The rollback failed too, usually because the connection broke. Let the original exception through.
+   }
+
    throw;
 }
 ```
+
+`RollbackTransactionAsync` always clears the transaction, but it still throws when the rollback itself fails. Guard it as
+above, or the rollback error replaces the exception that made you roll back.
 
 `BeginTransactionAsync` returns `true` when it started a transaction and `false` when one was already open.
 
