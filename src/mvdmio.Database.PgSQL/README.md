@@ -264,7 +264,7 @@ A failed query throws `QueryException`, which carries the offending SQL in its `
 `QueryTranslationException` — there is no SQL yet at that point. All three derive from `DatabaseException`, so
 `catch (DatabaseException)` covers them. Invalid arguments and misuse still surface as the usual
 `ArgumentException`/`InvalidOperationException`, and bulk `COPY` failures can surface Npgsql's own
-`PostgresException`.
+`PostgresException`. A cancelled call throws `OperationCanceledException` and is not wrapped in `QueryException`.
 
 ## Transactions
 

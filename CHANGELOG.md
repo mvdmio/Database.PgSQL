@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-10-24: A cancelled call throws OperationCanceledException
+A cancelled async call on `DatabaseConnection` (`Dapper.ExecuteAsync`, `QueryAsync`, and the other Dapper calls) now throws `OperationCanceledException` instead of a `QueryException` that wrapped it. `catch (OperationCanceledException) when (ct.IsCancellationRequested)` now works for Dapper calls as it already did for LINQ calls. A SQL error, a timeout, or a lost connection still throws `QueryException` with the SQL attached.
+
 ## 2026-10-17: InTransaction now reports the original failure
 When the database connection breaks inside `InTransaction`, `InTransactionAsync`, or `InTransactionAsync<T>`, the call now throws the exception your action saw. Before, the failed rollback hid it behind an `ObjectDisposedException`. The `DatabaseConnection` also stays usable afterwards: `RollbackTransaction` and `RollbackTransactionAsync` now always clear the transaction, so the next query or transaction starts on a fresh connection.
 

@@ -695,14 +695,15 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
          connectionOpened = await OpenAsync(ct);
          await connectionDelegate.Invoke(_openConnection);
       }
-      catch (Exception exception)
+      catch (Exception exception) when (exception is not OperationCanceledException)
       {
          throw new QueryException(sql, exception);
       }
       finally
       {
+         // Closes without the caller's token: with a cancelled token CloseAsync throws before it closes anything.
          if (connectionOpened)
-            await CloseAsync(ct);
+            await CloseAsync();
       }
    }
 
@@ -739,14 +740,15 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
          connectionOpened = await OpenAsync(ct);
          return await connectionDelegate.Invoke(_openConnection);
       }
-      catch (Exception exception)
+      catch (Exception exception) when (exception is not OperationCanceledException)
       {
          throw new QueryException(sql, exception);
       }
       finally
       {
+         // Closes without the caller's token: with a cancelled token CloseAsync throws before it closes anything.
          if (connectionOpened)
-            await CloseAsync(ct);
+            await CloseAsync();
       }
    }
 
