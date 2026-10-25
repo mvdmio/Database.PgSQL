@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-10-25: An awaited query that includes a collection throws QueryException
+An awaited query on the Query surface that includes a collection (`Include`, with or without `ThenInclude`, `Skip` or `Take`) now throws `QueryException` with the Postgres error and the SQL when the database rejects it. Before, it threw a `NullReferenceException` that hid the error. The fix is the `linq2db` upgrade from 6.3.0 to 6.5.1.
+
 ## 2026-10-24: A cancelled call throws OperationCanceledException
 A cancelled async call on `DatabaseConnection` (`Dapper.ExecuteAsync`, `QueryAsync`, and the other Dapper calls) now throws `OperationCanceledException` instead of a `QueryException` that wrapped it. `catch (OperationCanceledException) when (ct.IsCancellationRequested)` now works for Dapper calls as it already did for LINQ calls. A SQL error, a timeout, or a lost connection still throws `QueryException` with the SQL attached.
 

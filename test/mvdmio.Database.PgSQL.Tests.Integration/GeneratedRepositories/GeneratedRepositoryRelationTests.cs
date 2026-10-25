@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using mvdmio.Database.PgSQL.Exceptions;
 using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
+using Npgsql;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
@@ -354,6 +355,49 @@ public class GeneratedRepositoryRelationTests : TestBase
 
       failure.Should().BeOfType<QueryException>();
       ((QueryException)failure!).Sql.Should().Contain("generated_books");
+   }
+
+   [Fact]
+   public async Task Query_WithACollectionMaterializationThatFailsInTheDatabase_ThrowsQueryExceptionCarryingTheSql()
+   {
+      var zero = 0;
+
+      var failure = await Record.ExceptionAsync(
+         () => _authors.Query().Include(x => x.Books).Where(x => x.AuthorId / zero == 1).ToListAsync(CancellationToken)
+      );
+
+      AssertDivisionByZeroQueryException(failure);
+   }
+
+   [Fact]
+   public async Task Query_WithAChainedCollectionMaterializationThatFailsInTheDatabase_ThrowsQueryExceptionCarryingTheSql()
+   {
+      var zero = 0;
+
+      var failure = await Record.ExceptionAsync(
+         () => _authors.Query().Include(x => x.Books).ThenInclude(x => x.Editor).Where(x => x.AuthorId / zero == 1).ToListAsync(CancellationToken)
+      );
+
+      AssertDivisionByZeroQueryException(failure);
+   }
+
+   [Fact]
+   public async Task Query_WithAPagedCollectionMaterializationThatFailsInTheDatabase_ThrowsQueryExceptionCarryingTheSql()
+   {
+      var zero = 0;
+
+      var failure = await Record.ExceptionAsync(
+         () => _authors.Query().Include(x => x.Books).Where(x => x.AuthorId / zero == 1).Skip(0).Take(5).ToListAsync(CancellationToken)
+      );
+
+      AssertDivisionByZeroQueryException(failure);
+   }
+
+   private static void AssertDivisionByZeroQueryException(Exception? failure)
+   {
+      failure.Should().BeOfType<QueryException>();
+      ((QueryException)failure!).Sql.Should().Contain("generated_authors");
+      failure!.InnerException.Should().BeOfType<PostgresException>().Which.SqlState.Should().Be(PostgresErrorCodes.DivisionByZero);
    }
 
    [Fact]
