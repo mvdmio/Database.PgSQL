@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-10-28: The db tool loads a migrations project that uses NuGet packages
+`db cleanup`, `db migrate`, and every other command that loads the migrations project now find that project's NuGet package assemblies. Before, a migrations project with a type that names a package type, such as a class that derives from one, stopped the command with `ReflectionTypeLoadException: Could not load file or assembly`. A class library's build output holds no package assemblies, so the tool now reads them from the project's `.deps.json` and the package folders that restore recorded. An assembly the project does not list still stops the command, so cleanup never deletes the file of a migration it could not load.
+
 ## 2026-10-25: An awaited query that includes a collection throws QueryException
 An awaited query on the Query surface that includes a collection (`Include`, with or without `ThenInclude`, `Skip` or `Take`) now throws `QueryException` with the Postgres error and the SQL when the database rejects it. Before, it threw a `NullReferenceException` that hid the error. The fix is the `linq2db` upgrade from 6.3.0 to 6.5.1.
 

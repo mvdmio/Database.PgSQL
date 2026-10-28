@@ -58,6 +58,7 @@ internal static class ProjectBuilder
       Console.WriteLine("Build succeeded.");
 
       var assemblyPath = FindOutputAssembly(csprojPath);
+      ProjectDependencyResolver.Register(assemblyPath, projectDir);
       return Assembly.LoadFrom(assemblyPath);
    }
 

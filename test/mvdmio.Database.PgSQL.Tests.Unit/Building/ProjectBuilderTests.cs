@@ -72,10 +72,35 @@ public sealed class ProjectBuilderTests : IDisposable
       }
    }
 
+   [Fact]
+   public void BuildAndLoadAssembly_WhenATypeDerivesFromAPackageType_LoadsEveryType()
+   {
+      // A class library's bin/ holds no package assemblies. Without resolving them, GetTypes throws
+      // ReflectionTypeLoadException, and db cleanup cannot discover the project's migrations.
+      var projectDirectory = CreateDirectory("PackageProject");
+      var csprojPath = Path.Combine(projectDirectory, "PackageProject.csproj");
+      File.WriteAllText(
+         csprojPath,
+         $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>{CurrentTargetFramework()}</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup><ItemGroup><PackageReference Include=\"Humanizer.Core\" Version=\"2.14.1\" /></ItemGroup></Project>"
+      );
+      File.WriteAllText(Path.Combine(projectDirectory, "PackageType.cs"), "public class PackageType : Humanizer.Localisation.Formatters.DefaultFormatter { public PackageType() : base(\"en\") { } }");
+
+      var assembly = ProjectBuilder.BuildAndLoadAssembly(csprojPath);
+
+      assembly.GetTypes().Should().ContainSingle(x => x.Name == "PackageType")
+         .Which.BaseType!.FullName.Should().Be("Humanizer.Localisation.Formatters.DefaultFormatter");
+   }
+
    public void Dispose()
    {
       if (Directory.Exists(_tempDirectory))
          Directory.Delete(_tempDirectory, true);
+   }
+
+   private static string CurrentTargetFramework()
+   {
+      var frameworkName = typeof(ProjectBuilder).Assembly.GetCustomAttribute<System.Runtime.Versioning.TargetFrameworkAttribute>()!.FrameworkName;
+      return $"net{frameworkName.Split("Version=v")[^1]}";
    }
 
    private static string ResolveCsprojPath(string projectPath)
