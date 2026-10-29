@@ -91,6 +91,25 @@ public sealed class ProjectBuilderTests : IDisposable
          .Which.BaseType!.FullName.Should().Be("Humanizer.Localisation.Formatters.DefaultFormatter");
    }
 
+   [Fact]
+   public void BuildAndLoadAssembly_WhenTheProjectReferencesANewerVersionOfAToolPackage_LoadsEveryType()
+   {
+      // The tool already carries its own Npgsql. A project on a newer Npgsql must get the tool's copy, because a
+      // second copy of the same assembly cannot load into the default context.
+      var projectDirectory = CreateDirectory("NewerPackageProject");
+      var csprojPath = Path.Combine(projectDirectory, "NewerPackageProject.csproj");
+      File.WriteAllText(
+         csprojPath,
+         $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>{CurrentTargetFramework()}</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup><ItemGroup><PackageReference Include=\"Npgsql\" Version=\"10.0.3\" /></ItemGroup></Project>"
+      );
+      File.WriteAllText(Path.Combine(projectDirectory, "NewerPackageType.cs"), "public class NewerPackageType : Npgsql.NpgsqlException { }");
+
+      var assembly = ProjectBuilder.BuildAndLoadAssembly(csprojPath);
+
+      assembly.GetTypes().Should().ContainSingle(x => x.Name == "NewerPackageType")
+         .Which.BaseType!.FullName.Should().Be("Npgsql.NpgsqlException");
+   }
+
    public void Dispose()
    {
       if (Directory.Exists(_tempDirectory))

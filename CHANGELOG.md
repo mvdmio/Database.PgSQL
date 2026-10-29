@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-10-29: The db tool loads a migrations project on a newer version of one of its own packages
+A migrations project that references a newer version of a package the tool also ships, such as Npgsql 10.0.3, now loads. Before, the command stopped with `FileLoadException: The located assembly's manifest definition does not match the assembly reference`. The project now gets the tool's copy of that package.
+
 ## 2026-10-28: The db tool loads a migrations project that uses NuGet packages
 `db cleanup`, `db migrate`, and every other command that loads the migrations project now find that project's NuGet package assemblies. Before, a migrations project with a type that names a package type, such as a class that derives from one, stopped the command with `ReflectionTypeLoadException: Could not load file or assembly`. A class library's build output holds no package assemblies, so the tool now reads them from the project's `.deps.json` and the package folders that restore recorded. An assembly the project does not list still stops the command, so cleanup never deletes the file of a migration it could not load.
 

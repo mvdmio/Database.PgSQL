@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <PgSqlVersion>0.42.2</PgSqlVersion>
+    <PgSqlVersion>0.42.3</PgSqlVersion>
     <RepositoryUrl>https://github.com/mvdmio/mvdmio.Database.PgSQL</RepositoryUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>

@@ -116,11 +116,35 @@ internal static class ProjectDependencyResolver
 
    private static Assembly? Resolve(AssemblyLoadContext context, AssemblyName name)
    {
+      if (name.Name is null)
+         return null;
+
+      // The tool carries its own copy of some packages, such as Npgsql. A project on another version of one gets
+      // the tool's copy: the default context holds one assembly per name, so a second copy cannot load.
+      var loaded = context.Assemblies.FirstOrDefault(x => string.Equals(x.GetName().Name, name.Name, StringComparison.OrdinalIgnoreCase));
+
+      if (loaded is not null)
+         return loaded;
+
+      if (name.Version is not null)
+      {
+         try
+         {
+            // Without a version, the request binds to the tool's own copy when the tool ships one. A miss raises
+            // this event again for the versionless name, which skips this branch.
+            return context.LoadFromAssemblyName(new AssemblyName(name.Name));
+         }
+         catch (FileNotFoundException)
+         {
+            // The tool has no copy, so the project's own package resolves below.
+         }
+      }
+
       string? path;
 
       lock (_lock)
       {
-         if (name.Name is null || !_assemblyPaths.TryGetValue(name.Name, out path))
+         if (!_assemblyPaths.TryGetValue(name.Name, out path))
             return null;
       }
 
