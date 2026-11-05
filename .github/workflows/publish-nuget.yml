@@ -8,7 +8,8 @@ on:
       - "Directory.Build.props"
   workflow_dispatch:
 
-# Nothing here writes to the repository; the push authenticates with NUGET_API_KEY.
+# Nothing here writes to the repository. Only the publish job can request an OIDC token, which
+# NuGet exchanges for the temporary API key that the push uses.
 permissions:
   contents: read
 
@@ -139,6 +140,9 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # request the OIDC token that NuGet exchanges for a temporary API key
 
     steps:
       - name: Setup .NET
@@ -154,11 +158,17 @@ jobs:
         with:
           name: packages
 
+      - name: NuGet login
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: mvdmio
+
       # --skip-duplicate keeps a re-run against an unchanged PgSqlVersion a harmless no-op.
       # Pushing a .nupkg uploads its sibling .snupkg along with it.
       - name: Push packages
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
           for package in *.nupkg; do
             dotnet nuget push "$package" \
