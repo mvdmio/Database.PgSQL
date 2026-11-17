@@ -13,7 +13,7 @@ internal static class ConsumerProject
    public const string ASSEMBLY_NAME = "PackagingConsumer";
 
    /// <summary>The frameworks the library targets, each of which has to resolve its own <c>lib/</c> folder.</summary>
-   public static readonly string[] TargetFrameworks = ["net8.0", "net9.0", "net10.0"];
+   public static readonly string[] TargetFrameworks = ["net10.0", "net11.0"];
 
    /// <summary>
    ///    Warnings are errors so that the analyzer reporting something the release does not intend fails this test. The

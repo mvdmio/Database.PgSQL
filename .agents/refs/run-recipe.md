@@ -33,7 +33,7 @@ connectionStrings:
 ```
 Then, from `<work>`:
 ```sh
-DOTNET_ROLL_FORWARD=Major dotnet run --project <repo>/src/mvdmio.Database.PgSQL.Tool --framework net10.0 -- migrate latest -e proof
+DOTNET_ROLL_FORWARD=Major dotnet run --project <repo>/src/mvdmio.Database.PgSQL.Tool --framework net11.0 -- migrate latest -e proof
 ```
 Swap in the command under test (`migrate to <id>`, `cleanup`, `pull`). Some sandboxes refuse to run a script whole; the commands above then run one at a time.
 

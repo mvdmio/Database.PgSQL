@@ -8,10 +8,10 @@ PostgreSQL tooling for .NET, in two packages:
   creating and running migrations, exporting schema files, copying data between environments, and cleaning up
   obsolete migrations.
 
-Both target `net8.0`, `net9.0`, and `net10.0`. Use the library on its own, or add the tool when you also want a
+Both target `net10.0` and `net11.0`. Use the library on its own, or add the tool when you also want a
 command-line migration workflow.
 
-The library carries a source generator, so building against it needs the **.NET 8.0.100 SDK or newer** — an older SDK
+The library carries a source generator, so building against it needs the **.NET 10.0.100 SDK or newer** — an older SDK
 warns and then skips the generator, leaving the generated repository types undefined.
 
 ## Install

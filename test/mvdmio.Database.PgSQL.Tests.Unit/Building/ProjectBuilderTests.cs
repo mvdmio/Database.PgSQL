@@ -140,7 +140,7 @@ public sealed class ProjectBuilderTests : IDisposable
       var csprojPath = Path.Combine(projectDirectory, $"{projectName}.csproj");
       File.WriteAllText(
          csprojPath,
-         "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net9.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup></Project>"
+         "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup></Project>"
       );
 
       File.WriteAllText(Path.Combine(projectDirectory, "Class1.cs"), "public class Class1 { }");

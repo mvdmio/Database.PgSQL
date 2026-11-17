@@ -418,4 +418,4 @@ dotnet test test/mvdmio.Database.PgSQL.Tests.Integration.OData/mvdmio.Database.P
   next-page link is the serializer's job and needs a host.
 - Hosting. No controllers, no minimal-API endpoints, no `WebApplicationFactory`. The hosted failure mode above is
   documented, not tested — the in-process suite materializes the queryable itself and so sees a clean exception.
-- Frameworks other than `net10.0`. The library's framework coverage is proven by its own build.
+- Frameworks other than `net11.0`. The library's framework coverage is proven by its own build.

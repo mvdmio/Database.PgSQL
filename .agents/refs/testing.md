@@ -8,12 +8,12 @@ TDD is the expectation: write tests before implementing, and always add/modify t
 
 | Project | TFM | Purpose |
 |---------|-----|---------|
-| `test/mvdmio.Database.PgSQL.Tests.Unit/` | net9.0 | Pure unit tests — no database |
-| `test/mvdmio.Database.PgSQL.Tests.Integration/` | net10.0 | Database tests via Testcontainers |
+| `test/mvdmio.Database.PgSQL.Tests.Unit/` | net11.0 | Pure unit tests — no database |
+| `test/mvdmio.Database.PgSQL.Tests.Integration/` | net11.0 | Database tests via Testcontainers |
 | `test/mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema/` | — | A second assembly with its own migrations/schema, referenced by the integration suite to exercise multi-assembly / multi-scope and embedded-schema scenarios |
-| `test/mvdmio.Database.PgSQL.Tests.Integration.OData/` | net10.0 | OData conformance suite over the query surface — its own container, its own fixtures, and the only project that takes an OData dependency |
-| `test/mvdmio.Database.PgSQL.Analyzers.Tests/` | net9.0 | Roslyn analyzer and source generator tests — drives the generator over a source string and asserts on the diagnostics and emitted source |
-| `test/mvdmio.Database.PgSQL.Tests.Packaging/` | net10.0 | Packs the library, installs the package into a project scaffolded at test time, builds it for all three target frameworks and runs it against a container. The slowest suite, and the only one that references neither the library nor the analyzer — the artifact under test is the `.nupkg` |
+| `test/mvdmio.Database.PgSQL.Tests.Integration.OData/` | net11.0 | OData conformance suite over the query surface — its own container, its own fixtures, and the only project that takes an OData dependency |
+| `test/mvdmio.Database.PgSQL.Analyzers.Tests/` | net11.0 | Roslyn analyzer and source generator tests — drives the generator over a source string and asserts on the diagnostics and emitted source |
+| `test/mvdmio.Database.PgSQL.Tests.Packaging/` | net11.0 | Packs the library, installs the package into a project scaffolded at test time, builds it for both target frameworks and runs it against a container. The slowest suite, and the only one that references neither the library nor the analyzer — the artifact under test is the `.nupkg` |
 
 ## Unit tests
 
@@ -76,4 +76,3 @@ TDD is the expectation: write tests before implementing, and always add/modify t
 - By fully-qualified name (class/namespace substring):
   `dotnet test test/mvdmio.Database.PgSQL.Tests.Integration/mvdmio.Database.PgSQL.Tests.Integration.csproj --filter "FullyQualifiedName~SchemaFirst"`
 - Keep `dotnet` steps sequential — never run build and test (or two test runs) in parallel, to avoid file locks. Before committing, run in order: `dotnet format` → `dotnet build` → `dotnet test`.
-- The Unit and Analyzers projects target net9.0. On a machine without the .NET 9 runtime, prefix the test command with `DOTNET_ROLL_FORWARD=Major` so they run on the newer runtime.

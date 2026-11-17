@@ -48,9 +48,8 @@ public class PackagedGeneratorTests
    }
 
    [Theory]
-   [InlineData("net8.0")]
-   [InlineData("net9.0")]
    [InlineData("net10.0")]
+   [InlineData("net11.0")]
    public void Package_ResolvesALibraryForEveryTargetFramework(string targetFramework)
    {
       _fixture.PackageContents.Should().Contain($"lib/{targetFramework}/mvdmio.Database.PgSQL.dll");
@@ -68,9 +67,8 @@ public class PackagedGeneratorTests
    }
 
    [Theory]
-   [InlineData("net8.0")]
-   [InlineData("net9.0")]
    [InlineData("net10.0")]
+   [InlineData("net11.0")]
    public void Consumer_RunsAGeneratedRepositoryAgainstARealDatabase(string targetFramework)
    {
       var run = _fixture.Runs.Should().ContainKey(targetFramework).WhoseValue;
@@ -91,9 +89,8 @@ public class PackagedGeneratorTests
    ///    something a reader can trust rather than something they have to test.
    /// </summary>
    [Theory]
-   [InlineData("net8.0")]
-   [InlineData("net9.0")]
    [InlineData("net10.0")]
+   [InlineData("net11.0")]
    public void Consumer_RunsTheReadmesOwnRepositorySample(string targetFramework)
    {
       var run = _fixture.Runs.Should().ContainKey(targetFramework).WhoseValue;

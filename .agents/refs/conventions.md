@@ -30,4 +30,4 @@ A comprehensive `.editorconfig` governs formatting. Run `dotnet format` before b
 
 ## Targets
 
-- The library and tool multi-target `net8.0;net9.0;net10.0`. Don't use APIs unavailable on net8.0 without a guard/polyfill (PolySharp is referenced).
+- The library and tool multi-target `net10.0;net11.0`. Don't use APIs unavailable on net10.0 without a guard/polyfill (PolySharp is referenced).

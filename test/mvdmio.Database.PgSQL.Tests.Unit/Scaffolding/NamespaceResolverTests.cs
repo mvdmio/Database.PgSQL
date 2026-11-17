@@ -60,7 +60,7 @@ public sealed class NamespaceResolverTests : IDisposable
 
       File.WriteAllText(
          Path.Combine(projectDirectory, $"{projectName}.csproj"),
-         $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net9.0</TargetFramework>{rootNamespaceElement}</PropertyGroup></Project>"
+         $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework>{rootNamespaceElement}</PropertyGroup></Project>"
       );
 
       return projectDirectory;

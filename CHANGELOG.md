@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-18: Targets net10.0 and net11.0, drops net8.0 and net9.0
+The library and the `db` tool now target `net10.0` and `net11.0`, version 0.44.0. `net8.0` and `net9.0` are no longer supported, so a project on either framework cannot update past 0.43.0. Building against the package now needs the .NET 10.0.100 SDK or newer.
+
 ## 2026-11-17: A migration can run outside a transaction
 A migration can now override `IDbMigration.RunsInTransaction` to return `false`, so a change to a large table no longer holds its locks for the whole migration. Before, the migrator ran every migration in one transaction: the first `ALTER TABLE` kept its lock through the back-fill and the index build, writes from the running app waited for all of it, and `CREATE INDEX CONCURRENTLY` failed with "cannot run inside a transaction block". Now such a migration runs with no transaction, each statement commits at once, and the migrator records the migration only after the whole of it finishes. If it fails partway, the earlier statements stay applied, the migration stays unrecorded, and the next migrate runs it again from the start, so it must be safe to re-run from any point. The member defaults to `true`, so existing migrations run as before.
 

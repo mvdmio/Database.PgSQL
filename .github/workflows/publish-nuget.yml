@@ -32,9 +32,8 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
-            8
-            9
             10
+            11
 
       - name: Verify formatting
         run: dotnet format --verify-no-changes
@@ -91,9 +90,8 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
-            8
-            9
             10
+            11
 
       - name: Download build output
         uses: actions/download-artifact@v8
@@ -156,9 +154,8 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
-            8
-            9
             10
+            11
 
       - name: Download packages
         uses: actions/download-artifact@v8

@@ -10,13 +10,13 @@ The package combines Dapper and Npgsql with a higher-level API for common Postgr
 dotnet add package mvdmio.Database.PgSQL
 ```
 
-Targets `net8.0`, `net9.0`, and `net10.0`.
+Targets `net10.0` and `net11.0`.
 
-**Requires the .NET 8.0.100 SDK or newer to build.** The package carries the source generator that produces
+**Requires the .NET 10.0.100 SDK or newer to build.** The package carries the source generator that produces
 [generated repositories](#generated-repositories), and an SDK older than that cannot load it: the compiler warns
 (`CS9057` or `CS8032`) and then skips the generator without running it, so a `[Table]` class produces nothing and every
 name your code expects from it is undefined. If generated types are missing and you see one of those warnings, the SDK is
-the reason. Everything else in the package works on any SDK that can target `net8.0`.
+the reason. Everything else in the package works on any SDK that can target `net10.0`.
 
 ## What You Can Do With It
 

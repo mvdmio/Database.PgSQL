@@ -1,6 +1,6 @@
 # mvdmio.Database.PgSQL
 
-C# NuGet package wrapping Dapper for PostgreSQL — connections & query execution, transactions, migrations, bulk ops (copy/upsert), and management tasks (schema/table existence). Ships as the `mvdmio.Database.PgSQL` library plus the `mvdmio.Database.PgSQL.Tool` (`db`) CLI. Multi-targets `net8.0;net9.0;net10.0` with `LangVersion=latest`.
+C# NuGet package wrapping Dapper for PostgreSQL — connections & query execution, transactions, migrations, bulk ops (copy/upsert), and management tasks (schema/table existence). Ships as the `mvdmio.Database.PgSQL` library plus the `mvdmio.Database.PgSQL.Tool` (`db`) CLI. Multi-targets `net10.0;net11.0` with `LangVersion=latest`.
 
 ## Essentials
 

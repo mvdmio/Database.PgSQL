@@ -118,9 +118,9 @@ internal static class ProjectBuilder
          .GetCustomAttribute<TargetFrameworkAttribute>();
 
       if (framework?.FrameworkName is null)
-         return "net8.0";
+         return "net10.0";
 
-      // FrameworkName is like ".NETCoreApp,Version=v8.0" -> convert to "net8.0"
+      // FrameworkName is like ".NETCoreApp,Version=v10.0" -> convert to "net10.0"
       var version = framework.FrameworkName.Split("Version=v")[^1];
       return $"net{version}";
    }

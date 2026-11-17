@@ -21,7 +21,7 @@ dotnet tool install mvdmio.Database.PgSQL.Tool
 
 After installation, run the tool as `db`.
 
-Targets `net8.0`, `net9.0`, and `net10.0`.
+Targets `net10.0` and `net11.0`.
 
 ## Quick Start
 
