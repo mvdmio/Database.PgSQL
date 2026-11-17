@@ -3,10 +3,13 @@ using System.Text;
 
 namespace mvdmio.Database.PgSQL.Tests.Packaging.Fixture;
 
-/// <summary>What one child process did: whether it succeeded, and everything it wrote.</summary>
-public sealed record ProcessRun(int ExitCode, string Output)
+/// <summary>
+///    What one child process did: whether it succeeded, and everything it wrote. A child that did not finish in time
+///    carries <paramref name="StoppedBecause" /> and never succeeded.
+/// </summary>
+public sealed record ProcessRun(int ExitCode, string Output, string? StoppedBecause = null)
 {
-   public bool Succeeded => ExitCode == 0;
+   public bool Succeeded => ExitCode == 0 && StoppedBecause is null;
 
    /// <summary>
    ///    A step that never ran, because an earlier one failed. Fails like any other failed step, and says which.
@@ -19,6 +22,9 @@ public sealed record ProcessRun(int ExitCode, string Output)
    /// <summary>The output with the command that produced it, so a failed assertion reads like the console would.</summary>
    public string Report(string what)
    {
+      if (StoppedBecause is not null)
+         return $"{what} {StoppedBecause}{Environment.NewLine}Output so far:{Environment.NewLine}{Output}";
+
       return $"{what} exited with {ExitCode}:{Environment.NewLine}{Output}";
    }
 }
@@ -37,8 +43,22 @@ internal static class Dotnet
    /// </summary>
    private const string ROLL_FORWARD_VARIABLE = "DOTNET_ROLL_FORWARD";
 
-   public static ProcessRun Run(string fileName, IEnumerable<string> arguments, string workingDirectory, IDictionary<string, string?>? environment = null)
+   /// <summary>
+   ///    Node reuse is off for every child process here. MSBuild workers that outlive their build inherit the child's
+   ///    redirected stdout and stderr and keep them open, so the pipes never close and <see cref="Run" /> would wait on
+   ///    them forever. With reuse off, MSBuild stops its workers when the build ends.
+   /// </summary>
+   private const string NODE_REUSE_VARIABLE = "MSBUILDDISABLENODEREUSE";
+
+   private static readonly TimeSpan _defaultTimeout = TimeSpan.FromMinutes(5);
+
+   /// <param name="timeout">
+   ///    One budget, counted from the child's start, for the child to exit and for both its pipes to close. Past it the
+   ///    child's process tree is killed and the returned run has failed.
+   /// </param>
+   public static ProcessRun Run(string fileName, IEnumerable<string> arguments, string workingDirectory, IDictionary<string, string?>? environment = null, TimeSpan? timeout = null)
    {
+      var limit = timeout ?? _defaultTimeout;
       var startInfo = new ProcessStartInfo(fileName)
       {
          WorkingDirectory = workingDirectory,
@@ -53,6 +73,7 @@ internal static class Dotnet
       }
 
       startInfo.Environment[ROLL_FORWARD_VARIABLE] = "LatestMajor";
+      startInfo.Environment[NODE_REUSE_VARIABLE] = "1";
 
       if (environment is not null)
       {
@@ -64,15 +85,40 @@ internal static class Dotnet
 
       using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Could not start '{fileName}'.");
 
-      // Read both streams before waiting: a child filling a pipe buffer while nothing drains it deadlocks, and an SDK
-      // build writes more than enough to do that.
+      // Read both streams while waiting: a child filling a pipe buffer while nothing drains it deadlocks, and an SDK
+      // build writes more than enough to do that. Into one shared buffer as it arrives, so that what a child wrote
+      // before it was stopped can still be reported.
       var output = new StringBuilder();
-      var standardOutput = process.StandardOutput.ReadToEndAsync();
-      var standardError = process.StandardError.ReadToEndAsync();
+      var finished = Task.WhenAll(Drain(process.StandardOutput, output), Drain(process.StandardError, output), process.WaitForExitAsync());
 
-      process.WaitForExit();
-      output.Append(standardOutput.GetAwaiter().GetResult()).Append(standardError.GetAwaiter().GetResult());
+      if (finished.Wait(limit))
+         return new ProcessRun(process.ExitCode, output.ToString());
 
-      return new ProcessRun(process.ExitCode, output.ToString());
+      // A child that already exited has nothing left to kill: only a process it left behind is holding the pipes, and
+      // that one is outside the tree.
+      if (!process.HasExited)
+         process.Kill(entireProcessTree: true);
+
+      var commandLine = string.Join(' ', startInfo.ArgumentList.Prepend(fileName));
+
+      // The drains are abandoned here, still reading; disposing the process fails them, and nothing awaits them.
+      lock (output)
+      {
+         return new ProcessRun(-1, output.ToString(), $"did not finish within {limit.TotalSeconds:0.#} seconds and was stopped: {commandLine}");
+      }
+   }
+
+   private static async Task Drain(StreamReader reader, StringBuilder output)
+   {
+      var chunk = new char[4096];
+      int read;
+
+      while ((read = await reader.ReadAsync(chunk)) > 0)
+      {
+         lock (output)
+         {
+            output.Append(chunk, 0, read);
+         }
+      }
    }
 }

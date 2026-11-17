@@ -64,6 +64,7 @@ TDD is the expectation: write tests before implementing, and always add/modify t
 - Deliberately references nothing from `src/`: a project reference is what made a package shipping without its source generator invisible, since every other suite sees the analyzer that way and none of them looks at the package.
 - The library is packed under a run-unique prerelease version, so no stale copy can satisfy the consumer's reference. Note that packing passes `-p:GeneratePackageOnBuild=false`: with that property on — which is how the library is configured — NuGet's `Pack` target does not depend on `Build`, so `dotnet pack` silently packs whatever is already in `bin/`.
 - Add to `Fixture/ConsumerProject.cs`'s single table definition rather than adding another consumer: one build per framework is what keeps this suite affordable.
+- Its child processes run with MSBuild node reuse off (orphaned MSBuild workers keep the redirected pipes open and stall the run) and stop after 5 minutes with a report naming the command.
 
 ## Running tests
 

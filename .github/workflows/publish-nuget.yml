@@ -118,12 +118,16 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      # Three times the longest green run (36 s), rounded up and floored at 5 minutes.
       - name: Unit & analyzer tests
+        timeout-minutes: 5
         run: |
           dotnet test test/mvdmio.Database.PgSQL.Tests.Unit --no-build -c Release
           dotnet test test/mvdmio.Database.PgSQL.Analyzers.Tests --no-build -c Release
 
+      # Three times the longest green run (70 s), rounded up and floored at 5 minutes.
       - name: Integration tests
+        timeout-minutes: 5
         run: |
           dotnet test test/mvdmio.Database.PgSQL.Tests.Integration --no-build -c Release
           dotnet test test/mvdmio.Database.PgSQL.Tests.Integration.OData --no-build -c Release
@@ -132,7 +136,10 @@ jobs:
       # test assembly only: the test itself runs `dotnet pack` on the library, under a run-unique prerelease version, and
       # installs the result into a project it scaffolds — so the guarantee that the generator ships is checked here, on
       # the machine that publishes, rather than only on a maintainer's. Needs the network for the consumer's restore.
+      # The test's own child processes stop after 5 minutes each with a report; this 10 is only the backstop for a hang
+      # outside them, such as the container start or the test host.
       - name: Packaging test
+        timeout-minutes: 10
         run: dotnet test test/mvdmio.Database.PgSQL.Tests.Packaging --no-build -c Release
 
   publish:
