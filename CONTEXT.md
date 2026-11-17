@@ -5,7 +5,7 @@ Glossary for the PostgreSQL data-access and migration library. Defines the domai
 ## Language
 
 **Migration**:
-A single, ordered change to the database schema or data, implemented as an `IDbMigration`. Identified by its **Identifier** and grouped within a **Scope**.
+A single, ordered change to the database schema or data, implemented as an `IDbMigration`. Identified by its **Identifier** and grouped within a **Scope**. Runs in one transaction with its history row unless it opts out with `RunsInTransaction`, in which case each of its statements commits on its own and the history row is written only after the whole migration succeeds.
 _Avoid_: Script, change-set, upgrade.
 
 **Identifier**:
