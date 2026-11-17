@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-17: A migration can run outside a transaction
+A migration can now override `IDbMigration.RunsInTransaction` to return `false`, so a change to a large table no longer holds its locks for the whole migration. Before, the migrator ran every migration in one transaction: the first `ALTER TABLE` kept its lock through the back-fill and the index build, writes from the running app waited for all of it, and `CREATE INDEX CONCURRENTLY` failed with "cannot run inside a transaction block". Now such a migration runs with no transaction, each statement commits at once, and the migrator records the migration only after the whole of it finishes. If it fails partway, the earlier statements stay applied, the migration stays unrecorded, and the next migrate runs it again from the start, so it must be safe to re-run from any point. The member defaults to `true`, so existing migrations run as before.
+
 ## 2026-10-29: The db tool loads a migrations project on a newer version of one of its own packages
 A migrations project that references a newer version of a package the tool also ships, such as Npgsql 10.0.3, now loads. Before, the command stopped with `FileLoadException: The located assembly's manifest definition does not match the assembly reference`. The project now gets the tool's copy of that package.
 

@@ -37,6 +37,21 @@ public interface IDbMigration
    string Scope => GetType().Assembly.GetName().Name ?? throw new InvalidOperationException($"Cannot determine default scope for migration '{GetType().FullName}': the declaring assembly has no simple name. Override {nameof(Scope)} explicitly.");
 
    /// <summary>
+   ///    Whether the migrator runs this migration, together with its history row, in one transaction. Defaults to
+   ///    <c>true</c>: a failing migration rolls back as a whole.
+   ///    Override this to return <c>false</c> to run the migration with no transaction open, so each statement
+   ///    commits as soon as it finishes and releases its locks then (needed for batched back-fills and for
+   ///    <c>CREATE INDEX CONCURRENTLY</c>). The migrator then records the migration only after <see cref="UpAsync" />
+   ///    returns without an error.
+   /// </summary>
+   /// <remarks>
+   ///    A migration that runs outside a transaction must give the same result when run again from its first
+   ///    statement: a failure partway leaves the earlier statements applied and the migration unrecorded, so the next
+   ///    migrate runs it again from the start.
+   /// </remarks>
+   bool RunsInTransaction => true;
+
+   /// <summary>
    ///    Method for executing the migration on the database.
    /// </summary>
    /// <param name="db">The db-connection to execute the migration on.</param>

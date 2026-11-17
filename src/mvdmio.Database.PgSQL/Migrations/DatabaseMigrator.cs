@@ -284,12 +284,18 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    {
       try
       {
-         await _connection.InTransactionAsync(async () =>
+         // The row is written only after the whole migration succeeded, so a failure partway leaves it unrecorded
+         // and the next migrate runs it again. Without a transaction, each statement commits at once.
+         async Task UpAndRecordAsync()
          {
             await migration.UpAsync(_connection);
             await InsertMigrationRowAsync(migration.Identifier, migration.Name, migration.Scope, cancellationToken);
          }
-         );
+
+         if (migration.RunsInTransaction)
+            await _connection.InTransactionAsync(UpAndRecordAsync);
+         else
+            await UpAndRecordAsync();
       }
       catch (Exception exception)
       {

@@ -1223,8 +1223,9 @@ public class _202602161430_AddUsersTable : IDbMigration
 }
 ```
 
-Each migration runs in its own transaction, so a failing migration rolls back on its own. The companion
-[CLI tool](#cli-tool) scaffolds these files with `db migration create <name>`.
+Each migration runs in its own transaction, so a failing migration rolls back on its own, unless it opts out with
+[`RunsInTransaction`](#migrations-outside-a-transaction). The companion [CLI tool](#cli-tool) scaffolds these files
+with `db migration create <name>`.
 
 ### Running Migrations
 
@@ -1249,6 +1250,64 @@ Besides `MigrateDatabaseToLatestAsync`, the migrator offers:
 - `RetrieveAlreadyExecutedMigrationsAsync()` — read the migration history
 - `RunAsync(migration)` — run a single migration and record it
 - `IsDatabaseEmptyAsync()` — check whether any migration has ever been applied
+
+### Migrations Outside a Transaction
+
+A migration that changes a large table, one the running app keeps writing to, should not run in one transaction:
+PostgreSQL keeps every lock a statement takes until the transaction ends, so the app's writes wait for the whole
+migration, and `CREATE INDEX CONCURRENTLY` is refused inside a transaction. Override `RunsInTransaction` to return
+`false` and the migrator runs the migration on its own connection with no transaction open:
+
+```csharp
+public class _202611171000_BackfillRequestExportCursor : IDbMigration
+{
+   public bool RunsInTransaction => false;
+
+   public async Task UpAsync(DatabaseConnection db)
+   {
+      await db.Dapper.ExecuteAsync("ALTER TABLE public.requests ADD COLUMN IF NOT EXISTS export_cursor BIGINT NULL");
+
+      // Back-fill in batches; each batch commits at once and picks only rows that are still unfilled.
+      int updated;
+      do
+      {
+         updated = await db.Dapper.ExecuteAsync(
+            """
+            UPDATE public.requests SET export_cursor = request_id
+            WHERE request_id IN (SELECT request_id FROM public.requests WHERE export_cursor IS NULL LIMIT 5000)
+            """
+         );
+      } while (updated > 0);
+
+      // Drop first: a failed concurrent build leaves an invalid index that "IF NOT EXISTS" would skip on the re-run.
+      await db.Dapper.ExecuteAsync("DROP INDEX CONCURRENTLY IF EXISTS public.ix_requests_export_cursor");
+      await db.Dapper.ExecuteAsync("CREATE INDEX CONCURRENTLY ix_requests_export_cursor ON public.requests (export_cursor)");
+   }
+}
+```
+
+What changes when `RunsInTransaction` is `false`:
+
+- Each statement commits as soon as it finishes and releases its locks then, so a batched back-fill holds a lock for
+  one batch at a time.
+- The migrator records the migration in `mvdmio.migrations` only after the whole of `UpAsync` returns without an
+  error.
+- If it fails partway, the statements that already ran stay applied, the migration is not recorded, and the next
+  migrate runs it again from its first statement. **Write it so a second run from any stopping point gives the same
+  result.**
+- It still runs on the migrator's connection, under the same [advisory lock](#concurrent-startup), so two instances
+  starting at once never run it in parallel. It may open and commit transactions of its own through the connection's
+  transaction methods, to group a few statements that must apply together.
+- If you call the migrator inside a transaction of your own, the migration joins that transaction, as every migration
+  does, and `CREATE INDEX CONCURRENTLY` then fails with PostgreSQL's own error.
+
+The standard way to change a large table:
+
+- **Back-fill in batches** that each pick only rows still unfilled, so a re-run picks up where the failed run stopped.
+- **Build an index** with `DROP INDEX CONCURRENTLY IF EXISTS`, then `CREATE INDEX CONCURRENTLY`. A failed concurrent
+  build leaves an invalid index behind; a plain `CREATE INDEX CONCURRENTLY IF NOT EXISTS` would skip it on the re-run.
+- **Work that can last longer than the deploy waits for the app to start** does not belong in a migration, because
+  migrations run at app start. Put it in an app job.
 
 ### Migration Scopes
 
@@ -1286,7 +1345,8 @@ in identifier order together with every other pending migration, so you never re
 migration by hand. Before running it, the migrator logs a warning naming its scope, identifier and name, and the
 scope's watermark.
 
-An out-of-order migration runs like any other, in its own transaction together with its row. If it conflicts with the
+An out-of-order migration runs like any other, in its own transaction together with its row (unless it sets
+[`RunsInTransaction`](#migrations-outside-a-transaction) to `false`). If it conflicts with the
 current schema, the run stops with a `MigrationException` naming it; the migrations that ran before it stay
 committed.
 
