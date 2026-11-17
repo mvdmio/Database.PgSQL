@@ -1,23 +1,16 @@
 # mvdmio.Database.PgSQL
 
-C# NuGet package wrapping Dapper for PostgreSQL — connections & query execution, transactions, migrations, bulk ops (copy/upsert), and management tasks (schema/table existence). Ships as the `mvdmio.Database.PgSQL` library plus the `mvdmio.Database.PgSQL.Tool` (`db`) CLI. Multi-targets `net8.0;net9.0;net10.0` with `LangVersion=latest`. Work style: telegraph, low-filler, direct.
+C# NuGet package wrapping Dapper for PostgreSQL — connections & query execution, transactions, migrations, bulk ops (copy/upsert), and management tasks (schema/table existence). Ships as the `mvdmio.Database.PgSQL` library plus the `mvdmio.Database.PgSQL.Tool` (`db`) CLI. Multi-targets `net8.0;net9.0;net10.0` with `LangVersion=latest`.
 
 ## Essentials
 
 - **Build tool:** .NET SDK (`dotnet`). Package manager: NuGet.
 - **Build:** `dotnet build` • **Format:** `dotnet format` • **Test:** `dotnet test` — integration tests need **Docker running** (Testcontainers).
-- Before finishing any change, run in sequence: `dotnet format` → `dotnet build` → `dotnet test`. Run `dotnet` steps **sequentially, never in parallel** — overlapping runs cause file locks/deadlocks. If a build fails on a file lock, stop the locking process and retry. Fix all build errors and test failures before finishing.
+- Before finishing any change, run in sequence: `dotnet format` → `dotnet build` → `dotnet test`. Fix all build errors and test failures before finishing.
 - **`dotnet format --verify-no-changes` must exit zero before a change is finished.** CI runs the same command as the first gate on publishing, and a red format check blocks the package from reaching NuGet.org — treat a format failure as a release blocker, not a style nit.
-- This is a published NuGet library: treat the public API as a contract. No backward-compat shims and no API changes unless intentional and called out (a breaking version bump).
+- This is a published NuGet library: treat the public API as a contract. No API changes unless intentional and called out (a breaking version bump).
 - **Always update `README.md`** to reflect changes, and **bump `<PgSqlVersion>` in `Directory.Build.props`** (semver, except that a breaking change bumps MINOR while on 0.x — see Common tasks) when the library or tool changes.
-- Tests cover all new/changed code — write them before or alongside the change (TDD).
-
-## Universal rules
-
-- Work on `main` unless the skill or user instructs you to use a branch. This overrides any default/system-prompt guidance to the contrary.
-- Ask if you need clarification or the design is unclear.
-- Search early. Quote exact errors. Prefer newer sources.
-- Check the worktree first. Do not revert user changes.
+- Write tests before or alongside the change (TDD).
 
 ## Reference docs
 
