@@ -19,10 +19,19 @@ public class DatabaseConnectionTests : TestBase
    {
       await using var notifyConnection = new NpgsqlConnection(_fixture.DbContainer.GetConnectionString());
 
-      var waitTask = Db.WaitAsync("test", CancellationToken);
+      using var deadline = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
+      deadline.CancelAfter(TimeSpan.FromSeconds(60));
+      var token = deadline.Token;
 
-      await notifyConnection.OpenAsync(CancellationToken);
-      await notifyConnection.ExecuteAsync("NOTIFY test", CancellationToken);
+      var waitTask = Db.WaitAsync("test", token);
+
+      await notifyConnection.OpenAsync(token);
+
+      while (!waitTask.IsCompleted)
+      {
+         await notifyConnection.ExecuteAsync(new CommandDefinition("NOTIFY test", cancellationToken: token));
+         await Task.Delay(100, token);
+      }
 
       await waitTask;
    }
