@@ -20,6 +20,7 @@ TDD is the expectation: write tests before implementing, and always add/modify t
 - Location: `test/mvdmio.Database.PgSQL.Tests.Unit/`.
 - No database, no Docker — fast. Favor extracting pure logic into testable units (e.g. `SchemaFileParser`) and covering it here.
 - Assert with `AwesomeAssertions`.
+- The project builder tests run real `dotnet build`s, and one of them forces fresh build workers with a handshake salt (`MSBUILDNODEHANDSHAKESALT`).
 
 ## Integration tests
 

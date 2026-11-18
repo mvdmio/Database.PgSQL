@@ -6,6 +6,8 @@ namespace mvdmio.Database.PgSQL.Tool.Building;
 
 internal static class ProjectBuilder
 {
+   private const string DISABLE_BUILD_SERVERS_FLAG = "--disable-build-servers";
+
    public static Assembly BuildAndLoadAssembly(string projectPath)
    {
       var csprojPath = ResolveCsprojPath(projectPath);
@@ -13,12 +15,12 @@ internal static class ProjectBuilder
 
       Console.WriteLine($"Building project: {csprojPath}");
 
-      var process = new Process
+      using var process = new Process
       {
          StartInfo = new ProcessStartInfo
          {
             FileName = "dotnet",
-            Arguments = $"build \"{csprojPath}\" --nologo --verbosity quiet",
+            Arguments = $"build \"{csprojPath}\" {DISABLE_BUILD_SERVERS_FLAG} --nologo --verbosity quiet",
             WorkingDirectory = projectDir,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -29,10 +31,13 @@ internal static class ProjectBuilder
 
       process.Start();
 
-      var stdout = process.StandardOutput.ReadToEnd();
-      var stderr = process.StandardError.ReadToEnd();
+      var stdoutTask = process.StandardOutput.ReadToEndAsync();
+      var stderrTask = process.StandardError.ReadToEndAsync();
 
       process.WaitForExit();
+
+      var stdout = stdoutTask.GetAwaiter().GetResult();
+      var stderr = stderrTask.GetAwaiter().GetResult();
 
       if (process.ExitCode != 0)
       {

@@ -73,6 +73,27 @@ public sealed class ProjectBuilderTests : IDisposable
    }
 
    [Fact]
+   public async Task BuildAndLoadAssembly_WhenTheBuildStartsFreshWorkers_Returns()
+   {
+      var projectDirectory = CreateDirectory("FreshWorkersProject");
+      var csprojPath = CreateProject(projectDirectory, "FreshWorkersProject");
+      var originalSalt = Environment.GetEnvironmentVariable("MSBUILDNODEHANDSHAKESALT");
+      Environment.SetEnvironmentVariable("MSBUILDNODEHANDSHAKESALT", Guid.NewGuid().ToString("N"));
+
+      try
+      {
+         var assembly = await Task.Run(() => ProjectBuilder.BuildAndLoadAssembly(csprojPath), TestContext.Current.CancellationToken)
+            .WaitAsync(TimeSpan.FromMinutes(3), TestContext.Current.CancellationToken);
+
+         assembly.GetTypes().Should().ContainSingle(x => x.Name == "Class1");
+      }
+      finally
+      {
+         Environment.SetEnvironmentVariable("MSBUILDNODEHANDSHAKESALT", originalSalt);
+      }
+   }
+
+   [Fact]
    public void BuildAndLoadAssembly_WhenATypeDerivesFromAPackageType_LoadsEveryType()
    {
       var projectDirectory = CreateDirectory("PackageProject");
