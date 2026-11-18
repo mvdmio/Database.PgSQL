@@ -9,11 +9,6 @@ using Testcontainers.PostgreSql;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.Migrations;
 
-/// <summary>
-///    Tests that a migration can run outside a transaction (<see cref="IDbMigration.RunsInTransaction" /> is
-///    <c>false</c>). These tests use their own PostgreSQL container and independent connections (not the
-///    rolled-back <see cref="Fixture.TestBase" />, whose transaction would hide the behaviour under test).
-/// </summary>
 public class NonTransactionalMigrationTests : IAsyncLifetime
 {
    private const long CREATE_TABLE_IDENTIFIER = 202601010001;
@@ -203,10 +198,6 @@ public class NonTransactionalMigrationTests : IAsyncLifetime
       return identifiers.ToArray();
    }
 
-   /// <summary>
-   ///    Waits until the migration under test signals, or fails fast with the migrator's own error when the run
-   ///    ends before it ever signals. The wait is bounded so a hung run fails the test instead of hanging it.
-   /// </summary>
    private static async Task WaitForSignalAsync(TaskCompletionSource signal, Task migrationRun)
    {
       var finished = await Task.WhenAny(signal.Task, migrationRun).WaitAsync(TimeSpan.FromSeconds(60), CancellationToken);
@@ -284,8 +275,7 @@ public class NonTransactionalMigrationTests : IAsyncLifetime
       }
    }
 
-   // These helpers set Identifier/Name/Scope explicitly, so the class-name-format analyzer does not apply.
-#pragma warning disable PGSQL0001
+#pragma warning disable PGSQL0001 // These helpers set Identifier/Name/Scope explicitly, so the class-name-format analyzer does not apply.
    private sealed class TestMigration(long identifier, string name, bool runsInTransaction, Func<DatabaseConnection, Task> up) : IDbMigration
    {
       public long Identifier => identifier;

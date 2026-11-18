@@ -4,15 +4,11 @@ using System.Collections.Immutable;
 
 namespace mvdmio.Database.PgSQL.Analyzers;
 
-/// <summary>
-///    Generates CRUD repository types for classes marked with <c>TableAttribute</c>.
-/// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class TableRepositoryGenerator : IIncrementalGenerator
 {
    private const string TABLE_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.TableAttribute";
 
-   /// <inheritdoc/>
    public void Initialize(IncrementalGeneratorInitializationContext context)
    {
       var tableDefinitions = context.SyntaxProvider.ForAttributeWithMetadataName(
@@ -38,8 +34,6 @@ public sealed class TableRepositoryGenerator : IIncrementalGenerator
          productionContext.AddSource($"{HintNameFor(result.Model)}.Repository.g.cs", source);
       });
 
-      // Relations are resolved here rather than per table, because a relation names another table definition and the
-      // per-table output only ever sees its own.
       context.RegisterSourceOutput(compilationAndDefinitions, static (productionContext, tuple) =>
       {
          var compilation = tuple.Left;

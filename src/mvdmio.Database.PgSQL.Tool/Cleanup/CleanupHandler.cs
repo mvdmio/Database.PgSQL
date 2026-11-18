@@ -6,9 +6,6 @@ using mvdmio.Database.PgSQL.Tool.Pull;
 
 namespace mvdmio.Database.PgSQL.Tool.Cleanup;
 
-/// <summary>
-///    Orchestrates the db cleanup workflow.
-/// </summary>
 internal sealed class CleanupHandler
 {
    private readonly MigrationProjectLoader _projectLoader;
@@ -53,8 +50,6 @@ internal sealed class CleanupHandler
       var migrationsDirectory = ToolPathResolver.GetMigrationsDirectoryPath(config);
       Directory.CreateDirectory(schemasDirectory);
 
-      // Build the project before touching any environment, so a build failure rewrites no schema file and
-      // deletes nothing.
       var project = _projectLoader.Load(ToolPathResolver.GetProjectPath(config));
       var environments = new List<CleanupEnvironment>();
 
@@ -74,10 +69,6 @@ internal sealed class CleanupHandler
       ApplyPlan(plan);
    }
 
-   /// <summary>
-   ///    Rewrites the environment's schema file and reads what cleanup needs from it. Returns
-   ///    <see langword="null" /> when the schema export fails, after reporting the error.
-   /// </summary>
    private async Task<CleanupEnvironment?> PullEnvironmentAsync(
       ToolConfiguration config,
       string environmentName,
@@ -109,15 +100,11 @@ internal sealed class CleanupHandler
       foreach (var warning in schemaResult.Warnings)
          _reporter.WriteInfo($"  Warning: {warning}");
 
-      // A schema may carry one version line per scope; the lowest one is the conservative bound
-      // for deleting migration files (anything below it is baked into every scope's baseline).
       var migrationInfos = SchemaFileParser.ParseMigrationVersion(script);
       var lowestMigrationInfo = migrationInfos.Count == 0
          ? (SchemaFileMigrationInfo?)null
          : migrationInfos.MinBy(x => x.Identifier);
 
-      // Rows are read as recorded, not backfilled: a row without a scope counts toward nothing, which can
-      // only keep more files.
       await using var runtime = _runtimeFactory.Create(connectionString, environmentName, project);
       var executedMigrations = await runtime.RetrieveRecordedMigrationsAsync(cancellationToken);
 

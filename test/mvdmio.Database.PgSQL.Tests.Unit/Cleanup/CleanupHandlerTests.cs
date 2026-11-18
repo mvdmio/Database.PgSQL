@@ -153,9 +153,6 @@ public class CleanupHandlerTests : IDisposable
       }
    }
 
-   /// <summary>
-   ///    Every environment's schema header names the same lowest migration, so the deletion bound is 202602170000.
-   /// </summary>
    private sealed class FakeSchemaExportService : SchemaExportService
    {
       public List<string> ConnectionStrings { get; } = [];

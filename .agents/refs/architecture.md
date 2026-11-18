@@ -26,7 +26,8 @@ mvdmio.Database.PgSQL/
 │   │   ├── Relations/                      # RelationDefinition<TDeclaring, TTarget> and RelationKey
 │   │   └── DatabaseConnection.cs           # Main entry point
 │   ├── mvdmio.Database.PgSQL.Tool/         # CLI tool — `dotnet tool` command `db`
-│   └── mvdmio.Database.PgSQL.Analyzers/    # Roslyn analyzer (netstandard2.0, ships in the package)
+│   ├── mvdmio.Database.PgSQL.Analyzers/    # Roslyn analyzer (netstandard2.0, ships in the package)
+│   └── mvdmio.Database.PgSQL.Lint/         # MVDM0053 comment rule (netstandard2.0, never packed)
 ├── test/
 │   ├── mvdmio.Database.PgSQL.Tests.Unit/
 │   ├── mvdmio.Database.PgSQL.Tests.Integration/
@@ -37,6 +38,7 @@ mvdmio.Database.PgSQL/
 ├── docs/adr/                               # Architecture decision records
 ├── CONTEXT.md                              # Domain glossary
 ├── Directory.Build.props                   # Shared version (PgSqlVersion) + repo metadata
+├── Directory.Build.targets                 # Gives every project but Lint the comment rule as an analyzer-only reference
 ├── .github/workflows/publish-nuget.yml     # CI/CD
 └── README.md
 ```
@@ -76,3 +78,4 @@ The analyzer project is referenced by the library as an analyzer and is packed i
 | `src/mvdmio.Database.PgSQL/Migrations/Interfaces/IDbMigration.cs` | Migration interface |
 | `src/mvdmio.Database.PgSQL/Connectors/Schema/SchemaExtractor.cs` | Schema script generation (header + DDL) |
 | `Directory.Build.props` | Single source of the package version |
+| `Directory.Build.targets` | Wires the `mvdmio.Database.PgSQL.Lint` comment rule into every other project |

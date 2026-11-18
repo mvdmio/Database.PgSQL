@@ -3,10 +3,6 @@ using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>
-///    A table definition that relates to itself in both directions and to another table, so that a hierarchy and an
-///    ordinary parent-to-children relation are both observable.
-/// </summary>
 [Table("public.generated_authors")]
 public partial class AuthorTable
 {

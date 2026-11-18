@@ -3,9 +3,6 @@ using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
 
-/// <summary>
-///    Command: db cleanup
-/// </summary>
 internal static class CleanupCommand
 {
    public static Command Create()

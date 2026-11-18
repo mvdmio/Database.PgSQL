@@ -3,11 +3,6 @@ using mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData;
 
-/// <summary>
-///    One test per OData query option, asserting both the rows returned and the shape of the SQL sent. The SQL is not
-///    an implementation detail here: column narrowing, <c>LIMIT</c>/<c>OFFSET</c>, an aggregate count and
-///    parameterization cannot be told apart from a correct row set any other way.
-/// </summary>
 public class QueryOptionConformanceTests : SampleConformanceTestBase
 {
    public QueryOptionConformanceTests(ODataTestFixture fixture)
@@ -24,7 +19,6 @@ public class QueryOptionConformanceTests : SampleConformanceTestBase
       sql.Should().Contain("WHERE");
       sql.Should().Contain(".tier");
 
-      // Parameterized rather than inlined, so PostgreSQL can reuse the plan.
       sql.Should().NotContain("'gold'");
 
       (await NamesAsync(applied)).Should().BeEquivalentTo("alice", "carol");
@@ -71,8 +65,6 @@ public class QueryOptionConformanceTests : SampleConformanceTestBase
 
       applied.TotalCount.Should().Be(4L);
 
-      // OData resolves the count while applying the options, so the statement it just sent is the count itself: an
-      // aggregate that selected no column, rather than a materialized row set counted in memory.
       var countSql = applied.LastSql()!.ToUpperInvariant();
       countSql.Should().Contain("COUNT(");
       countSql.Should().NotContain("NAME");
@@ -89,11 +81,9 @@ public class QueryOptionConformanceTests : SampleConformanceTestBase
    {
       var sql = Apply("$select=Name,Rating").RenderSql();
 
-      // Dot-qualified so that ".name" cannot be satisfied by "nickname", without pinning the provider's table alias.
       sql.Should().ContainAll(".name", ".rating");
       sql.Should().NotContainAny(".nickname", ".amount", ".created_at", ".tier");
 
-      // OData adds the key to every projection so the entity stays addressable; it does not add the rest of the row.
       sql.Should().Contain(".sample_id");
    }
 
@@ -155,7 +145,6 @@ public class QueryOptionConformanceTests : SampleConformanceTestBase
    {
       var applied = Apply("$apply=filter(IsActive eq true)/groupby((Tier), aggregate($count as Rows))");
 
-      // Both stages reached the database in one statement: the filter as a WHERE, the grouping as a GROUP BY.
       applied.RenderSql().Should().ContainAll("WHERE", "GROUP BY");
 
       var rows = applied.ProjectedRows();

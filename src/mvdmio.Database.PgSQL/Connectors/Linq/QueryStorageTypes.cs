@@ -3,19 +3,6 @@ using NpgsqlTypes;
 
 namespace mvdmio.Database.PgSQL.Connectors.Linq;
 
-/// <summary>
-///    Translates a column's storage claim into the data type the query surface's provider understands.
-/// </summary>
-/// <remarks>
-///    A claim is spelled with Npgsql's own <see cref="NpgsqlDbType" />, because on the Dapper surface the claim and the
-///    wire representation are the same value and there is nothing to translate. Only the provider needs this table, and
-///    only for the members it can represent — a claim absent from it is honoured on the Dapper surface and left unstated
-///    here, which is what <c>PGSQL0024</c> warns about at build time.
-///    <para>
-///       The analyzer decides whether to warn from its own copy of which members are listed here. It cannot reference
-///       this assembly, so the two are kept in step by hand: adding an entry here means adding the member there.
-///    </para>
-/// </remarks>
 internal static class QueryStorageTypes
 {
    private static readonly Dictionary<NpgsqlDbType, DataType> _dataTypes = new()
@@ -46,14 +33,10 @@ internal static class QueryStorageTypes
       [NpgsqlDbType.Xml] = DataType.Xml
    };
 
-   /// <summary>
-   ///    The provider data type a claim corresponds to, or <see langword="null" /> when the provider cannot represent it.
-   /// </summary>
    public static DataType? DataTypeFor(NpgsqlDbType storedAs)
    {
       return _dataTypes.TryGetValue(storedAs, out var dataType) ? dataType : null;
    }
 
-   /// <summary>Every claim this table can represent, which is what the analyzer's copy has to match.</summary>
    public static IEnumerable<NpgsqlDbType> Representable => _dataTypes.Keys;
 }

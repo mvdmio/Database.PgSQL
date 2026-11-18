@@ -2,16 +2,8 @@ using System.Xml.Linq;
 
 namespace mvdmio.Database.PgSQL.Tool.Scaffolding;
 
-/// <summary>
-///    Resolves the namespace for a generated migration file by inspecting the nearest .csproj.
-/// </summary>
 internal static class NamespaceResolver
 {
-   /// <summary>
-   ///    Resolves the namespace for a migration file in the given output directory.
-   /// </summary>
-   /// <param name="migrationsDirectory">The absolute path to the migrations output directory.</param>
-   /// <returns>The resolved namespace string.</returns>
    public static string Resolve(string migrationsDirectory)
    {
       var csprojPath = FindNearestCsproj(migrationsDirectory) ?? throw new InvalidOperationException(
@@ -22,13 +14,11 @@ internal static class NamespaceResolver
       var projectDir = Path.GetDirectoryName(csprojPath)!;
       var rootNamespace = ReadRootNamespace(csprojPath);
 
-      // Compute the relative path from the project directory to the migrations directory
       var relativePath = Path.GetRelativePath(projectDir, migrationsDirectory);
 
       if (relativePath == ".")
          return rootNamespace;
 
-      // Convert path separators to namespace separators
       var namespaceSuffix = relativePath
          .Replace(Path.DirectorySeparatorChar, '.')
          .Replace(Path.AltDirectorySeparatorChar, '.');
@@ -61,7 +51,6 @@ internal static class NamespaceResolver
       if (rootNamespaceElement is not null)
          return rootNamespaceElement.Value;
 
-      // Derive from the project file name (e.g. MyApp.csproj -> MyApp)
       return Path.GetFileNameWithoutExtension(csprojPath);
    }
 }

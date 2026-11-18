@@ -1,8 +1,5 @@
 namespace mvdmio.Database.PgSQL.Tool.Configuration;
 
-/// <summary>
-///    Resolves absolute tool paths from configuration.
-/// </summary>
 internal static class ToolPathResolver
 {
    public static string GetProjectPath(ToolConfiguration config)

@@ -31,7 +31,6 @@ public class QueryTranslationBoundaryTests
    [Fact]
    public void Execute_WhenTheFailureSentNoSqlAtAll_DoesNotReportThePreviousQuerysSql()
    {
-      // A failure before the command was built — a dropped connection, say — leaves the previous query's SQL behind.
       var source = new LinqQuerySource(new object(), () => throw new NotSupportedException(), () => "SELECT * FROM the_previous_query");
 
       var failure = Assert.Throws<QueryException>(

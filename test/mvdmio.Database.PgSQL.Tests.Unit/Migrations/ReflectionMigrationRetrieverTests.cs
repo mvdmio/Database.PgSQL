@@ -4,10 +4,6 @@ using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers;
 
 namespace mvdmio.Database.PgSQL.Tests.Unit.Migrations;
 
-/// <summary>
-///    Tests that <see cref="ReflectionMigrationRetriever" /> only instantiates concrete migration types that
-///    have a parameterless constructor, and never crashes on abstract or parameterized-constructor types.
-/// </summary>
 public class ReflectionMigrationRetrieverTests
 {
    [Fact]
@@ -25,7 +21,6 @@ public class ReflectionMigrationRetrieverTests
    {
       var retriever = new ReflectionMigrationRetriever(typeof(_202601020001_Valid).Assembly);
 
-      // The retriever must not throw on AbstractMigration / ParameterizedMigration, and must not return them.
       var migrations = retriever.RetrieveMigrations().ToArray();
 
       migrations.Should().NotContain(m => m is ParameterizedMigration);

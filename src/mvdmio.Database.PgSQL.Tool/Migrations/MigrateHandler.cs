@@ -2,9 +2,6 @@ using mvdmio.Database.PgSQL.Tool.Configuration;
 
 namespace mvdmio.Database.PgSQL.Tool.Migrations;
 
-/// <summary>
-///    Orchestrates migrate command execution.
-/// </summary>
 internal sealed class MigrateHandler
 {
    private readonly MigrationProjectLoader _projectLoader;

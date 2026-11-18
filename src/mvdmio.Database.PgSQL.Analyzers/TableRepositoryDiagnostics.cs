@@ -87,13 +87,8 @@ internal static class TableRepositoryDiagnostics
       description: "Generated repositories only support public instance properties with a public getter and a setter. The setter may be private, protected or init-only — a table definition is never instantiated, so what its members permit a caller to do describes nothing about the column. A setter has to be there, because a get-only or expression-bodied member is a computed value rather than a column."
    );
 
-   /// <summary>
-   ///    The reason a generated name cannot be used, as <see cref="GeneratedNameCollision" />'s third argument. Stated
-   ///    here rather than at the call site so both collisions read as one diagnostic with two causes.
-   /// </summary>
    public const string COLLISION_REASON_NON_PARTIAL_TYPE = "that name is already used by a non-partial type in the same namespace";
 
-   /// <inheritdoc cref="COLLISION_REASON_NON_PARTIAL_TYPE" />
    public const string COLLISION_REASON_PRIMARY_KEY_LOOKUP = "the primary key's own lookup and delete already take that name";
 
    public static readonly DiagnosticDescriptor GeneratedNameCollision = new(
@@ -115,15 +110,6 @@ internal static class TableRepositoryDiagnostics
       isEnabledByDefault: true,
       description: "Query() can only translate property types the query surface knows how to convert. Other types need a conversion registered through the mapping hook."
    );
-
-   // The relation diagnostics below drop only the relation they describe and let the rest of the table generate,
-   // unlike every diagnostic above. Abandoning the table would suppress its generated data type and bury the one
-   // message describing the actual mistake under type-not-found errors from everything that names that type.
-
-   // PGSQL0012 (relation foreign key property not found) and PGSQL0013 (relation foreign key type cannot match the
-   // primary key) are retired: both described the old attribute-argument form's positional foreign-key matching,
-   // which is gone now that a relation states its pairs as expressions the compiler already checks. Their ids are
-   // never reused.
 
    public static readonly DiagnosticDescriptor RelationTargetIsNotATableDefinition = new(
       id: "PGSQL0014",
@@ -175,14 +161,6 @@ internal static class TableRepositoryDiagnostics
       description: "A relation property is skipped by column mapping, so naming a column for it describes something that will never be read or written."
    );
 
-   // PGSQL0019 (relation foreign key does not match the target's primary key arity) is retired along with it: there
-   // is no fixed arity left to check once a relation states its pairs explicitly rather than matching a count
-   // against the target's primary key. What it protected — a relation to one row reaching more than one — is now
-   // the uniqueness warning PGSQL0031 below. Its id is never reused.
-
-   // Abandons the table, unlike the relation diagnostics above: a malformed key leaves the lookup, the delete and the
-   // update undefined rather than one relation.
-
    public static readonly DiagnosticDescriptor NullablePrimaryKeyProperty = new(
       id: "PGSQL0020",
       title: "Primary key property cannot be nullable",
@@ -193,23 +171,12 @@ internal static class TableRepositoryDiagnostics
       description: "A nullable key member is a key the database would reject, and it is also what would let the query surface widen a relation's join with an 'or both are null' alternative, which costs the join its index. Refusing it here makes that shape unreachable."
    );
 
-   // Abandons nothing, unlike the key diagnostic above. A contradictory nullability claim leaves every generated
-   // signature well-defined, so dropping the claim and reporting it is one error rather than a cascade of
-   // type-not-found errors across the consumer's own code.
-
-   /// <summary>
-   ///    Which contradiction a declared nullability claim is, as <see cref="ContradictoryColumnNullability" />'s third
-   ///    argument. Stated here rather than at the call site so all four read as one diagnostic with four causes.
-   /// </summary>
    public const string NULLABILITY_REASON_NOT_NULL_OVER_A_NULLABLE_TYPE = "NotNull says it cannot hold null, but its type can";
 
-   /// <inheritdoc cref="NULLABILITY_REASON_NOT_NULL_OVER_A_NULLABLE_TYPE" />
    public const string NULLABILITY_REASON_NULL_OVER_A_NON_NULLABLE_VALUE_TYPE = "Null says it can hold null, but a non-nullable value type cannot";
 
-   /// <inheritdoc cref="NULLABILITY_REASON_NOT_NULL_OVER_A_NULLABLE_TYPE" />
    public const string NULLABILITY_REASON_BOTH_DIRECTIONS = "Null and NotNull are both set, and they cannot both be true";
 
-   /// <inheritdoc cref="NULLABILITY_REASON_NOT_NULL_OVER_A_NULLABLE_TYPE" />
    public const string NULLABILITY_REASON_NULL_ON_A_KEY_MEMBER = "Null says it can hold null, but a [PrimaryKey] member cannot";
 
    public static readonly DiagnosticDescriptor ContradictoryColumnNullability = new(
@@ -222,9 +189,6 @@ internal static class TableRepositoryDiagnostics
       description: "[Column]'s Null and NotNull override what a property's type says about the column it maps to, so a claim that contradicts the type, the key or itself says two things at once. The claim is dropped and the column keeps whatever its type and key membership already settle."
    );
 
-   // The three storage diagnostics below abandon nothing either, for the same reason PGSQL0021 does not: a refused
-   // claim, an unwritable type and an unrepresentable claim all leave every generated signature well-defined.
-
    public static readonly DiagnosticDescriptor RefusedStorageClaim = new(
       id: "PGSQL0022",
       title: "Storage claim cannot be honoured for the property's type",
@@ -235,10 +199,6 @@ internal static class TableRepositoryDiagnostics
       description: "A storage claim states how the column is represented; it does not ask for a conversion. A claim joins the refused set only once a test demonstrates it failing, so this refuses few combinations by design and names the legal ones instead of listing the illegal ones. The claim is dropped and the column is bound the way an unclaimed one would be."
    );
 
-   /// <summary>
-   ///    What a refused claim's fifth argument offers instead. Stated here so the message names a way forward rather than
-   ///    only what is wrong.
-   /// </summary>
    public const string STORAGE_ALTERNATIVES_FOR_A_STRING = "Text, Json or Jsonb";
 
    public static readonly DiagnosticDescriptor UnwritablePropertyType = new(
@@ -251,7 +211,6 @@ internal static class TableRepositoryDiagnostics
       description: "The driver registers no integer or numeric mapping for the unsigned integer types, by inference or with an explicit type, so a repository over one of them reads and filters and then throws on every insert and update. Refused here rather than at run time. Separate from PGSQL0011, whose advice — register a conversion — cannot help, because there is no PostgreSQL type to convert to."
    );
 
-   /// <summary>The signed types that cover each refused unsigned one's range, as <see cref="UnwritablePropertyType" />'s fourth argument.</summary>
    public const string WRITABLE_ALTERNATIVES_FOR_UNSIGNED_INTEGERS = "int, long or decimal";
 
    public static readonly DiagnosticDescriptor UnrepresentableStorageClaim = new(
@@ -263,9 +222,6 @@ internal static class TableRepositoryDiagnostics
       isEnabledByDefault: true,
       description: "A storage claim feeds the parameter binding and the query surface mapping both, which is what stops the two disagreeing about a column. Where the query surface has no equivalent for the claim — the network address and geometry types among them — the claim is honoured on the Dapper surface and left unstated on the other, so the divergence is made visible here rather than left silent."
    );
-
-   // The two diagnostics below abandon the table, the same as a malformed key: generating it anyway would emit
-   // precisely the unguarded surface this feature removes, and would do it quietly.
 
    public static readonly DiagnosticDescriptor NullableTenancyColumn = new(
       id: "PGSQL0025",
@@ -287,10 +243,6 @@ internal static class TableRepositoryDiagnostics
       description: "A generated column is on no command type, so there is no property to make required — the developer would learn that at run time instead of build time."
    );
 
-   // Unlike the two diagnostics above, this one abandons nothing at all — not the relation, not the table — because a
-   // relation to a shared, untenanted table can be legitimate, and per ADR 0005 a relation-level problem drops the
-   // relation rather than the table.
-
    public static readonly DiagnosticDescriptor RelationCouldReachAcrossTenants = new(
       id: "PGSQL0027",
       title: "Relation could reach across tenants",
@@ -300,11 +252,6 @@ internal static class TableRepositoryDiagnostics
       isEnabledByDefault: true,
       description: "A tenancy column appearing on either side of a relation's joined key pairs must be paired with a tenancy column on the other side, or the join can pull another tenant's related rows — and a tenancy column that sits outside every pair entirely is paired with nothing, which is the same failure. Checked pair by pair and direction-free, so it covers the declaring side as well as the target side. Reported once per unpinned tenancy column on either table."
    );
-
-   // The three diagnostics below cover a relation declared as a class deriving from RelationDefinition<,>. Like
-   // every other relation diagnostic, each drops only the relation it describes and lets the rest of the table
-   // generate — abandoning it would suppress the generated data type and bury the one message describing the actual
-   // mistake under type-not-found errors from everything naming that type.
 
    public static readonly DiagnosticDescriptor RelationDeclaringTableMismatch = new(
       id: "PGSQL0028",
@@ -355,9 +302,6 @@ internal static class TableRepositoryDiagnostics
       isEnabledByDefault: true,
       description: "[Relation] is an optional marker: a property is a Relation because its type derives from RelationDefinition<,>, or is a supported collection of one, not because it carries this attribute. Writing it on a property whose type is neither would let the attribute say something untrue."
    );
-
-   // The three diagnostics below read the resolved key pairs themselves rather than anything about how the relation
-   // was declared, so they apply to a relation declared through either form alike.
 
    public static readonly DiagnosticDescriptor RelationToOneRowMayReachSeveral = new(
       id: "PGSQL0031",

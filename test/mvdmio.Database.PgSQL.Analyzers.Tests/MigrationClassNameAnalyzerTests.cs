@@ -4,13 +4,8 @@ using Microsoft.CodeAnalysis.Testing;
 
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
-/// <summary>
-///    Unit tests for <see cref="MigrationClassNameAnalyzer"/>.
-/// </summary>
 public class MigrationClassNameAnalyzerTests
 {
-   // Minimal stub of IDbMigration so the analyzer can resolve the interface
-   // without having to pull in the full Npgsql/Dapper dependency graph.
    private const string IDBMIGRATION_STUB = """
       using System.Threading.Tasks;
 
@@ -50,7 +45,6 @@ public class MigrationClassNameAnalyzerTests
    [Fact]
    public async Task ValidClassName_WithoutLeadingUnderscore_NoDiagnostic()
    {
-      // The regex allows an optional leading underscore
       var source = """
          using System.Threading.Tasks;
          using mvdmio.Database.PgSQL;
@@ -89,7 +83,6 @@ public class MigrationClassNameAnalyzerTests
    [Fact]
    public async Task IdentifierTooShort_ProducesDiagnostic()
    {
-      // 10 digits instead of 12
       var source = """
          using System.Threading.Tasks;
          using mvdmio.Database.PgSQL;
@@ -111,7 +104,6 @@ public class MigrationClassNameAnalyzerTests
    [Fact]
    public async Task MissingNamePart_ProducesDiagnostic()
    {
-      // Only the timestamp, no name after the second underscore
       var source = """
          using System.Threading.Tasks;
          using mvdmio.Database.PgSQL;
@@ -133,7 +125,6 @@ public class MigrationClassNameAnalyzerTests
    [Fact]
    public async Task AbstractClass_NoDiagnostic()
    {
-      // Abstract classes are excluded — the analyzer only targets concrete classes
       var source = """
          using System.Threading.Tasks;
          using mvdmio.Database.PgSQL;
@@ -186,10 +177,6 @@ public class MigrationClassNameAnalyzerTests
 
       await RunAnalyzerAsync(source, expected);
    }
-
-   // -----------------------------------------------------------------------
-   // Helpers
-   // -----------------------------------------------------------------------
 
    private static async Task RunAnalyzerAsync(string source, params DiagnosticResult[] expectedDiagnostics)
    {

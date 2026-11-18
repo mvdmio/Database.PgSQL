@@ -7,25 +7,11 @@ using System.Reflection;
 
 namespace mvdmio.Database.PgSQL.Connectors.Linq;
 
-/// <summary>
-///    The queryable and query provider handed to consumers by the query surface. It keeps the composed expression
-///    unbound until execution — so the query runs against the connection and transaction current at that moment —
-///    and it is the single place where a provider failure becomes one of this library's exceptions.
-/// </summary>
-/// <typeparam name="TElement">The element type of this stage of the composition.</typeparam>
-/// <remarks>
-///    <see cref="IQueryProviderAsync" /> lives in one of the provider's <c>Internal</c> namespaces, but implementing
-///    it is not optional: the provider's asynchronous operators dispatch on it, and a provider that lacks it silently
-///    degrades every awaited query to synchronous enumeration. The unit tests hold that behaviour in place.
-/// </remarks>
 internal class TranslatedQueryable<TElement> : IOrderedQueryable<TElement>, IAsyncEnumerable<TElement>, IQueryProviderAsync, ITranslatedQueryable, ISqlDiagnostics
 {
    private readonly LinqQuerySource _source;
    private readonly Expression _expression;
 
-   /// <summary>
-   ///    Creates the root of a composition: the table itself, standing in for its own expression.
-   /// </summary>
    public TranslatedQueryable(LinqQuerySource source)
    {
       ArgumentNullException.ThrowIfNull(source);
@@ -35,9 +21,6 @@ internal class TranslatedQueryable<TElement> : IOrderedQueryable<TElement>, IAsy
       IsRoot = true;
    }
 
-   /// <summary>
-   ///    Creates a composed stage over the same source.
-   /// </summary>
    public TranslatedQueryable(LinqQuerySource source, Expression expression)
    {
       ArgumentNullException.ThrowIfNull(source);
@@ -74,12 +57,6 @@ internal class TranslatedQueryable<TElement> : IOrderedQueryable<TElement>, IAsy
          .GetAsyncEnumerator(cancellationToken);
    }
 
-   /// <remarks>
-   ///    A projection changes the element type, and only the expression knows the new one, so this overload has to
-   ///    construct the closed generic type reflectively. Every path this library's own API uses — the LINQ operators
-   ///    and the materialization extensions — goes through the generic overload below instead; only a caller that
-   ///    composes through the untyped <see cref="IQueryable" /> reaches this one.
-   /// </remarks>
    public IQueryable CreateQuery(Expression expression)
    {
       ArgumentNullException.ThrowIfNull(expression);
@@ -107,12 +84,6 @@ internal class TranslatedQueryable<TElement> : IOrderedQueryable<TElement>, IAsy
       return new TranslatedQueryable<TOther>(_source, expression);
    }
 
-   /// <summary>
-   ///    Records a materialization request on this composition, without binding anything to a connection yet.
-   /// </summary>
-   /// <typeparam name="TProperty">The type of the relation property being materialized.</typeparam>
-   /// <param name="step">The provider call that materializes the relation.</param>
-   /// <returns>The composition, remembering the relation so a further level can be chained onto it.</returns>
    public IIncludedQueryable<TElement, TProperty> Including<TProperty>(IncludeStep step)
    {
       ArgumentNullException.ThrowIfNull(step);
@@ -178,18 +149,11 @@ internal class TranslatedQueryable<TElement> : IOrderedQueryable<TElement>, IAsy
       );
    }
 
-   /// <summary>
-   ///    Renders the SQL this query translates to. Used to prove that runtime values become parameters.
-   /// </summary>
    public string RenderSql()
    {
       return QueryTranslationBoundary.Execute(() => Materialize().ToSqlQuery().Sql, _source);
    }
 
-   /// <summary>
-   ///    The SQL most recently sent to the database. Used to prove that an aggregate was answered by the database
-   ///    rather than by materializing rows.
-   /// </summary>
    public string? LastSql()
    {
       return _source.GetLastSql();
@@ -212,10 +176,6 @@ internal class TranslatedQueryable<TElement> : IOrderedQueryable<TElement>, IAsy
       throw new NotSupportedException($"The query provider did not produce an asynchronously enumerable query for '{typeof(TElement)}'.");
    }
 
-   /// <remarks>
-   ///    Materialization is translated here rather than where it was composed, so that everything the decorator
-   ///    guarantees survives a query that asked for it. See <see cref="IncludeRewriter" />.
-   /// </remarks>
    private (IQueryProvider Provider, Expression Expression) Resolve(Expression expression)
    {
       var rewriter = new QueryRootRewriter();

@@ -3,9 +3,6 @@ using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
 
-/// <summary>
-///    Command: db migrate to &lt;identifier&gt;
-/// </summary>
 internal static class MigrateToCommand
 {
    public static Command Create()

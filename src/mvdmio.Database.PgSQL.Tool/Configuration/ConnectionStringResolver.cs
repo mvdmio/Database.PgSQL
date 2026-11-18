@@ -1,8 +1,5 @@
 namespace mvdmio.Database.PgSQL.Tool.Configuration;
 
-/// <summary>
-///    Resolves connection strings and environment names from tool configuration.
-/// </summary>
 internal static class ConnectionStringResolver
 {
    public static string? ResolveConnectionString(ToolConfiguration config, string? connectionStringOverride, string? environmentOverride)

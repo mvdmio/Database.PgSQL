@@ -1,18 +1,7 @@
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
-/// <summary>
-///    Seeds the author-and-book graph and applies query strings against <see cref="ODataConfiguration.RelationModel" />.
-///    Parallel to <see cref="SampleConformanceTestBase" />, and for the same reason: every test goes through a generated
-///    repository's <c>Query()</c> rather than the <c>Linq</c> adapter directly, because that is the seam a consumer
-///    calls.
-/// </summary>
 public abstract class RelationConformanceTestBase : ODataTestBase
 {
-   /// <summary>
-   ///    Chosen so that every assertion discriminates: the mentor chain is four deep, so <c>$levels=2</c> stops
-   ///    somewhere an unbounded walk would not; two authors have no books, so an empty expanded collection is
-   ///    observable; and one book has no author, so an expansion across a relation that finds nothing is observable.
-   /// </summary>
    private static readonly (string Name, string? MentorName)[] _authors = [
       ("tolkien", null),
       ("lewis", "tolkien"),
@@ -60,19 +49,16 @@ public abstract class RelationConformanceTestBase : ODataTestBase
       }
    }
 
-   /// <summary>Applies a query string to the author repository's queryable using the recommended settings.</summary>
    protected AppliedQuery ApplyToAuthors(string queryString)
    {
       return ODataQuery.Apply(Authors.Query(), queryString, ODataConfiguration.RelationModel);
    }
 
-   /// <summary>Applies a query string to the book repository's queryable using the recommended settings.</summary>
    protected AppliedQuery ApplyToBooks(string queryString)
    {
       return ODataQuery.Apply(Books.Query(), queryString, ODataConfiguration.RelationModel);
    }
 
-   /// <summary>The titles an applied query returned, in the order the database gave them. Titles are unique here.</summary>
    protected static async Task<IReadOnlyList<string>> TitlesAsync(AppliedQuery applied)
    {
       var rows = await applied.RowsAsync<BookData>(CancellationToken);
@@ -80,7 +66,6 @@ public abstract class RelationConformanceTestBase : ODataTestBase
       return rows.Select(x => x.Title).ToList();
    }
 
-   /// <summary>The names an applied query returned, in the order the database gave them. Names are unique here.</summary>
    protected static async Task<IReadOnlyList<string>> NamesAsync(AppliedQuery applied)
    {
       var rows = await applied.RowsAsync<AuthorData>(CancellationToken);

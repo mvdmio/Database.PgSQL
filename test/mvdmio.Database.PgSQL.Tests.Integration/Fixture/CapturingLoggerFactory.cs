@@ -2,9 +2,6 @@ using Microsoft.Extensions.Logging;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 
-/// <summary>
-///    Logger factory that captures every log entry, so tests can assert on warnings emitted by the migrator.
-/// </summary>
 public sealed class CapturingLoggerFactory : ILoggerFactory
 {
    private readonly CapturingLogger _logger = new();
@@ -18,7 +15,6 @@ public sealed class CapturingLoggerFactory : ILoggerFactory
 
    public void AddProvider(ILoggerProvider provider)
    {
-      // No-op.
    }
 
    public void Dispose()

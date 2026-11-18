@@ -3,21 +3,8 @@ using Microsoft.CodeAnalysis;
 
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
-/// <summary>
-///    Covers what a table definition says about whether each of its columns can hold null, and what the registration it
-///    produces therefore states to the query surface.
-/// </summary>
-/// <remarks>
-///    Only the not-null direction is ever emitted: nullable is what the query surface assumes wherever a type can
-///    express it, so a nullable column needs no argument and its absence is as much a part of these assertions as its
-///    presence.
-/// </remarks>
 public class TableRepositoryGeneratorNullabilityTests
 {
-   /// <summary>
-   ///    Every property shape from the nullability table on one definition, so one run pins the whole rule set rather
-   ///    than one row of it at a time.
-   /// </summary>
    private const string EVERY_SHAPE = """
       using mvdmio.Database.PgSQL.Attributes;
       using System;
@@ -70,8 +57,6 @@ public class TableRepositoryGeneratorNullabilityTests
 
       var registration = GeneratorHarness.RegistrationSource(result);
 
-      // A key member carries no nullability argument: the key argument already says it, and the mapping builder is what
-      // acts on that, so every caller of it gets the rule rather than only generated code.
       registration.Should().ContainAll(
          """.Column(x => x.RowId, "row_id", isPrimaryKey: true)""",
          """.Column(x => x.Kind, "kind", isPrimaryKey: true)""",
@@ -85,9 +70,6 @@ public class TableRepositoryGeneratorNullabilityTests
          """.Column(x => x.TightLabel, "tight_label", isNotNull: true)"""
       );
 
-      // Nullable, each for its own reason: a Nullable<T>, an annotated reference type, a claim withdrawing what the
-      // annotation would say, a [Unique] column — a unique index permits any number of nulls — and a [Generated] one,
-      // which is the polymorphic-discriminator shape that is null for every kind but its own.
       registration.Should().ContainAll(
          """.Column(x => x.OptionalCount, "optional_count")""",
          """.Column(x => x.Note, "note")""",
@@ -100,15 +82,9 @@ public class TableRepositoryGeneratorNullabilityTests
    [Fact]
    public void EveryPropertyShape_ProducesCodeThatCompiles()
    {
-      // The only thing that proves the emitted nullability argument resolves against the overload the library ships.
       GeneratorHarness.AssertGeneratedSourcesCompile(EVERY_SHAPE);
    }
 
-   /// <summary>
-   ///    A reference type in a nullable-oblivious file makes no claim, so it keeps the nullable default — and that is
-   ///    exactly the case <c>[Column(NotNull = true)]</c> exists for, which is why stating it there is not a
-   ///    contradiction.
-   /// </summary>
    [Fact]
    public void NullableObliviousCompilation_ClaimsNothingForAReferenceTypeAndHonoursTheAttribute()
    {
@@ -142,7 +118,6 @@ public class TableRepositoryGeneratorNullabilityTests
       registration.Should().Contain(""".Column(x => x.Label, "label")""");
       registration.Should().Contain(""".Column(x => x.TightLabel, "tight_label", isNotNull: true)""");
 
-      // A value type says it through its type rather than through an annotation, so nothing changes for it here.
       registration.Should().Contain(""".Column(x => x.Count, "count", isNotNull: true)""");
    }
 
@@ -216,17 +191,10 @@ public class TableRepositoryGeneratorNullabilityTests
       diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
       diagnostic.GetMessage().Should().ContainAll("RowTable", "Value", expectedReason);
 
-      // Abandons nothing, unlike a malformed key: the claim is dropped and every generated signature stays well-defined,
-      // so the consumer reads this one error rather than type-not-found errors across their own code.
       result.GeneratedSources.Should().NotBeEmpty();
       GeneratorHarness.RegistrationSource(result).Should().Contain(expectedColumnCall);
    }
 
-   /// <summary>
-   ///    A claim that restates something already true is not a contradiction, so it earns no diagnostic — covered by the
-   ///    silent <c>[Column(NotNull = true)]</c> on both a key member and an already non-nullable column in
-   ///    <see cref="EveryPropertyShape_RegistersTheNullabilityItsDefinitionStates" />, and here for the other direction.
-   /// </summary>
    [Fact]
    public void RedundantButTrueNullability_ProducesNoDiagnostic()
    {

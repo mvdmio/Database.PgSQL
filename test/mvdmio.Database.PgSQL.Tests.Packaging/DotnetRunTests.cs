@@ -4,17 +4,8 @@ using System.Diagnostics;
 
 namespace mvdmio.Database.PgSQL.Tests.Packaging;
 
-/// <summary>
-///    That a child process which stops returning fails the run with a readable report, instead of stalling it. Does not use
-///    <see cref="PackagingFixture" />: it needs neither Docker nor a pack.
-/// </summary>
 public class DotnetRunTests
 {
-   /// <remarks>
-   ///    The shell exits at once and leaves a background <c>sleep</c> holding its stdout and stderr, which is the shape of
-   ///    the MSBuild workers that hung the publish workflow. That <c>sleep</c> is outside the shell's process tree once the
-   ///    shell has exited, so it is not killed and runs out its 120 seconds on its own; the test does not clean it up.
-   /// </remarks>
    [Fact(Timeout = 60_000)]
    public void Run_WhenAnOrphanedProcessKeepsThePipesOpen_ReturnsAFailedRunWithTheCommandLine()
    {

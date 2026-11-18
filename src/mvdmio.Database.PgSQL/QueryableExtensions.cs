@@ -102,10 +102,6 @@ public static class QueryableExtensions
       return Record<TEntity, TProperty>(source, new IncludeStep((queryable, rewriter) => ((ILoadWithQueryable<TEntity, IEnumerable<TPreviousProperty>>)queryable).ThenLoad(rewriter.Rewrite(property))));
    }
 
-   /// <remarks>
-   ///    The step is recorded into the composed expression rather than handed to the provider now, so the query stays
-   ///    unbound until it executes. <see cref="IncludeRewriter" /> explains why that is not a preference.
-   /// </remarks>
    private static IIncludedQueryable<TEntity, TProperty> Record<TEntity, TProperty>(IQueryable<TEntity> source, IncludeStep step)
       where TEntity : class
    {

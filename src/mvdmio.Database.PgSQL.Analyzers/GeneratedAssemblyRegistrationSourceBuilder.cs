@@ -56,11 +56,6 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
       return builder.ToString();
    }
 
-   /// <remarks>
-   ///    Emitted as a module initializer so the mappings are in place before any generated repository can be used,
-   ///    without the library having to discover them by reflection. Relations are registered here too, in the same
-   ///    callback as the entity's columns, so both ends of every relation are always registered together.
-   /// </remarks>
    private static void AppendQueryMappingRegistration(StringBuilder builder, ImmutableArray<ResolvedTable> tables)
    {
       var ordered = tables
@@ -88,8 +83,6 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
 
          foreach (var relation in table.Relations)
          {
-            // The type arguments are stated because a property typed as a concrete list satisfies both Relation
-            // overloads, which would make the call ambiguous if they were left to be inferred.
             builder.AppendLine($"            {RelationCall(relation)}");
          }
 
@@ -99,25 +92,10 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
       builder.AppendLine("   }");
    }
 
-   /// <summary>
-   ///    How one column is registered with the query surface, storage claim and all.
-   /// </summary>
-   /// <remarks>
-   ///    The claim emitted here is read from the same <see cref="ColumnStorage" /> the parameter binding is emitted from,
-   ///    which is what stops the two surfaces disagreeing about the column. Three shapes, picked by what the claim needs:
-   ///    nothing stated at all, a claim alone, or a claim with the conversion that carries the value to it.
-   ///    <para>
-   ///       The type arguments on the converting shape are stated rather than inferred, for the same reason a relation's
-   ///       are: the stored type is only inferable from a lambda body, and stating it makes the emitted call say which
-   ///       conversion it means.
-   ///    </para>
-   /// </remarks>
    private static string ColumnCall(PropertyDefinitionModel property)
    {
       var storage = property.Storage;
 
-      // A key member is already not-null through the key argument, which the builder itself acts on, so saying it twice
-      // would only make the emitted call longer. Nullable needs no argument either: it is what the query surface assumes.
       var primaryKeyArgument = property.IsPrimaryKey ? ", isPrimaryKey: true" : string.Empty;
       var notNullArgument = !property.IsPrimaryKey && property.Nullability.IsNotNull ? ", isNotNull: true" : string.Empty;
       var trailingArguments = $"{primaryKeyArgument}{notNullArgument}";
@@ -138,21 +116,6 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
          $".Column<{property.TypeName}, {conversion.StoredTypeName}{nullability}>({columnArguments}, {claim}, {toStored}, {fromStored}{trailingArguments})";
    }
 
-   /// <summary>The pair of lambdas carrying a value to what its column holds and back again.</summary>
-   /// <remarks>
-   ///    Both directions are decided in one place, off one reading of the conversion, because they are two halves of one
-   ///    answer and a mismatched pair is a column that writes one representation and reads another.
-   ///    <para>
-   ///       A cast is its own inverse in shape. Text is not: an enum is parsed case-insensitively coming back, matching what
-   ///       Dapper does natively for a text column with no handler registered, so a value differing in case from the member
-   ///       name behaves the same on both surfaces.
-   ///    </para>
-   ///    <para>
-   ///       Null is handled here as well as by the provider, which skips a conversion for a null by default. Written out
-   ///       anyway, because the emitted lambdas have to type-check on their own and a <see cref="Nullable{T}" />'s own
-   ///       <c>ToString</c> answers an empty string for a null rather than a null.
-   ///    </para>
-   /// </remarks>
    private static (string ToStored, string FromStored) Conversions(StorageConversion conversion, string valueTypeName, string nullability)
    {
       if (!conversion.IsEnumMemberName)
@@ -165,20 +128,6 @@ internal static class GeneratedAssemblyRegistrationSourceBuilder
          : ("static x => x == null ? null : x.Value.ToString()", $"static x => x == null ? null : ({valueTypeName}?){parse}");
    }
 
-   /// <summary>
-   ///    How one relation is registered with the query surface.
-   /// </summary>
-   /// <remarks>
-   ///    Every relation, whatever its pair count, takes the predicate overload. The key-based overloads carry a single
-   ///    key each and their key type parameters are unconstrained, so an anonymous type or a tuple compiles there and
-   ///    registers as one key named after its constructor, failing only at the first query. A predicate is checked
-   ///    member by member at build time, so that shape is unreachable from here.
-   ///    <para>
-   ///       A relation definition's <c>Condition</c>, when it states one, is appended after the key pairs — its body was
-   ///       already rewritten to this same lambda's parameters when it was read off the developer's source, so it
-   ///       inlines here verbatim.
-   ///    </para>
-   /// </remarks>
    private static string RelationCall(ResolvedRelation relation)
    {
       var comparisons = relation.JoinedKeys.Select(x => $"x.{x.ThisKey.PropertyName} == y.{x.TargetKey.PropertyName}");

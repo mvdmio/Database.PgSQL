@@ -33,11 +33,6 @@ internal sealed class SchemaCatalogReader
       return sb.ToString();
    }
 
-   /// <summary>
-   ///    Retrieves all non-default extensions installed in the database.
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The installed extensions.</returns>
    [PublicAPI]
    public async Task<IEnumerable<ExtensionInfo>> GetExtensionsAsync(CancellationToken cancellationToken = default)
    {
@@ -56,11 +51,6 @@ internal sealed class SchemaCatalogReader
       );
    }
 
-   /// <summary>
-   ///    Retrieves all user-created schemas, excluding system schemas, the public schema, and the mvdmio migration schema.
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The schema names.</returns>
    [PublicAPI]
    public async Task<IEnumerable<string>> GetUserSchemasAsync(CancellationToken cancellationToken = default)
    {
@@ -76,11 +66,6 @@ internal sealed class SchemaCatalogReader
       );
    }
 
-   /// <summary>
-   ///    Retrieves all exportable schemas, excluding only system schemas and the mvdmio migration schema.
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The exportable schema names, including public.</returns>
    [PublicAPI]
    public async Task<IEnumerable<string>> GetExportableSchemasAsync(CancellationToken cancellationToken = default)
    {
@@ -95,11 +80,6 @@ internal sealed class SchemaCatalogReader
       );
    }
 
-   /// <summary>
-   ///    Retrieves all user-defined enum types.
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The enum types with their labels.</returns>
    [PublicAPI]
    public async Task<IEnumerable<EnumTypeInfo>> GetEnumTypesAsync(CancellationToken cancellationToken = default)
    {
@@ -126,11 +106,6 @@ internal sealed class SchemaCatalogReader
          .ToArray();
    }
 
-   /// <summary>
-   ///    Retrieves all user-defined composite types (excluding table row types and other internal types).
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The composite types with their attributes.</returns>
    [PublicAPI]
    public async Task<IEnumerable<CompositeTypeInfo>> GetCompositeTypesAsync(CancellationToken cancellationToken = default)
    {
@@ -164,11 +139,6 @@ internal sealed class SchemaCatalogReader
          .ToArray();
    }
 
-   /// <summary>
-   ///    Retrieves all user-defined domain types.
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The domain types.</returns>
    [PublicAPI]
    public async Task<IEnumerable<DomainTypeInfo>> GetDomainTypesAsync(CancellationToken cancellationToken = default)
    {
@@ -222,11 +192,6 @@ internal sealed class SchemaCatalogReader
       return result;
    }
 
-   /// <summary>
-   ///    Retrieves all user-defined sequences.
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The sequences.</returns>
    [PublicAPI]
    public async Task<IEnumerable<SequenceInfo>> GetSequencesAsync(CancellationToken cancellationToken = default)
    {
@@ -257,11 +222,6 @@ internal sealed class SchemaCatalogReader
       );
    }
 
-   /// <summary>
-   ///    Retrieves all user tables with their columns.
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The tables with column information.</returns>
    [PublicAPI]
    public async Task<IEnumerable<TableInfo>> GetTablesAsync(CancellationToken cancellationToken = default)
    {
@@ -313,11 +273,6 @@ internal sealed class SchemaCatalogReader
          .ToArray();
    }
 
-   /// <summary>
-   ///    Retrieves all constraints (primary key, foreign key, unique, check, exclusion) for user tables.
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The constraints.</returns>
    [PublicAPI]
    public async Task<IEnumerable<ConstraintInfo>> GetConstraintsAsync(CancellationToken cancellationToken = default)
    {
@@ -346,11 +301,6 @@ internal sealed class SchemaCatalogReader
       );
    }
 
-   /// <summary>
-   ///    Retrieves all indexes that are not created by constraints (i.e., not primary key, unique, or exclusion constraint indexes).
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The indexes.</returns>
    [PublicAPI]
    public async Task<IEnumerable<IndexInfo>> GetIndexesAsync(CancellationToken cancellationToken = default)
    {
@@ -378,11 +328,6 @@ internal sealed class SchemaCatalogReader
       );
    }
 
-   /// <summary>
-   ///    Retrieves all user-defined functions and procedures.
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The functions with their full definitions.</returns>
    [PublicAPI]
    public async Task<IEnumerable<FunctionInfo>> GetFunctionsAsync(CancellationToken cancellationToken = default)
    {
@@ -407,11 +352,6 @@ internal sealed class SchemaCatalogReader
       );
    }
 
-   /// <summary>
-   ///    Retrieves all user-defined triggers (excluding internal constraint triggers).
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The triggers.</returns>
    [PublicAPI]
    public async Task<IEnumerable<TriggerInfo>> GetTriggersAsync(CancellationToken cancellationToken = default)
    {
@@ -433,11 +373,6 @@ internal sealed class SchemaCatalogReader
       );
    }
 
-   /// <summary>
-   ///    Retrieves all user-defined views.
-   /// </summary>
-   /// <param name="cancellationToken">A cancellation token.</param>
-   /// <returns>The views.</returns>
    [PublicAPI]
    public async Task<IEnumerable<ViewInfo>> GetViewsAsync(CancellationToken cancellationToken = default)
    {
@@ -456,10 +391,6 @@ internal sealed class SchemaCatalogReader
          ct: cancellationToken
       );
    }
-
-   // ========================================================================
-   // Internal row types for queries that need grouping
-   // ========================================================================
 
    private sealed class EnumTypeRow
    {

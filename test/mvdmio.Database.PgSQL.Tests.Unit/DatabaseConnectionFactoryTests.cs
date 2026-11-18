@@ -3,11 +3,6 @@ using Npgsql;
 
 namespace mvdmio.Database.PgSQL.Tests.Unit;
 
-/// <summary>
-/// Tests for the thread-safety and caching behavior of <see cref="DatabaseConnectionFactory"/>.
-/// These tests do not require a live database: <see cref="NpgsqlDataSourceBuilder.Build"/> parses the
-/// connection string but does not open a connection.
-/// </summary>
 public class DatabaseConnectionFactoryTests
 {
    private const string CONNECTION_STRING = "Host=localhost;Database=test;Username=test;Password=test";
@@ -22,7 +17,6 @@ public class DatabaseConnectionFactoryTests
       var builderInvocations = 0;
       void BuilderAction(NpgsqlDataSourceBuilder _) => Interlocked.Increment(ref builderInvocations);
 
-      // Release all tasks simultaneously to maximise the chance of hitting the creation race.
       var startSignal = new TaskCompletionSource();
 
       var tasks = Enumerable.Range(0, CONCURRENCY).Select(_ => Task.Run(async () =>
@@ -35,11 +29,8 @@ public class DatabaseConnectionFactoryTests
 
       var dataSources = await Task.WhenAll(tasks);
 
-      // The builder action only runs when the data source is actually built. With Lazy this is exactly once,
-      // even when GetOrAdd races several wrapper creations.
       builderInvocations.Should().Be(1);
 
-      // Every caller must observe the single cached instance.
       dataSources.Should().OnlyContain(x => ReferenceEquals(x, dataSources[0]));
    }
 

@@ -6,14 +6,6 @@ using System.Text;
 
 namespace mvdmio.Database.PgSQL.Analyzers;
 
-/// <summary>
-///    Everything a table definition's Roslyn symbols say: which attributes a property carries, whether its shape and
-///    nullability are usable, what a relation property's type states, and the names derived from all of it.
-/// </summary>
-/// <remarks>
-///    Separated from <see cref="TableDefinitionParser" /> so that file is left with the decisions — which diagnostic a
-///    fact earns and whether it abandons the table — rather than the symbol reading those decisions rest on.
-/// </remarks>
 internal static class TableDefinitionSymbols
 {
    public const string TABLE_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.TableAttribute";
@@ -23,16 +15,10 @@ internal static class TableDefinitionSymbols
    public const string GENERATED_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.GeneratedAttribute";
    public const string RELATION_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.RelationAttribute";
 
-   /// <summary>The open generic <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c> a relation definition class derives from.</summary>
    public const string RELATION_DEFINITION_FULL_NAME = "mvdmio.Database.PgSQL.Relations.RelationDefinition`2";
 
-   /// <summary>The <c>[Column]</c> named argument that declares a tenancy column.</summary>
    private const string TENANCY_PROPERTY_NAME = "Tenancy";
 
-   /// <summary>
-   ///    The collection types a relation to many rows may be declared as. The generated mirror is always a concrete
-   ///    list, so this only decides what the table definition itself is allowed to say.
-   /// </summary>
    private static readonly HashSet<string> _toManyCollectionTypeNames = new(StringComparer.Ordinal) {
       "System.Collections.Generic.List<T>",
       "System.Collections.Generic.IList<T>",
@@ -57,22 +43,11 @@ internal static class TableDefinitionSymbols
       return property.GetAttributes().Any(x => x.AttributeClass?.ToDisplayString() == fullName);
    }
 
-   /// <summary>
-   ///    Whether a property that is not a mappable column still has to be validated, because an attribute on it says the
-   ///    developer meant it to be one.
-   /// </summary>
    public static bool ShouldValidateProperty(IPropertySymbol property)
    {
       return property.DeclaredAccessibility == Accessibility.Public || HasRelevantAttribute(property);
    }
 
-   /// <summary>
-   ///    Whether a property is a relation rather than a column candidate. Entirely type-driven: a property whose
-   ///    type, or whose collection element type for a relation to many, derives from
-   ///    <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c> is a relation on its own. Writing <c>[Relation]</c> on
-   ///    it besides is accepted and changes nothing; writing it on a property this method answers
-   ///    <see langword="false" /> for is what <c>PGSQL0033</c> catches.
-   /// </summary>
    public static bool IsRelationProperty(IPropertySymbol property, Compilation compilation)
    {
       var (elementType, _) = ReadCardinality(property.Type);
@@ -80,13 +55,6 @@ internal static class TableDefinitionSymbols
       return TryGetRelationDefinitionBase(elementType, compilation, out _);
    }
 
-   /// <remarks>
-   ///    A setter has to exist, and its accessibility is not looked at. The requirement that one exist is what keeps a
-   ///    computed member out — a get-only or expression-bodied property describes no column, and admitting it would turn
-   ///    an expression into a column that is not there. How accessible it is says nothing about the column, because a
-   ///    table definition is purely declarative and is never instantiated: <c>{ get; private set; }</c>,
-   ///    <c>{ get; init; }</c> and <c>{ get; protected set; }</c> all describe the same column as <c>{ get; set; }</c>.
-   /// </remarks>
    public static bool IsSupportedProperty(IPropertySymbol property)
    {
       return !property.IsStatic
@@ -96,13 +64,6 @@ internal static class TableDefinitionSymbols
              && property.SetMethod is not null;
    }
 
-   /// <remarks>
-   ///    Unlike <see cref="IsSupportedProperty" />, neither the property's own accessibility nor its accessors' is
-   ///    looked at here. A relation property is purely declarative in the same sense the table definition holding it
-   ///    is: nothing ever reads or writes it at run time, only its type identifies the relation. That is what lets it
-   ///    be typed as a privately nested relation definition class — C# itself then requires the property to be no
-   ///    more accessible than that type, exactly as it would for any other member, and this check does not relax that.
-   /// </remarks>
    public static bool IsSupportedRelationPropertyShape(IPropertySymbol property)
    {
       return !property.IsStatic
@@ -144,7 +105,6 @@ internal static class TableDefinitionSymbols
       );
    }
 
-   /// <summary>Whether a <c>[Column]</c> argument, named rather than positional, was set to <see langword="true" />.</summary>
    private static bool HasNamedFlagSet(AttributeData? attribute, string propertyName)
    {
       if (attribute is null)
@@ -153,35 +113,17 @@ internal static class TableDefinitionSymbols
       return attribute.NamedArguments.Any(x => string.Equals(x.Key, propertyName, StringComparison.Ordinal) && x.Value.Value is true);
    }
 
-   /// <summary>How generated code names a type: fully qualified, keywords for the special types, nullability included.</summary>
    public static string TypeDisplayName(ITypeSymbol type)
    {
       return type.ToDisplayString(_typeDisplayFormat);
    }
 
-   /// <summary>
-   ///    Whether the property's type can hold null, which a primary key member's may not.
-   /// </summary>
-   /// <remarks>
-   ///    Both forms are checked because they are separate facts: a nullable value type is a constructed
-   ///    <see cref="Nullable{T}" />, while a nullable reference type is only an annotation — and in a nullable-oblivious
-   ///    file that annotation is absent, which is read here as not nullable because nothing else can be read from it.
-   /// </remarks>
    public static bool TypeCanHoldNull(ITypeSymbol type)
    {
       return type.NullableAnnotation == NullableAnnotation.Annotated
              || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
    }
 
-   /// <summary>
-   ///    Whether the property's type states that its column cannot hold null. Not the negation of
-   ///    <see cref="TypeCanHoldNull" />: this is the stricter question of whether the type says anything at all, and an
-   ///    unannotated reference type in a nullable-oblivious file says nothing, so both answer false for it.
-   /// </summary>
-   /// <remarks>
-   ///    A value type states it unless it is a <see cref="Nullable{T}" />. A reference type states it only through its
-   ///    annotation, which is why the absence of one is read as saying nothing rather than as saying not-null.
-   /// </remarks>
    public static bool TypeStatesNotNull(IPropertySymbol property)
    {
       if (property.Type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
@@ -193,16 +135,6 @@ internal static class TableDefinitionSymbols
       return property.NullableAnnotation == NullableAnnotation.NotAnnotated;
    }
 
-   /// <summary>What a relation property's type states, or <see langword="null" /> when it states nothing usable.</summary>
-   /// <remarks>
-   ///    A property whose type — or whose collection element type, for a relation to many — derives from
-   ///    <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c> is a relation: the target and the declaring type
-   ///    argument are read from that base type, alongside the definition class itself so the caller can go on to read
-   ///    its <c>Keys</c>. Called only for a property <see cref="IsRelationProperty" /> already answered
-   ///    <see langword="true" /> for, so <see langword="null" /> here means the declaration is malformed rather than
-   ///    that the property is not a relation at all — <c>TTarget</c> resolving to something other than a named type,
-   ///    for instance.
-   /// </remarks>
    public static RelationPropertyShape? ReadRelationPropertyShape(ITypeSymbol propertyType, Compilation compilation)
    {
       var (elementType, isToMany) = ReadCardinality(propertyType);
@@ -210,15 +142,6 @@ internal static class TableDefinitionSymbols
       return ReadTargetCandidate(elementType, compilation, isToMany);
    }
 
-   /// <summary>
-   ///    A relation property's cardinality and the type its target is read from: the element type of a supported
-   ///    collection for a relation to many, and the property's own type otherwise.
-   /// </summary>
-   /// <remarks>
-   ///    The one place a collection is recognised as a relation to many. Both the question of whether a property is a
-   ///    relation at all and the question of what it targets come off this same answer, so the two cannot come to
-   ///    disagree about which collection types count.
-   /// </remarks>
    private static (ITypeSymbol ElementType, bool IsToMany) ReadCardinality(ITypeSymbol propertyType)
    {
       if (propertyType is INamedTypeSymbol { IsGenericType: true } collection
@@ -230,10 +153,6 @@ internal static class TableDefinitionSymbols
       return (propertyType, false);
    }
 
-   /// <summary>
-   ///    Whether <paramref name="type" /> derives from <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c>, and if
-   ///    so, that closed base type — from which the two type arguments are read.
-   /// </summary>
    public static bool TryGetRelationDefinitionBase(ITypeSymbol type, Compilation compilation, out INamedTypeSymbol relationDefinitionBase)
    {
       relationDefinitionBase = null!;
@@ -254,9 +173,6 @@ internal static class TableDefinitionSymbols
       return false;
    }
 
-   /// <summary>
-   ///    Where a mapped property was declared, so a diagnostic about it points at the property rather than at the class.
-   /// </summary>
    public static Location PropertyLocation(
       ImmutableArray<IPropertySymbol> mappedProperties,
       PropertyDefinitionModel property,
@@ -268,7 +184,6 @@ internal static class TableDefinitionSymbols
       return symbol?.Locations.FirstOrDefault() ?? classSyntax.Identifier.GetLocation();
    }
 
-   /// <summary>The namespace-qualified name of a type, which is how a relation names its target.</summary>
    public static string GetFullName(INamedTypeSymbol type)
    {
       return type.ContainingNamespace.IsGlobalNamespace
@@ -276,7 +191,6 @@ internal static class TableDefinitionSymbols
          : $"{type.ContainingNamespace.ToDisplayString()}.{type.Name}";
    }
 
-   /// <summary>Whether a generated type name is already taken by something it cannot merge with.</summary>
    public static bool HasGeneratedTypeNameCollision(INamedTypeSymbol classSymbol, string typeName)
    {
       return classSymbol.ContainingNamespace
@@ -284,7 +198,6 @@ internal static class TableDefinitionSymbols
          .Any(type => !CanMergeWithGeneratedType(type));
    }
 
-   /// <summary>A table definition's class name with the <c>Table</c> suffix removed.</summary>
    public static string GetEntityName(string className)
    {
       return className.EndsWith("Table", StringComparison.Ordinal) && className.Length > "Table".Length
@@ -292,7 +205,6 @@ internal static class TableDefinitionSymbols
          : className;
    }
 
-   /// <summary>Splits a <c>[Table]</c> value into its schema and table, defaulting the schema to <c>public</c>.</summary>
    public static bool TryParseTableName(string value, out string schemaName, out string tableName)
    {
       var parts = value.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries)
@@ -317,12 +229,6 @@ internal static class TableDefinitionSymbols
       return false;
    }
 
-   /// <summary>
-   ///    Whether <paramref name="candidate" /> derives from <c>RelationDefinition&lt;TDeclaring, TTarget&gt;</c>, and
-   ///    if so, that base type's two type arguments — the declaring type and the target. Fails when
-   ///    <c>TTarget</c> resolves to something other than a named type, which is the one way a relation definition
-   ///    class can compile and still not name a usable target.
-   /// </summary>
    private static RelationPropertyShape? ReadTargetCandidate(ITypeSymbol candidate, Compilation compilation, bool isToMany)
    {
       if (candidate is not INamedTypeSymbol { TypeKind: TypeKind.Class } named)

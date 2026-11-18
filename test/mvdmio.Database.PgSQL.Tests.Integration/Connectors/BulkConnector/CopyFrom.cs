@@ -4,10 +4,6 @@ using Npgsql;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.Connectors.BulkConnector;
 
-/// <summary>
-///    Integration tests for <see cref="PgSQL.Connectors.Bulk.BulkConnector.CopyFromAsync"/>.
-///    Uses two databases on the shared PostgreSQL container to simulate cross-database copy.
-/// </summary>
 public class CopyFromTests : IAsyncLifetime
 {
    private readonly TestFixture _fixture;

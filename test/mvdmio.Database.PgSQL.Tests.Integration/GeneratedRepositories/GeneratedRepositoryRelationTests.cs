@@ -5,11 +5,6 @@ using Npgsql;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>
-///    Covers relations end to end: the parser, the emitted mapping and mirrored properties, the module initializer, the
-///    adapter, the decorator, the include rewriter, the query provider and PostgreSQL. <see cref="TestBase" /> opens a
-///    transaction for every test, so each of these also proves a relation query binds to the ambient transaction.
-/// </summary>
 public class GeneratedRepositoryRelationTests : TestBase
 {
    private readonly TestFixture _fixture;
@@ -178,11 +173,6 @@ public class GeneratedRepositoryRelationTests : TestBase
       tolkien.Books.Single(x => x.Title == "silmarillion").Editor.Should().BeNull();
    }
 
-   /// <remarks>
-   ///    The provider rejects this, because its own chaining marker does not survive an intervening operator. The
-   ///    library records both halves and emits them contiguously at execution time, so the operator is free to sit
-   ///    between them — it only has to be named as the marker again, which is what the cast does.
-   /// </remarks>
    [Fact]
    public async Task Query_WithAnOperatorBetweenTheHalvesOfAChainedMaterialization_StillPopulatesBothLevels()
    {
@@ -208,11 +198,6 @@ public class GeneratedRepositoryRelationTests : TestBase
       tolkien.Books.Select(x => x.Title).Should().Equal("hobbit");
    }
 
-   /// <remarks>
-   ///    A scoping lambda is consumer-written, so it may name another repository's query — and that query's decorator has
-   ///    to be resolved against its own root before it reaches the provider, exactly as a predicate's would be. The
-   ///    filter does not travel in the composed expression, so nothing else would have rewritten it.
-   /// </remarks>
    [Fact]
    public async Task Query_WithAFilteredMaterializationNamingAnotherRepository_ScopesByTheTableItNames()
    {
@@ -411,13 +396,6 @@ public class GeneratedRepositoryRelationTests : TestBase
       await Assert.ThrowsAsync<ObjectDisposedException>(() => query.ToListAsync(CancellationToken));
    }
 
-   /// <remarks>
-   ///    A detail statement re-derives its parents by re-running the query above it as a derived table, and that is what
-   ///    a filter on the main query reaches: it decides which parents get detail rows, and does not narrow the detail
-   ///    rows themselves — not even on a self-referencing hierarchy, where every row the filter excluded is a candidate
-   ///    detail row. These assertions record what the database actually returns rather than what the design assumed, so
-   ///    the day the provider's split-query strategy changes this test says so.
-   /// </remarks>
    [Fact]
    public async Task Query_WithAMainQueryFilterAndAMaterializedHierarchy_ScopesTheParentsWithoutNarrowingTheDetailRows()
    {
@@ -428,7 +406,6 @@ public class GeneratedRepositoryRelationTests : TestBase
 
       roots.Select(x => x.Name).Should().Equal("tolkien");
 
-      // lewis is a row the main query excluded, and it still arrives as tolkien's mentee.
       roots[0].Mentees.Select(x => x.Name).Should().Equal("lewis");
 
       var twoLevels = await _authors.Query()
@@ -439,7 +416,6 @@ public class GeneratedRepositoryRelationTests : TestBase
 
       twoLevels[0].Mentees.Single().Mentees.Select(x => x.Name).Should().Equal("pratchett");
 
-      // Narrowing the detail rows themselves is what the filtered overload is for, and only it does that.
       var scoped = await _authors.Query()
          .Include(x => x.Mentees, mentees => mentees.Where(mentee => mentee.Name == "nobody"))
          .Where(x => x.MentorId == null)
@@ -448,11 +424,6 @@ public class GeneratedRepositoryRelationTests : TestBase
       scoped[0].Mentees.Should().BeEmpty();
    }
 
-   /// <remarks>
-   ///    Two generated repositories over one connection share a query surface, so both roots resolve and the subquery
-   ///    reads the table it names. Resolving every decorator against a single root — which is what the rewriter used to
-   ///    do — made the inner query read the outer query's table and return the wrong rows without failing.
-   /// </remarks>
    [Fact]
    public async Task Query_WithACorrelatedSubqueryAcrossTwoRepositories_ReadsTheTablesItNames()
    {

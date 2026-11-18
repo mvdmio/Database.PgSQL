@@ -79,7 +79,6 @@ public class MigrationCleanupPlannerTests : IDisposable
       var outOfOrderInProd = CreateFile(_tempDirectory, "_202602161000_CreateOrders.cs");
       IDbMigration[] discovered = [Migration(202602151200, "ScopeA"), Migration(202602161000, "ScopeA"), Migration(202602170000, "ScopeA")];
 
-      // dev ran everything; prod ran the later migration first, so 202602161000 is out-of-order there.
       var dev = Env("dev", 202602170000, Executed(202602151200, "ScopeA"), Executed(202602161000, "ScopeA"), Executed(202602170000, "ScopeA"));
       var prod = Env("prod", 202602170000, Executed(202602151200, "ScopeA"), Executed(202602170000, "ScopeA"));
 
@@ -106,7 +105,6 @@ public class MigrationCleanupPlannerTests : IDisposable
          Migration(202602170000, "ScopeB")
       ];
 
-      // ScopeA has the shared identifier everywhere; ScopeB's migration with that identifier is out-of-order in prod.
       var dev = Env("dev", 202602170000, ExecutedInBothScopes(202602150000, 202602161000, 202602170000));
       var prod = Env(
          "prod",

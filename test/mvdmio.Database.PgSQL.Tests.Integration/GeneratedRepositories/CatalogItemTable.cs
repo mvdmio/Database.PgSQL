@@ -3,11 +3,6 @@ using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>
-///    The declaring side of the nullable-unique-relation-target shape: a not-null <see cref="Sku" /> paired against
-///    <see cref="CatalogEntryTable" />'s nullable <c>[Unique]</c> column of the same name. The pairing compiles with no
-///    change to <c>Key(...)</c>, which is itself the proof that the analyzer's PGSQL0035 rule admits it.
-/// </summary>
 [Table("public.generated_catalog_items")]
 public partial class CatalogItemTable
 {

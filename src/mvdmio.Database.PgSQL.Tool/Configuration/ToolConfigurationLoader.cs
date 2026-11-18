@@ -3,9 +3,6 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace mvdmio.Database.PgSQL.Tool.Configuration;
 
-/// <summary>
-///    Loads tool configuration from the nearest configuration file.
-/// </summary>
 internal static class ToolConfigurationLoader
 {
    public static ToolConfiguration Load()

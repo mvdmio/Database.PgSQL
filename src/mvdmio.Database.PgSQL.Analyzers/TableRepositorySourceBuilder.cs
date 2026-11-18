@@ -5,23 +5,15 @@ namespace mvdmio.Database.PgSQL.Analyzers;
 
 internal static class TableRepositorySourceBuilder
 {
-   /// <summary>
-   ///    The name of the primary-key lookup on every generated repository. Fixed rather than derived from the key's
-   ///    properties, so a reader never has to discover what it is called for a given table — which only holds if it is
-   ///    universal, so a single-column key gets this name too.
-   /// </summary>
    public const string PRIMARY_KEY_LOOKUP_METHOD_NAME = "GetByPrimaryKeyAsync";
 
-   /// <summary>The delete that mirrors <see cref="PRIMARY_KEY_LOOKUP_METHOD_NAME" />.</summary>
    public const string PRIMARY_KEY_DELETE_METHOD_NAME = "DeleteByPrimaryKeyAsync";
 
-   /// <summary>The lookup a <c>[Unique]</c> property gets, which stays named after the property.</summary>
    public static string LookupMethodName(PropertyDefinitionModel property)
    {
       return $"GetBy{property.PropertyName}Async";
    }
 
-   /// <summary>The delete a <c>[Unique]</c> property gets, which stays named after the property.</summary>
    public static string DeleteMethodName(PropertyDefinitionModel property)
    {
       return $"DeleteBy{property.PropertyName}Async";
@@ -57,40 +49,13 @@ internal static class TableRepositorySourceBuilder
       return builder.ToString();
    }
 
-   /// <summary>
-   ///    Which of the three generated types is being emitted, which is the whole of what differs between them. The two
-   ///    rules below both read off it, so a type cannot be given one half of a kind's behaviour and not the other.
-   /// </summary>
    private enum DtoKind
    {
-      /// <summary>
-      ///    The type Dapper materializes a row into, replacing a hand-written row record. A caller may not assign a
-      ///    column the database populates, and nothing on it can be <c>required</c>, because Dapper builds it through a
-      ///    parameterless constructor.
-      /// </summary>
       Data,
 
-      /// <summary>
-      ///    A create or update command a caller builds by hand. Every column stays assignable — an update addresses its
-      ///    row by a primary key that may itself be generated, so the caller has to be able to supply it — and the
-      ///    tenancy columns are <c>required</c>.
-      /// </summary>
       Command
    }
 
-   /// <remarks>
-   ///    <c>required</c> and <c>init</c> are never mirrored, whatever the table definition declares — these types have
-   ///    no constructor that could satisfy <c>required</c>, and every column but a generated one has to stay assignable
-   ///    for a command to be built. A definition pairing <c>required … { get; init; }</c> with
-   ///    <c>{ get; private set; }</c> therefore keeps the half that guards a database-populated column and loses the
-   ///    other.
-   ///    <para>
-   ///       The one exception is a tenancy column on a <see cref="DtoKind.Command" />. It is not mirrored from anything
-   ///       the table definition declares about the column itself — <c>[Column(Tenancy = true)]</c> carries no
-   ///       <c>required</c> or <c>init</c> claim of its own — but added, so a construction site that omits the tenant
-   ///       fails to build rather than writing a row under a default value.
-   ///    </para>
-   /// </remarks>
    private static void AppendDto(
       StringBuilder builder,
       string accessibility,
@@ -337,25 +302,11 @@ internal static class TableRepositorySourceBuilder
       builder.AppendLine("   }");
    }
 
-   /// <summary>
-   ///    One parameter per column <paramref name="constraint" /> names, in the order a signature takes them — every
-   ///    tenancy column first and in declaration order, then whatever the member addresses its row by — each with the
-   ///    trailing comma the optional parameter after it needs. Empty when the constraint is, so a member that
-   ///    constrains nothing keeps the signature it has today.
-   /// </summary>
-   /// <remarks>
-   ///    Every generated signature is built here, so all four read alike and none of them can disagree with the
-   ///    statement it issues about which columns are constrained. Which columns those are is the model's question.
-   /// </remarks>
    private static string ParameterListPrefix(ConstrainedColumns constraint)
    {
       return string.Join(string.Empty, constraint.InParameterOrder.Select(x => $"{x.TypeName} {x.ParameterName}, "));
    }
 
-   /// <summary>
-   ///    The parameter dictionary a Dapper call takes: one binding per parameter, each the name the SQL names it by and
-   ///    the C# expression supplying its value.
-   /// </summary>
    private static void AppendParameterDictionary(StringBuilder builder, IEnumerable<(string Name, string Value)> bindings, int indentation)
    {
       builder.Append(' ', indentation).AppendLine("parameters: new Dictionary<string, object?>");
@@ -376,28 +327,16 @@ internal static class TableRepositorySourceBuilder
       builder.Append(' ', indentation).Append('}');
    }
 
-   /// <summary>Bindings for a statement whose values come off a command object, named by property.</summary>
    private static IEnumerable<(string Name, string Value)> CommandBindings(ImmutableArray<PropertyDefinitionModel> properties, string valueSource)
    {
       return properties.Select(x => (x.PropertyName, BindingExpression(x, $"{valueSource}.{x.PropertyName}")));
    }
 
-   /// <summary>Bindings for a statement whose values come off method parameters, named by parameter.</summary>
    private static IEnumerable<(string Name, string Value)> ParameterBindings(IEnumerable<PropertyDefinitionModel> properties)
    {
       return properties.Select(x => (x.ParameterName, BindingExpression(x, x.ParameterName)));
    }
 
-   /// <summary>
-   ///    What one column's value is bound from, with its storage claim applied.
-   /// </summary>
-   /// <remarks>
-   ///    The only place a claim reaches the wire on the Dapper surface, and it does so through two mechanisms rather than
-   ///    a registry: the value is converted where its CLR type has to change — an enum to the text of its member name, a
-   ///    narrow integer widened to one the driver can write — and the parameter type is stated where the value stands as
-   ///    it is and only the driver's inference is wrong, which is the <c>jsonb</c> case. Nothing is registered, so nothing
-   ///    can be registered twice or disagree with the mapping the same claim produces for the query surface.
-   /// </remarks>
    private static string BindingExpression(PropertyDefinitionModel property, string valueExpression)
    {
       var storage = property.Storage;

@@ -3,9 +3,6 @@ using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
 
-/// <summary>
-///    Command: db copy --from &lt;env&gt; --to &lt;env&gt;
-/// </summary>
 internal static class CopyCommand
 {
    public static Command Create()

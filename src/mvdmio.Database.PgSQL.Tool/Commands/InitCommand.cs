@@ -3,9 +3,6 @@ using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
 
-/// <summary>
-///    Command: db init
-/// </summary>
 internal static class InitCommand
 {
    public static Command Create()

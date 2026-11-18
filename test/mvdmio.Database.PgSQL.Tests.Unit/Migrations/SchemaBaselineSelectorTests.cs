@@ -29,9 +29,6 @@ public class SchemaBaselineSelectorTests
    [Fact]
    public void SelectBaselines_WithForeignScopeLine_RejectsItAndRecordsNoBaseline()
    {
-      // The reported bug: a pulled schema header names another app's scope. The file's assembly does not
-      // vouch for that scope, so no baseline may be recorded for it — otherwise that scope's real
-      // migrations are all at-or-below the fabricated watermark and silently skipped.
       var headers = new[]
       {
          Header(
@@ -56,9 +53,6 @@ public class SchemaBaselineSelectorTests
    [Fact]
    public void SelectBaselines_WithForeignLineForScopeVouchedByAnotherFile_UsesOnlyTheVouchingFilesIdentifier()
    {
-      // File A's ghost line claims App.B is further along than App.B's own schema file does. Only the
-      // vouching file's line may establish the watermark; the ghost line is rejected even though the
-      // scope itself gets a baseline.
       var headers = new[]
       {
          Header(
@@ -87,8 +81,6 @@ public class SchemaBaselineSelectorTests
    [Fact]
    public void SelectBaselines_WithScopeVouchedThroughDiscoveredMigrations_AcceptsLine()
    {
-      // An assembly vouches for more than its simple name: any scope of a migration discovered from it
-      // (e.g. an overridden IDbMigration.Scope) is also vouched.
       var headers = new[]
       {
          Header(
@@ -108,8 +100,6 @@ public class SchemaBaselineSelectorTests
    [Fact]
    public void SelectBaselines_WithLegacyScopelessLines_KeepsEachIdentifierRegardlessOfVouching()
    {
-      // Legacy scope-less header lines keep their existing behavior: recorded individually (one baseline
-      // per identifier, not collapsed to the highest) and healed later by the backfill.
       var headers = new[]
       {
          Header(

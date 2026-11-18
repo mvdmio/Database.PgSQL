@@ -6,11 +6,6 @@ using NpgsqlTypes;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData;
 
-/// <summary>
-///    The other half of what <see cref="GeneratedTypeModelTests" /> asks. That one records what an OData model makes of
-///    the awkward property types; this one records what the query surface does with them, so that a limitation can be
-///    attributed to the right layer instead of being blamed on whichever one was looked at first.
-/// </summary>
 public class AwkwardTypeQueryTests : ODataTestBase
 {
    private AwkwardRepository _repository = null!;
@@ -58,11 +53,6 @@ public class AwkwardTypeQueryTests : ODataTestBase
       matches[0].SignedOffset.Should().Be(-3);
    }
 
-   /// <summary>
-   ///    A signed byte is written through the generated repository, which it could not be before the storage claim
-   ///    existed. Nothing declares the claim: the widening is what an unclaimed <c>sbyte</c> gets, because widening is all
-   ///    it ever needed.
-   /// </summary>
    [Fact]
    public async Task Create_OnATableCarryingASignedByte_WritesTheRow()
    {
@@ -86,11 +76,6 @@ public class AwkwardTypeQueryTests : ODataTestBase
       read.AwkwardId.Should().Be(created.AwkwardId);
    }
 
-   /// <summary>
-   ///    Why the claim is applied where the value is bound rather than left to inference. The driver has no mapping for
-   ///    the <c>DbType</c> Dapper infers from a signed byte, so a bare parameter is refused — and stating the PostgreSQL
-   ///    type on the same value is the whole of the fix a generated repository now applies for itself.
-   /// </summary>
    [Fact]
    public async Task Parameter_CarryingASignedByte_IsRefusedByInferenceAndAcceptedWithAStatedType()
    {
@@ -115,10 +100,6 @@ public class AwkwardTypeQueryTests : ODataTestBase
       stated.Should().Be("-3");
    }
 
-   /// <summary>
-   ///    The evidence behind <c>PGSQL0023</c>. These three widths are refused as column types now, and this is why: the
-   ///    driver has no mapping for any of them, so no statement can carry one however the parameter is built.
-   /// </summary>
    [Theory]
    [InlineData("UInt16", (ushort)42)]
    [InlineData("UInt32", 4_000_000_000U)]

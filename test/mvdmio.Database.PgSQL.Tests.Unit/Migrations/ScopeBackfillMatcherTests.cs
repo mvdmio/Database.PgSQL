@@ -47,7 +47,6 @@ public class ScopeBackfillMatcherTests
    [Fact]
    public void Match_WithAmbiguousIdentifierAcrossScopes_LeavesRowUnattributed()
    {
-      // Two discovered migrations in different scopes share the identifier: attribution would be a guess.
       var executed = new[] { Executed(202601010000, "A1", scope: null) };
       var discovered = new IDbMigration[]
       {
@@ -64,7 +63,6 @@ public class ScopeBackfillMatcherTests
    [Fact]
    public void Match_WithSequentialRunners_EachFillsOnlyRecognizedRows()
    {
-      // Runner 1 only knows ScopeA migrations; runner 2 only knows ScopeB migrations.
       var executed = new[]
       {
          Executed(202601010000, "A1", scope: null),
@@ -76,7 +74,6 @@ public class ScopeBackfillMatcherTests
       runnerOne.Assignments.Should().ContainSingle().Which.Should().Be(new ScopeAssignment(202601010000, "ScopeA"));
       runnerOne.Unattributed.Should().ContainSingle().Which.Identifier.Should().Be(202602010000);
 
-      // After runner 1 applied its assignment, only the ScopeB row is still scope-less.
       var executedAfterRunnerOne = new[]
       {
          Executed(202601010000, "A1", "ScopeA"),

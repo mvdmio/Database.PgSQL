@@ -45,8 +45,6 @@ public class TableRepositoryGeneratorTests
       registrationSource.Should().Contain("AddGeneratorTests(this IServiceCollection services)");
       registrationSource.Should().Contain("services.TryAddScoped<global::Demo.IUserRepository, global::Demo.UserRepository>();");
 
-      // The primary key's lookup and delete are named after the key rather than after UserId, and a single-column key
-      // gets the same name a composite one does — see TableRepositoryGeneratorCompositeKeyTests.
       generatedSource.Should().Contain("GetByPrimaryKeyAsync(long userId, CancellationToken ct = default)");
       generatedSource.Should().Contain("DeleteByPrimaryKeyAsync(long userId, CancellationToken ct = default)");
       generatedSource.Should().NotContain("GetByUserIdAsync");
@@ -327,7 +325,6 @@ public class TableRepositoryGeneratorTests
       bookRelations.Should().Contain("public global::Demo.AuthorData? Editor { get; set; }");
       authorRelations.Should().Contain("public global::System.Collections.Generic.List<global::Demo.BookData> Books { get; set; } = new();");
 
-      // A relation joining one pair of columns registers through the predicate overload, the same as a composite one.
       registration.Should().Contain(".Relation<global::Demo.AuthorData>(x => x.Author, (x, y) => x.AuthorId == y.AuthorId)");
       registration.Should().Contain(".Relation<global::Demo.AuthorData>(x => x.Editor, (x, y) => x.EditorId == y.AuthorId)");
       registration.Should().Contain(".Relation<global::Demo.BookData>(x => x.Books, (x, y) => x.AuthorId == y.AuthorId)");
@@ -423,12 +420,6 @@ public class TableRepositoryGeneratorTests
       result.GeneratedSources.Should().NotBeEmpty();
    }
 
-   /// <remarks>
-   ///    Reaching PGSQL0016 takes an unusual shape now that the relation split is entirely type-driven: the relation
-   ///    property's own type is a perfectly good relation definition, so what has to be malformed is what its
-   ///    <c>TTarget</c> type argument resolves to. An array satisfies the <c>where TTarget : class</c> constraint —
-   ///    arrays are reference types — but is not a named type, so it can never be a table definition.
-   /// </remarks>
    [Fact]
    public void RelationTargetingSomethingThatIsNotANamedType_ProducesDiagnostic()
    {
@@ -598,17 +589,12 @@ public class TableRepositoryGeneratorTests
 
       diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
       diagnostic.GetMessage().Should().Contain("Author");
-      // Author is still an ordinary column candidate — an unmapped, unattributed AuthorTable-typed reference type
-      // that the query surface cannot map — so the table still generates around it.
       result.GeneratedSources.Should().NotBeEmpty();
    }
 
    [Fact]
    public void RelationAttributeOnAnUnsupportedCollectionOfARelationDefinition_ProducesDiagnostic()
    {
-      // A HashSet is not a supported to-many collection type, so even wrapping a genuine relation definition does
-      // not make this a relation — the marker attribute is simply wrong here, the same as it would be on any other
-      // non-relation property.
       var source = """
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;

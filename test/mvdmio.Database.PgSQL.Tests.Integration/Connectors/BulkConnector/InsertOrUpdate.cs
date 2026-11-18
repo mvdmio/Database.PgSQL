@@ -31,10 +31,8 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
    [Fact]
    public async Task WithEmptyTable()
    {
-      // Arrange
       var items = TestItem.Create(10);
 
-      // Act
       var result = (await Db.Bulk.InsertOrUpdateAsync(
          "test_upsert",
          ["integer"],
@@ -43,7 +41,6 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
          CancellationToken
       )).ToArray();
 
-      // Assert
       result.Should().HaveCount(10);
       result.Where(x => x.IsUpdated).Should().HaveCount(0);
       result.Where(x => x.IsInserted).Should().HaveCount(10);
@@ -66,7 +63,6 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
    [Fact]
    public async Task WithChangedValues()
    {
-      // Arrange
       var items = TestItem.Create(10);
 
       var updateItems = items.Select(x => new TestItem
@@ -78,7 +74,6 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
       }
       );
 
-      // Act
       await Db.Bulk.CopyAsync(
          "test_upsert",
          items,
@@ -94,7 +89,6 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
          CancellationToken
       )).ToArray();
 
-      // Assert
       result.Should().HaveCount(10);
       result.Where(x => x.IsUpdated).Should().HaveCount(10);
       result.Where(x => x.IsInserted).Should().HaveCount(0);
@@ -117,7 +111,6 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
    [Fact]
    public async Task WithUnchangedValues()
    {
-      // Arrange
       var items = TestItem.Create(10);
 
       var updateItems = items.Select(x => new TestItem
@@ -129,7 +122,6 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
       }
       );
 
-      // Act
       await Db.Bulk.CopyAsync(
          "test_upsert",
          items,
@@ -145,7 +137,6 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
          CancellationToken
       )).ToArray();
 
-      // Assert
       result.Should().HaveCount(0);
       result.Where(x => x.IsUpdated).Should().HaveCount(0);
       result.Where(x => x.IsInserted).Should().HaveCount(0);
@@ -168,7 +159,6 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
    [Fact]
    public async Task AfterWriteFailure_ReleasesCopyStateForNextOperation()
    {
-      // Arrange
       var failingItems = new[]
       {
          new TestItem
@@ -190,7 +180,6 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
 
       var validItems = TestItem.Create(2);
 
-      // Act
       Func<Task> action = async () => await Db.Bulk.InsertOrUpdateAsync(
          "test_upsert",
          ["integer"],
@@ -214,7 +203,6 @@ public class BulkConnectorInsertOrUpdateTests : TestBase
          CancellationToken
       )).ToArray();
 
-      // Assert
       result.Should().HaveCount(2);
       result.Should().OnlyContain(x => x.IsInserted && !x.IsUpdated);
 

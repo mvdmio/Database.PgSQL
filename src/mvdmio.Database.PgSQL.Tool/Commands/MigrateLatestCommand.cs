@@ -3,9 +3,6 @@ using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
 
-/// <summary>
-///    Command: db migrate latest
-/// </summary>
 internal static class MigrateLatestCommand
 {
    public static Command Create()

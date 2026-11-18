@@ -4,19 +4,14 @@ using System.Collections.Immutable;
 
 namespace mvdmio.Database.PgSQL.Analyzers;
 
-/// <summary>
-///    Warns when a class marked with <c>TableAttribute</c> does not end with <c>Table</c>.
-/// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class TableDefinitionClassNameAnalyzer : DiagnosticAnalyzer
 {
    private const string TABLE_ATTRIBUTE_FULL_NAME = "mvdmio.Database.PgSQL.Attributes.TableAttribute";
 
-   /// <inheritdoc/>
    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
       ImmutableArray.Create(TableRepositoryDiagnostics.TableClassNameShouldEndWithTable);
 
-   /// <inheritdoc/>
    public override void Initialize(AnalysisContext context)
    {
       context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);

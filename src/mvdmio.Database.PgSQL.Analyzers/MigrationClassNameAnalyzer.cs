@@ -6,20 +6,9 @@ using System.Text.RegularExpressions;
 
 namespace mvdmio.Database.PgSQL.Analyzers;
 
-/// <summary>
-///    Roslyn analyzer that warns when a class implementing <c>IDbMigration</c> does not follow
-///    the required naming convention <c>_{identifier}_{name}</c> (e.g. <c>_202310191050_AddUsersTable</c>).
-/// </summary>
-/// <remarks>
-///    The convention is required because <c>IDbMigration</c> provides default implementations of
-///    <c>Identifier</c> and <c>Name</c> that are parsed directly from the class name at runtime.
-///    A class that does not follow the convention will throw a <see cref="System.FormatException"/> at
-///    runtime when those default properties are first accessed.
-/// </remarks>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class MigrationClassNameAnalyzer : DiagnosticAnalyzer
 {
-   /// <summary>Diagnostic ID for an invalid migration class name.</summary>
    [SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "DiagnosticId is the name every Roslyn analyzer exposes its ID under; UPPER_SNAKE_CASE would fight that idiom, and the member is public, so renaming it would break surface for housekeeping.")]
    public const string DiagnosticId = "PGSQL0001";
 
@@ -27,7 +16,6 @@ public sealed class MigrationClassNameAnalyzer : DiagnosticAnalyzer
    private const string IDBMIGRATION_INTERFACE_NAME = "IDbMigration";
    private const string IDBMIGRATION_FULL_NAMESPACE = "mvdmio.Database.PgSQL.Migrations.Interfaces";
 
-   // Matches: optional leading underscore, exactly 12 digits, underscore, at least one more char
    private static readonly Regex _migrationNameRegex = new(@"^_?(\d{12})_(.+)$", RegexOptions.Compiled);
 
    private static readonly DiagnosticDescriptor _rule = new(
@@ -42,10 +30,8 @@ public sealed class MigrationClassNameAnalyzer : DiagnosticAnalyzer
                    "so that the default Identifier and Name property implementations can extract their values from the class name."
    );
 
-   /// <inheritdoc/>
    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(_rule);
 
-   /// <inheritdoc/>
    public override void Initialize(AnalysisContext context)
    {
       context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
@@ -57,7 +43,6 @@ public sealed class MigrationClassNameAnalyzer : DiagnosticAnalyzer
    {
       var namedType = (INamedTypeSymbol)context.Symbol;
 
-      // Only care about concrete classes (not abstract, not interfaces, not structs)
       if (namedType.TypeKind != TypeKind.Class || namedType.IsAbstract)
          return;
 
@@ -69,7 +54,6 @@ public sealed class MigrationClassNameAnalyzer : DiagnosticAnalyzer
       if (_migrationNameRegex.IsMatch(className))
          return;
 
-      // The class name is invalid — emit a diagnostic on the class declaration
       var diagnostic = Diagnostic.Create(
          _rule,
          namedType.Locations[0],

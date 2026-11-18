@@ -3,9 +3,6 @@ using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>
-///    The far side of a many-to-many, reached through a join table that is itself a table definition.
-/// </summary>
 [Table("public.generated_tags")]
 public partial class TagTable
 {

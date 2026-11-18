@@ -4,16 +4,8 @@ using System.Runtime.Versioning;
 
 namespace mvdmio.Database.PgSQL.Tool.Building;
 
-/// <summary>
-///    Builds a .NET project and loads the output assembly.
-/// </summary>
 internal static class ProjectBuilder
 {
-   /// <summary>
-   ///    Builds the project at the given path and returns the loaded output assembly.
-   /// </summary>
-   /// <param name="projectPath">The absolute path to the project directory or .csproj file.</param>
-   /// <returns>The loaded assembly containing migration classes.</returns>
    public static Assembly BuildAndLoadAssembly(string projectPath)
    {
       var csprojPath = ResolveCsprojPath(projectPath);
@@ -72,7 +64,6 @@ internal static class ProjectBuilder
          return projectPath;
       }
 
-      // projectPath is a directory - find the .csproj inside it
       if (!Directory.Exists(projectPath))
          throw new DirectoryNotFoundException($"Project directory not found: {projectPath}");
 
@@ -95,7 +86,6 @@ internal static class ProjectBuilder
       var assemblyName = Path.GetFileNameWithoutExtension(csprojPath);
       var tfm = GetCurrentTargetFrameworkMoniker();
 
-      // Look in bin/Debug/<tfm>/ first, then bin/Release/<tfm>/
       string[] configurations = ["Debug", "Release"];
 
       foreach (var config in configurations)
@@ -120,7 +110,6 @@ internal static class ProjectBuilder
       if (framework?.FrameworkName is null)
          return "net10.0";
 
-      // FrameworkName is like ".NETCoreApp,Version=v10.0" -> convert to "net10.0"
       var version = framework.FrameworkName.Split("Version=v")[^1];
       return $"net{version}";
    }

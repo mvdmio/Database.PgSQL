@@ -5,17 +5,8 @@ using System.Reflection;
 
 namespace mvdmio.Database.PgSQL.Migrations;
 
-/// <summary>
-///    Applies embedded schemas for assemblies that still have at least one empty vouched scope, in
-///    constructor order. A migrate-to target skips only the schemas whose headers exceed it. Baseline rows
-///    are recorded for vouched scopes that had no watermark before this run; legacy scope-less header lines
-///    are recorded only when the database was globally empty.
-/// </summary>
 internal static class SchemaBootstrapApplier
 {
-   /// <summary>
-   ///    Applies the schemas this run should bootstrap. Returns true when at least one schema file was applied.
-   /// </summary>
    public static async Task<bool> ApplyForEmptyScopesAsync(
       DatabaseConnection connection,
       ILogger logger,
@@ -64,8 +55,6 @@ internal static class SchemaBootstrapApplier
 
       await connection.InTransactionAsync(async () =>
       {
-         // Pre-create the migrations table so schema files that also try to create it
-         // (with or without IF NOT EXISTS) don't conflict within the same transaction.
          await MigrationsTableManager.EnsureTableAsync(connection, cancellationToken);
 
          var headers = new List<SchemaFileHeader>(schemasToApply.Count);
@@ -105,9 +94,6 @@ internal static class SchemaBootstrapApplier
       return true;
    }
 
-   /// <summary>
-   ///    Records a baseline after <see cref="MigrationsTableManager.EnsureTableAsync"/>, so the scope column exists.
-   /// </summary>
    private static async Task InsertBaselineRowAsync(
       DatabaseConnection connection,
       SchemaFileMigrationInfo baseline,
@@ -128,9 +114,5 @@ internal static class SchemaBootstrapApplier
       );
    }
 
-   /// <summary>
-   ///    One embedded schema selected for apply: the file contents plus the header <see cref="SchemaBaselineSelector"/>
-   ///    needs to record baselines.
-   /// </summary>
    private sealed record SchemaToApply(string Content, SchemaFileHeader Header);
 }

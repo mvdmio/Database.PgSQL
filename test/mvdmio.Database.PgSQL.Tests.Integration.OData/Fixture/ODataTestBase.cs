@@ -1,14 +1,5 @@
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
-/// <summary>
-///    Opens a connection through the factory and a transaction before each test, and rolls the transaction back
-///    afterwards, so every test leaves the database as it found it.
-/// </summary>
-/// <remarks>
-///    A deliberate copy of the main integration suite's base class rather than a project reference to it, the same
-///    choice the secondary-schema project makes, so the two test assemblies stay independent. There is no HTTP
-///    boundary here, so the rollback pattern works exactly as it does there.
-/// </remarks>
 public abstract class ODataTestBase : IAsyncLifetime
 {
    private readonly ODataTestFixture _fixture;

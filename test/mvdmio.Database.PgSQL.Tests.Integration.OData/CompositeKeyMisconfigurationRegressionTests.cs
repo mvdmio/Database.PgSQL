@@ -3,18 +3,6 @@ using mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData;
 
-/// <summary>
-///    The null-propagation symptoms that need a relation to see, over a composite key rather than a single-column one. The
-///    third member of the family alongside <see cref="MisconfigurationRegressionTests" /> and
-///    <see cref="RelationMisconfigurationRegressionTests" />.
-/// </summary>
-/// <remarks>
-///    The one setting a consumer must get right does not become discoverable by being documented once; it stays
-///    discoverable by being guarded on every key shape the library admits. Like its pair, each test runs the same query
-///    string twice — once with the mandated settings and once with
-///    <see cref="ODataConfiguration.MisconfiguredQuerySettings" />, which leaves the setting untouched rather than forcing
-///    it, so what they observe is what OData's namespace matching actually decides for this provider.
-/// </remarks>
 public class CompositeKeyMisconfigurationRegressionTests : CompositeKeyConformanceTestBase
 {
    public CompositeKeyMisconfigurationRegressionTests(ODataTestFixture fixture)
@@ -29,7 +17,6 @@ public class CompositeKeyMisconfigurationRegressionTests : CompositeKeyConforman
 
       var misconfigured = MisconfiguredProjects(QUERY_STRING).ProjectedRows();
 
-      // Every project, in the right order, with the right scalar values — and not one task.
       misconfigured.Select(x => x["Code"]).Should().Equal("apollo", "aurora", "borealis", "vega");
       misconfigured.Should().AllSatisfy(row => row.ExpandedMany(nameof(TenantProjectData.Tasks)).Should().BeEmpty());
 
@@ -42,8 +29,6 @@ public class CompositeKeyMisconfigurationRegressionTests : CompositeKeyConforman
    [Fact]
    public void Expand_ToManyRowsOverACompositeKey_SendsTheSameStatementEitherWay()
    {
-      // Why it is undetectable from either side: the query surface composed exactly the same statement, so there is no
-      // failure to catch. The rewriting happens above it, in the projection OData binds the expansion as.
       const string QUERY_STRING = "$expand=Tasks&$orderby=Code";
 
       MisconfiguredProjects(QUERY_STRING).RenderSql().Should().Be(ApplyToProjects(QUERY_STRING).RenderSql());
@@ -67,13 +52,10 @@ public class CompositeKeyMisconfigurationRegressionTests : CompositeKeyConforman
 
       var misconfigured = MisconfiguredProjects(QUERY_STRING);
 
-      // OData adds an EXISTS on top of its own NOT EXISTS, so a project with no tasks no longer qualifies — and an empty
-      // collection satisfying "all" vacuously is the specified behaviour.
       misconfigured.RenderSql().Should().ContainAll("NOT EXISTS(", "EXISTS(");
 
       (await CodesAsync(misconfigured)).Should().Equal("borealis");
 
-      // Not a translation failure and not an error: a different, wrong row set.
       (await CodesAsync(ApplyToProjects(QUERY_STRING))).Should().Equal("borealis", "vega");
    }
 

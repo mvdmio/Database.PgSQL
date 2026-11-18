@@ -58,11 +58,6 @@ public class QueryRootRewriterTests
       rewritten.Should().BeSameAs(expression);
    }
 
-   /// <remarks>
-   ///    A correlated subquery across two generated repositories puts two sources in one expression. Resolving both
-   ///    against a single root — which is what this rewriter used to be handed — made the inner query read the outer
-   ///    query's table and return the wrong rows without failing.
-   /// </remarks>
    [Fact]
    public void Rewrite_WithTwoSourcesOverOneConnection_ResolvesEachAgainstItsOwnRoot()
    {

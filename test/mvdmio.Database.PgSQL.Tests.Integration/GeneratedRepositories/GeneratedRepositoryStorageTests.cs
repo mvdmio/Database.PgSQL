@@ -8,11 +8,6 @@ using System.Globalization;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>
-///    Covers a column's storage claim against a real table: what the database ends up holding, what comes back, and
-///    whether the two surfaces agree. Every row of the documented matrix is exercised here, because each row is a promise
-///    about a real column rather than about emitted text.
-/// </summary>
 public class GeneratedRepositoryStorageTests : TestBase
 {
    private StorageClaimRepository _repository = null!;
@@ -56,10 +51,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       read.JsonMetadata.Should().BeEquivalentTo(new Dictionary<string, string> { ["tier"] = "bronze" });
    }
 
-   /// <summary>
-   ///    Every cell of the documented matrix, read back through the query surface as well — so no row of it rests on the
-   ///    Dapper side alone.
-   /// </summary>
    [Fact]
    public async Task Query_OverEveryStorageShape_ReadsBackWhatCreateWrote()
    {
@@ -86,10 +77,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       read.JsonMetadata.Should().BeEquivalentTo(new Dictionary<string, string> { ["tier"] = "bronze" });
    }
 
-   /// <summary>
-   ///    What each column of the matrix really holds, read as its own PostgreSQL type. This is the assertion that a claim
-   ///    reached the wire rather than merely being carried in the mapping.
-   /// </summary>
    [Theory]
    [InlineData("state", "Closed")]
    [InlineData("phase", "Closed")]
@@ -115,11 +102,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       (await ReadColumnAsync<long>(columnName, created.ClaimId)).Should().Be((long)WorkState.InProgress);
    }
 
-   /// <summary>
-   ///    The one matrix cell where stating the claim changes the route to the database: a claimed dictionary is bound
-   ///    through the parameter-type mechanism rather than through the process-wide Dapper conversion, so the value reaches
-   ///    the column as a CLR dictionary rather than as a serialized string.
-   /// </summary>
    [Theory]
    [InlineData("metadata", "gold")]
    [InlineData("claimed_metadata", "silver")]
@@ -165,10 +147,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       throughQuery.ClaimId.Should().Be(withNull.ClaimId);
    }
 
-   /// <summary>
-   ///    A claim naming the default has to be indistinguishable from claiming nothing, on both surfaces — otherwise the
-   ///    matrix's "without a claim" column and its <c>Text</c> claim would be two different behaviours wearing one name.
-   /// </summary>
    [Fact]
    public async Task ClaimingTheDefault_BehavesAsClaimingNothing()
    {
@@ -181,10 +159,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       byClaimed.Select(x => x.ClaimId).Should().Equal(created.ClaimId);
    }
 
-   /// <summary>
-   ///    An unclaimed enum column holds the text of its member name, which is what this library has always promised and
-   ///    what an application storing enums as text already has in its data.
-   /// </summary>
    [Fact]
    public async Task UnclaimedEnumColumn_HoldsTheMemberNameAsText()
    {
@@ -205,10 +179,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       stored.Should().Be((int)WorkState.Closed);
    }
 
-   /// <summary>
-   ///    The defect the claim exists to remove: the same column filtered through <c>Query()</c> the way it was written
-   ///    through <c>CreateAsync</c>.
-   /// </summary>
    [Fact]
    public async Task Query_FilteringAnUnclaimedEnumColumn_MatchesWhatCreateWrote()
    {
@@ -220,12 +190,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       matches.Select(x => x.ClaimId).Should().Equal(created.ClaimId);
    }
 
-   /// <summary>
-   ///    The predicate reaches the column directly, with the converted value in a parameter and no cast around either
-   ///    side — so it can still use an index. The value is not in the SQL to assert on, which is what
-   ///    <see cref="Query_FilteringAnUnclaimedEnumColumn_MatchesWhatCreateWrote" /> establishes instead: a row can only
-   ///    match if the parameter carried the member name.
-   /// </summary>
    [Fact]
    public void Query_FilteringAnUnclaimedEnumColumn_ComparesTheColumnAgainstAParameter()
    {
@@ -246,10 +210,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       matches.Select(x => x.ClaimId).Should().Equal(created.ClaimId);
    }
 
-   /// <summary>
-   ///    Two columns of one enum, stored two ways, read correctly through the same query. One table's choice does not
-   ///    constrain the other's, and neither is a process-wide decision.
-   /// </summary>
    [Fact]
    public async Task Query_OverBothEnumColumnsAtOnce_ReadsEachThroughItsOwnStorage()
    {
@@ -260,10 +220,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       read.ClaimId.Should().Be(created.ClaimId);
    }
 
-   /// <summary>
-   ///    Reading is what the two surfaces used to disagree about most quietly: a value that materialised through a lookup
-   ///    would throw through a query. Both are asked for the same row here.
-   /// </summary>
    [Fact]
    public async Task EnumColumn_ReadsIdenticallyThroughBothSurfaces()
    {
@@ -277,11 +233,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       throughQuery.ReviewState.Should().Be(throughDapper.ReviewState);
    }
 
-   /// <summary>
-   ///    A stored value differing in case from the member name. Dapper's native text-to-enum path parses
-   ///    case-insensitively, so the query surface's conversion does too rather than being stricter than the surface beside
-   ///    it.
-   /// </summary>
    [Fact]
    public async Task EnumColumn_HoldingADifferentlyCasedMemberName_ReadsThroughBothSurfaces()
    {
@@ -312,10 +263,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       await ReadColumnAsync<string?>("review_state", created.ClaimId).ContinueWith(x => x.Result.Should().BeNull(), CancellationToken);
    }
 
-   /// <summary>
-   ///    The <c>jsonb</c> case. PostgreSQL will not cast text to <c>jsonb</c> implicitly, so this used to fail every write
-   ///    with <c>42804</c> while compiling clean.
-   /// </summary>
    [Fact]
    public async Task StringOnAJsonbColumn_InsertsAndReadsBackAsAString()
    {
@@ -328,11 +275,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       read.Document.Should().Be("""{"kind": "invoice"}""");
    }
 
-   /// <summary>
-   ///    That the value reached the column as JSON rather than as text. PostgreSQL reparses <c>jsonb</c> and answers with
-   ///    its own formatting, so the whitespace the caller wrote is not what comes back — which a <c>text</c> column would
-   ///    have returned verbatim.
-   /// </summary>
    [Fact]
    public async Task StringOnAJsonbColumn_IsReformattedByPostgresRatherThanStoredVerbatim()
    {
@@ -353,8 +295,6 @@ public class GeneratedRepositoryStorageTests : TestBase
 
       updated.Document.Should().Be("""{"kind": "credit-note"}""");
 
-      // Read as jsonb rather than as text, so the assertion is that the column really holds JSON rather than a string
-      // that happens to look like it.
       var kind = await Db.Dapper.QuerySingleAsync<string>(
          "SELECT document ->> 'kind' FROM public.generated_storage_claims WHERE claim_id = :claimId",
          new Dictionary<string, object?> { ["claimId"] = created.ClaimId },
@@ -364,11 +304,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       kind.Should().Be("credit-note");
    }
 
-   /// <summary>
-   ///    Load-bearing and previously unverified: the <c>jsonb</c> binding works by putting an
-   ///    <c>ICustomQueryParameter</c> into the parameter dictionary generated code builds, and nothing had established
-   ///    that Dapper honours one when it arrives that way rather than on a parameter object.
-   /// </summary>
    [Fact]
    public async Task CustomQueryParameter_InsideTheParameterDictionary_IsHonouredByDapper()
    {
@@ -393,10 +328,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       value.Should().BeNull();
    }
 
-   /// <summary>
-   ///    The row the matrix calls load-bearing: an application with JSON in <c>text</c> columns that it casts at query
-   ///    time must keep binding those as text, so fixing <c>jsonb</c> cannot break them.
-   /// </summary>
    [Fact]
    public async Task UnclaimedStringColumn_KeepsBindingAsText()
    {
@@ -445,11 +376,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       throughQuery.ClaimId.Should().Be(created.ClaimId);
    }
 
-   /// <summary>
-   ///    The generated data type keeps a <c>[Generated]</c> column non-publicly settable, and both surfaces still populate
-   ///    it. That the provider can write a private setter at all is the part this settles — it is undocumented, and the
-   ///    alternative would have been a backing-field escape hatch.
-   /// </summary>
    [Fact]
    public async Task GeneratedColumnWithAPrivateSetter_MaterializesThroughBothSurfaces()
    {
@@ -464,10 +390,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       throughQuery.CreatedAt.Should().BeCloseTo(created.CreatedAt, TimeSpan.FromSeconds(5));
    }
 
-   /// <summary>
-   ///    The evidence behind <c>PGSQL0022</c>. A storage claim states how the column is represented; it does not ask for a
-   ///    conversion, and the driver refuses a string bound under an integral type outright.
-   /// </summary>
    [Theory]
    [InlineData(NpgsqlDbType.Smallint)]
    [InlineData(NpgsqlDbType.Integer)]
@@ -486,17 +408,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       failure!.InnerException!.Message.Should().Contain("System.String");
    }
 
-   /// <summary>
-   ///    What hand-written Dapper SQL does with an enum parameter, unchanged by this release and unchanged by whether the
-   ///    type handlers are registered: it binds the number behind the member.
-   /// </summary>
-   /// <remarks>
-   ///    The registration does not reach this, and never did — Dapper resolves an enum parameter to its underlying type
-   ///    before it consults the handler table, so <c>EnumAsStringTypeHandler.SetValue</c> is unreachable from the parameter
-   ///    path. Pinned because the registration reads as though it settled both directions, and because it is the reason a
-   ///    generated repository states the conversion at its own binding site rather than relying on a registry. A
-   ///    hand-written statement that wants the member name binds the string itself, as the second half shows.
-   /// </remarks>
    [Fact]
    public async Task HandWrittenSql_BindsAnEnumParameterAsItsUnderlyingNumber()
    {
@@ -517,11 +428,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       asStated.Should().Be("InProgress");
    }
 
-   /// <summary>
-   ///    That an opt-in convenience cannot change what a generated repository does. The registered handler stores this
-   ///    enum as text, and the integer-claimed column is written and read correctly all the same — which it could not be
-   ///    if the handler had intercepted the binding.
-   /// </summary>
    [Fact]
    public async Task RegisteredEnumTypeHandler_DoesNotReachAGeneratedRepositorysBinding()
    {
@@ -537,7 +443,6 @@ public class GeneratedRepositoryStorageTests : TestBase
       return await _repository.CreateAsync(StorageClaimRows.Create(state, priority, reviewState), CancellationToken);
    }
 
-   /// <summary>What the column really holds, read as its own PostgreSQL type rather than through the mapping.</summary>
    private async Task<T> ReadColumnAsync<T>(string columnName, long claimId)
    {
       return await Db.Dapper.QuerySingleAsync<T>(

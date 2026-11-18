@@ -17,13 +17,8 @@ public class SchemaExtractionTests : TestBase
    {
       await base.InitializeAsync();
 
-      // Create a rich schema for testing all extraction features.
-      // Each statement is executed separately to avoid Dapper/Npgsql issues with
-      // dollar-quoting in multi-statement batches.
-
       await Db.Dapper.ExecuteAsync("CREATE SCHEMA IF NOT EXISTS test_schema;");
 
-      // Enum type (wrapped in DO block with dollar-quoting, must be its own call)
       await Db.Dapper.ExecuteAsync(
          """
          DO $$ BEGIN
@@ -155,7 +150,6 @@ public class SchemaExtractionTests : TestBase
    {
       var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
 
-      // The test fixture runs migrations, so the latest migration per scope should be in the header
       script.Should().Contain("Migration version: 202505192230 (ComplexTable) [mvdmio.Database.PgSQL.Tests.Integration]");
    }
 
@@ -210,10 +204,8 @@ public class SchemaExtractionTests : TestBase
    {
       var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
 
-      // Primary keys
       script.Should().Contain("PRIMARY KEY");
 
-      // Foreign key
       script.Should().Contain("fk_child_parent");
       script.Should().Contain("FOREIGN KEY");
       script.Should().Contain("REFERENCES");
@@ -333,12 +325,8 @@ public class SchemaExtractionTests : TestBase
    [Fact]
    public async Task GenerateSchemaScriptAsync_IsIdempotent()
    {
-      // The generated script should be executable against the same database without errors,
-      // since all statements are idempotent.
       var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
 
-      // Execute each statement separately to avoid Dapper/Npgsql issues with
-      // dollar-quoting in multi-statement batches.
       var statements = SplitSqlStatements(script);
 
       foreach (var statement in statements)
@@ -347,10 +335,6 @@ public class SchemaExtractionTests : TestBase
       }
    }
 
-   /// <summary>
-   ///    Splits a SQL script into individual statements, correctly handling dollar-quoted blocks
-   ///    (e.g., DO $$ ... $$; or function bodies with $func$ ... $func$).
-   /// </summary>
    private static List<string> SplitSqlStatements(string script)
    {
       var statements = new List<string>();
@@ -360,7 +344,6 @@ public class SchemaExtractionTests : TestBase
 
       while (i < script.Length)
       {
-         // Check for dollar-quoting start/end
          if (script[i] == '$')
          {
             var tagEnd = script.IndexOf('$', i + 1);
@@ -371,7 +354,6 @@ public class SchemaExtractionTests : TestBase
 
                if (dollarTag == null)
                {
-                  // Entering dollar-quoted block
                   dollarTag = tag;
                   current.Append(tag);
                   i = tagEnd + 1;
@@ -380,7 +362,6 @@ public class SchemaExtractionTests : TestBase
 
                if (tag == dollarTag)
                {
-                  // Exiting dollar-quoted block
                   current.Append(tag);
                   dollarTag = null;
                   i = tagEnd + 1;
@@ -394,7 +375,7 @@ public class SchemaExtractionTests : TestBase
             current.Append(';');
             var stmt = current.ToString().Trim();
 
-            if (stmt.Length > 1) // More than just ";"
+            if (stmt.Length > 1)
                statements.Add(stmt);
 
             current.Clear();
@@ -402,7 +383,6 @@ public class SchemaExtractionTests : TestBase
             continue;
          }
 
-         // Skip single-line comments
          if (i + 1 < script.Length && script[i] == '-' && script[i + 1] == '-' && dollarTag == null)
          {
             var lineEnd = script.IndexOf('\n', i);
@@ -575,24 +555,14 @@ public class SchemaExtractionTests : TestBase
    [Fact]
    public async Task GenerateSchemaScriptAsync_HandlesNullConstraintType()
    {
-      // Regression test: GenerateSchemaScriptAsync previously threw ArgumentNullException
-      // when a constraint had a null ConstraintType. This can happen when Dapper maps
-      // a database value to null despite the column being NOT NULL in PostgreSQL.
-      //
-      // We verify that the ordering logic in AppendConstraintsAsync does not throw
-      // by generating the schema script for a database that has constraints.
-      // The database created by the test fixture already has primary key and foreign key
-      // constraints, so this exercises the constraint ordering path.
       var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
 
-      // The script should contain constraint definitions without throwing
       script.Should().Contain("Constraints");
    }
 
    [Fact]
    public async Task GetConstraintsAsync_HandlesExclusionConstraints()
    {
-      // Create a table with an exclusion constraint to test all constraint types
       await Db.Dapper.ExecuteAsync("CREATE EXTENSION IF NOT EXISTS btree_gist;", ct: CancellationToken);
 
       await Db.Dapper.ExecuteAsync(
@@ -618,8 +588,6 @@ public class SchemaExtractionTests : TestBase
    [Fact]
    public async Task GenerateSchemaScriptAsync_HandlesExclusionConstraints()
    {
-      // Create a table with an exclusion constraint to verify schema script generation
-      // handles all constraint types, including exclusion constraints.
       await Db.Dapper.ExecuteAsync("CREATE EXTENSION IF NOT EXISTS btree_gist;", ct: CancellationToken);
 
       await Db.Dapper.ExecuteAsync(
@@ -659,7 +627,6 @@ public class SchemaExtractionTests : TestBase
 
       var constraintNames = constraints.Select(c => c.ConstraintName).ToHashSet();
 
-      // None of the returned indexes should be a constraint-backing index
       foreach (var index in indexes)
       {
          constraintNames.Should().NotContain(index.IndexName);
@@ -706,7 +673,6 @@ public class SchemaExtractionTests : TestBase
    [Fact]
    public async Task GenerateSchemaScriptAsync_HandlesConstraintNameWithSpecialCharacters()
    {
-      // Constraint names with single quotes must be properly escaped in the generated script.
       await Db.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.special_constraint_test (
@@ -851,7 +817,6 @@ public class SchemaExtractionTests : TestBase
    {
       var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
 
-      // Verify sequence has actual property values, not zeroes
       script.Should().Contain("INCREMENT BY 1");
       script.Should().Contain("START WITH 100");
       script.Should().Contain("AS bigint");
@@ -862,7 +827,6 @@ public class SchemaExtractionTests : TestBase
    {
       var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
 
-      // Verify table columns have actual names and types, not empty strings
       script.Should().Contain("\"id\" bigint");
       script.Should().Contain("\"name\" text");
    }
@@ -887,16 +851,12 @@ public class SchemaExtractionTests : TestBase
    [Fact]
    public async Task GetCurrentMigrationVersionAsync_ReturnsMostRecentMigration()
    {
-      // Verify the mvdmio schema exists
       var schemaExists = await Db.Management.SchemaExistsAsync("mvdmio");
       schemaExists.Should().BeTrue("the mvdmio schema should exist after migrations run");
 
-      // Verify the migrations table exists
       var tableExists = await Db.Management.TableExistsAsync("mvdmio", "migrations");
       tableExists.Should().BeTrue("the migrations table should exist after migrations run");
 
-      // The test fixture runs migrations from a single assembly (one scope), so exactly one
-      // per-scope entry should be returned: the highest executed identifier within that scope.
       var currentMigrations = await Db.Management.Schema.GetCurrentMigrationVersionAsync(CancellationToken);
 
       currentMigrations.Should().ContainSingle();
@@ -908,9 +868,6 @@ public class SchemaExtractionTests : TestBase
    [Fact]
    public async Task GetCurrentMigrationVersionAsync_WithOwnedScopes_ExcludesForeignScopesAndKeepsLegacyRows()
    {
-      // A shared database: the migrations table also carries another app's scope and a legacy
-      // scope-less row. With ownership declared, only the owned scope's watermark is reported;
-      // legacy rows cannot be attributed to a scope at export time, so they keep their entry.
       await InsertForeignAndLegacyMigrationRowsAsync();
 
       var extractor = new SchemaExtractor(Db, includedSchemas: null, ownedScopes: ["mvdmio.Database.PgSQL.Tests.Integration"]);
@@ -953,9 +910,6 @@ public class SchemaExtractionTests : TestBase
    [Fact]
    public async Task GenerateSchemaScriptAsync_WithIncludedSchemasAndOwnedScopes_ExportsOnlyOwnedWatermarkAndIncludedSchemas()
    {
-      // The reporter's shape: multiple apps share one database (foreign scope rows present), and this
-      // app's export is filtered to its own schemas AND its own scope. Neither the body nor the header
-      // may name the other app's objects or watermark.
       await InsertForeignAndLegacyMigrationRowsAsync();
 
       var extractor = new SchemaExtractor(Db, includedSchemas: ["test_schema"], ownedScopes: ["mvdmio.Database.PgSQL.Tests.Integration"]);
@@ -971,8 +925,6 @@ public class SchemaExtractionTests : TestBase
    [Fact]
    public async Task GenerateSchemaScriptAsync_WithOwnedScopeThatHasNoExecutedMigrations_EmitsNoneHeader()
    {
-      // Owning a scope with no executed migrations degrades exactly as an empty database does, so a
-      // schema-first bootstrap of that app alone stays self-consistent.
       var extractor = new SchemaExtractor(Db, includedSchemas: null, ownedScopes: ["App.That.Never.Ran"]);
 
       var script = await extractor.GenerateSchemaScriptAsync(CancellationToken);

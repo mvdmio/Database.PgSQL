@@ -3,13 +3,6 @@ using Microsoft.CodeAnalysis;
 
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
-/// <summary>
-///    Covers a relation declared as a class deriving from <c>RelationDefinition&lt;,&gt;</c>: the type-driven
-///    relation-property split, a nested and an externally declared definition class, a relation to one row and to
-///    many rows, the nullable-left key overload, pair order, and the three diagnostics this shape owns
-///    (<c>PGSQL0028</c>, <c>PGSQL0029</c>, <c>PGSQL0030</c>) alongside the reused <c>PGSQL0014</c> and
-///    <c>PGSQL0015</c>.
-/// </summary>
 public class TableRepositoryGeneratorRelationDefinitionTests
 {
    private const string VALID_RELATIONS = """
@@ -78,7 +71,6 @@ public class TableRepositoryGeneratorRelationDefinitionTests
       bookRelations.Should().Contain("public global::Demo.AuthorData? Author { get; set; }");
       authorRelations.Should().Contain("public global::System.Collections.Generic.List<global::Demo.BookData> Books { get; set; } = new();");
 
-      // Emission is unchanged from the predicate-based association step 01 settled on, whatever the declaration form.
       registration.Should().Contain(".Relation<global::Demo.AuthorData>(x => x.Author, (x, y) => x.AuthorId == y.AuthorId)");
       registration.Should().Contain(".Relation<global::Demo.BookData>(x => x.Books, (x, y) => x.AuthorId == y.AuthorId)");
    }
@@ -134,7 +126,6 @@ public class TableRepositoryGeneratorRelationDefinitionTests
       result.GeneratedSources.Should().NotBeEmpty();
    }
 
-   /// <summary>A book carrying whichever pair order the caller writes, for the composite-pair order-independence test.</summary>
    private static string CompositeRelationSource(string firstPair, string secondPair)
    {
       return $$"""
@@ -196,8 +187,6 @@ public class TableRepositoryGeneratorRelationDefinitionTests
       var tenantFirstRegistration = GeneratorHarness.RegistrationSource(tenantFirst);
       var targetFirstRegistration = GeneratorHarness.RegistrationSource(targetFirst);
 
-      // Both equalities are present whichever pair was written first, because the pairs are combined with && and
-      // carry no meaning from their own order.
       tenantFirstRegistration.Should().Contain("x.TenantId == y.TenantId");
       tenantFirstRegistration.Should().Contain("x.TargetId == y.TargetId");
       targetFirstRegistration.Should().Contain("x.TenantId == y.TenantId");

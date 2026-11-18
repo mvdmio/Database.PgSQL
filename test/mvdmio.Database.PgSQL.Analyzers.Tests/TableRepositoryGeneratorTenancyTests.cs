@@ -3,16 +3,8 @@ using Microsoft.CodeAnalysis;
 
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
-/// <summary>
-///    What a table definition's <c>[Column(Tenancy = true)]</c> claim buys across the whole generated surface:
-///    <c>Query</c>, <c>GetAllAsync</c>, every <c>GetBy{Unique}Async</c> and <c>DeleteBy{Unique}Async</c>,
-///    <c>GetByPrimaryKeyAsync</c>/<c>DeleteByPrimaryKeyAsync</c>, and the two command types the write path takes.
-///    Pinned alongside the composite-key, nullability and storage classes that cover the other three <c>[Column]</c>
-///    claims the same way.
-/// </summary>
 public class TableRepositoryGeneratorTenancyTests
 {
-   /// <summary>The tenancy column is part of the primary key, which is the shape a driving multi-tenant schema has.</summary>
    private const string TENANCY_INSIDE_KEY = """
       using mvdmio.Database.PgSQL.Attributes;
 
@@ -36,7 +28,6 @@ public class TableRepositoryGeneratorTenancyTests
       }
       """;
 
-   /// <summary>The tenancy column sits outside the surrogate key, which is the common shape elsewhere.</summary>
    private const string TENANCY_OUTSIDE_KEY = """
       using mvdmio.Database.PgSQL.Attributes;
 
@@ -59,7 +50,6 @@ public class TableRepositoryGeneratorTenancyTests
       }
       """;
 
-   /// <summary>Two tenancy columns, declared account-then-workspace, so the two-level-tenancy case is exercised.</summary>
    private const string TWO_TENANCY_COLUMNS = """
       using mvdmio.Database.PgSQL.Attributes;
 
@@ -85,7 +75,6 @@ public class TableRepositoryGeneratorTenancyTests
       }
       """;
 
-   /// <summary>The tenancy column also carries <c>[Unique]</c>, so its own lookup and delete take that value once.</summary>
    private const string TENANCY_COLUMN_IS_UNIQUE = """
       using mvdmio.Database.PgSQL.Attributes;
 
@@ -106,7 +95,6 @@ public class TableRepositoryGeneratorTenancyTests
       }
       """;
 
-   /// <summary>A table whose only assignable column besides the key is its tenancy column, outside the key.</summary>
    private const string TENANCY_ONLY_ASSIGNABLE_COLUMN = """
       using mvdmio.Database.PgSQL.Attributes;
 
@@ -124,7 +112,6 @@ public class TableRepositoryGeneratorTenancyTests
       }
       """;
 
-   /// <summary>A table declaring no tenancy column at all, for the compatibility assertion.</summary>
    private const string UNTENANTED = """
       using mvdmio.Database.PgSQL.Attributes;
 
@@ -207,14 +194,11 @@ public class TableRepositoryGeneratorTenancyTests
       var repository = GeneratorHarness.RepositorySource(result);
       var registration = GeneratorHarness.RegistrationSource(result);
 
-      // Still in the select and returning lists.
       repository.Should().Contain("""SELECT "account_id" AS "AccountId", "project_id" AS "ProjectId", "code" AS "Code", "name" AS "Name" """.TrimEnd());
       repository.Should().Contain("""RETURNING "account_id" AS "AccountId", "project_id" AS "ProjectId", "code" AS "Code", "name" AS "Name" """.TrimEnd());
 
-      // Still a property on the generated data type.
       repository.Should().Contain("public long AccountId { get; set; }");
 
-      // Still registered as an ordinary column on the query surface — a key member here, which is what it also claims.
       registration.Should().Contain(""".Column(x => x.AccountId, "account_id", isPrimaryKey: true)""");
    }
 
@@ -260,7 +244,6 @@ public class TableRepositoryGeneratorTenancyTests
       repository.Should().Contain("public async Task<ProjectData?> GetByPrimaryKeyAsync(long accountId, long projectId, CancellationToken ct = default)");
       repository.Should().Contain("public async Task<bool> DeleteByPrimaryKeyAsync(long accountId, long projectId, CancellationToken ct = default)");
 
-      // No duplicated predicate: the key predicate alone already constrains the tenant.
       repository.Should().Contain("""WHERE "account_id" = :accountId AND "project_id" = :projectId""");
    }
 
@@ -376,13 +359,9 @@ public class TableRepositoryGeneratorTenancyTests
    {
       var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_OUTSIDE_KEY));
 
-      // Asserted against each type's own body: all three carry the column, and an assertion over the whole file would
-      // pass on one command type making it required and the other not.
       TypeBody(repository, "CreateRowCommand").Should().Contain("public required long AccountId { get; set; }");
       TypeBody(repository, "UpdateRowCommand").Should().Contain("public required long AccountId { get; set; }");
 
-      // The data type still materializes the column through a parameterless constructor, which cannot satisfy
-      // required, so it stays plain.
       var dataType = TypeBody(repository, "RowData");
       dataType.Should().Contain("public long AccountId { get; set; }");
       dataType.Should().NotContain("required");
@@ -391,8 +370,6 @@ public class TableRepositoryGeneratorTenancyTests
    [Fact]
    public void CreateAsyncAndUpdateAsync_KeepTheirSingleCommandParameter_OnEitherShape()
    {
-      // The two rows of the member table that gain nothing. The tenant reaches the write path as a required property
-      // on the command type, so both signatures read exactly as they do on a table declaring no tenancy column.
       var insideKey = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_INSIDE_KEY));
 
       insideKey.Should().Contain("Task<ProjectData> CreateAsync(CreateProjectCommand data, CancellationToken ct = default);");
@@ -404,10 +381,6 @@ public class TableRepositoryGeneratorTenancyTests
       outsideKey.Should().Contain("Task<RowData> UpdateAsync(UpdateRowCommand data, CancellationToken ct = default);");
    }
 
-   /// <summary>
-   ///    The body of one emitted type, so an assertion about a property lands on the type declaring it. The tenancy
-   ///    column appears on the data type and both command types, and only the command types make it <c>required</c>.
-   /// </summary>
    private static string TypeBody(string source, string typeName)
    {
       var normalized = source.Replace("\r\n", "\n");
@@ -445,7 +418,6 @@ public class TableRepositoryGeneratorTenancyTests
    {
       var repository = GeneratorHarness.RepositorySource(GeneratorHarness.RunGenerator(TENANCY_INSIDE_KEY));
 
-      // No extra tenancy predicate joins the key predicate: the row is already tenant-scoped by construction.
       repository.Should().Contain("""WHERE "account_id" = :AccountId AND "project_id" = :ProjectId""");
       repository.Should().Contain("""SET "code" = :Code, "name" = :Name""");
    }
@@ -453,9 +425,6 @@ public class TableRepositoryGeneratorTenancyTests
    [Fact]
    public void TenancyColumn_AsTheOnlyAssignableColumn_ReportsPGSQL0007_AndGeneratesNothing()
    {
-      // The tenancy column is excluded from what an update assigns, so a table whose only non-key, non-generated
-      // column is its tenancy column has nothing left to assign — the pre-existing "no updatable columns" refusal,
-      // reported against the table even though the tenancy declaration is what caused it.
       var result = GeneratorHarness.RunGenerator(TENANCY_ONLY_ASSIGNABLE_COLUMN);
 
       result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0007");
@@ -494,8 +463,6 @@ public class TableRepositoryGeneratorTenancyTests
    [Fact]
    public void NullableTenancyColumn_FromANullClaim_ReportsPGSQL0025_AndAbandonsTheTable()
    {
-      // A non-nullable reference type carrying Null = true is not a contradiction — [Column]'s claim overrides the
-      // type — so the column is nullable through the claim alone, which the tenancy rule must catch the same way.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
 
@@ -554,8 +521,6 @@ public class TableRepositoryGeneratorTenancyTests
    [Fact]
    public void NullablePrimaryKeyThatIsAlsoATenancyColumn_ReportsOnlyPGSQL0020_NotPGSQL0025()
    {
-      // Malformed two ways at once: a nullable key member that also carries Tenancy = true. The key rule already
-      // abandons the table, so the tenancy rule must not pile on a second, competing diagnostic for the same property.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
 
@@ -586,9 +551,6 @@ public class TableRepositoryGeneratorTenancyTests
       insideKey.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0025" || x.Id == "PGSQL0026");
       outsideKey.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0025" || x.Id == "PGSQL0026");
    }
-
-   // PGSQL0027 — a relation whose join could reach across tenants. RelationResolver is the only stage that sees two
-   // tables at once, so every shape below declares both ends of the relation it exercises.
 
    [Fact]
    public void RelationToOneRow_PinnedByTheDeclaringTablesOwnTenancyColumn_ReportsNoWarning()
@@ -640,14 +602,6 @@ public class TableRepositoryGeneratorTenancyTests
    [Fact]
    public void RelationToOneRow_PairedAgainstAnUnrelatedProperty_ReportsPGSQL0027_TheStrictForm()
    {
-      // The declaring table does carry a tenancy column, but the relation's foreign key is a different property
-      // entirely. The loose reading — warn only when nothing at all is paired against the target's tenancy column —
-      // would pass this, because something is paired. The strict form must warn anyway.
-      //
-      // The pair-based, direction-free rule now reports this twice: once because the target's own tenancy column
-      // (AccountTable.AccountId) is paired against a non-tenancy property (OwnerId), and once because the declaring
-      // table's own tenancy column (DocumentTable.AccountId) is not paired against anything at all in this relation —
-      // the direction the old, positional rule missed entirely.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -699,8 +653,6 @@ public class TableRepositoryGeneratorTenancyTests
    [Fact]
    public void RelationToOneRow_DeclaringTableWithNoTenancyColumnAtAll_ReportsPGSQL0027()
    {
-      // No property on the declaring table carries Tenancy = true, so whatever is paired against the target's
-      // tenancy column falls out of the rule automatically: it cannot be the declaring table's own tenancy column.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -744,8 +696,6 @@ public class TableRepositoryGeneratorTenancyTests
    [Fact]
    public void RelationToAnUntenantedTarget_WhereNeitherTableDeclaresTenancy_ReportsNoWarning()
    {
-      // Neither table carries a tenancy column, so there is nothing to pin on either side and nothing to warn about
-      // — a relation between two shared, untenanted tables is a legitimate shape.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -789,11 +739,6 @@ public class TableRepositoryGeneratorTenancyTests
    [Fact]
    public void RelationToAnUntenantedTarget_FromATenantedDeclaringTable_ReportsNoWarning()
    {
-      // A tenanted table reaching a shared, untenanted lookup: the declaring table's own tenancy column is in no
-      // pair, but the target carries no tenant of its own, so the join cannot reach another tenant's rows and there
-      // is no column on the far side to pair with. Warning here would name a problem with no fix, on one of the most
-      // ordinary shapes there is. The unpinned half of the rule therefore asks that both tables be tenanted; the
-      // mispaired half, which is always actionable, does not — see the tests either side of this one.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -841,8 +786,6 @@ public class TableRepositoryGeneratorTenancyTests
    [Fact]
    public void RelationToMany_PinnedByTheTargetsOwnTenancyColumn_ReportsNoWarning()
    {
-      // The sides swap for a relation to many: the foreign key lives on the target, so the check reads the target's
-      // paired property against the declaring table's own tenancy column.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -937,10 +880,6 @@ public class TableRepositoryGeneratorTenancyTests
    [Fact]
    public void RelationTenancyColumn_OutsideTheJoinedKey_WithATenantedDeclaringTable_ReportsPGSQL0027PerUnpinnedColumn()
    {
-      // Neither table's tenancy column is part of the key the relation joins on, so nothing is paired against either
-      // at all. Both tables are tenanted, so the join really can reach another account's rows and each side has a
-      // column the other could have been pinned to — the warning is earned on both, and reported once per unpinned
-      // column rather than once per relation.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -985,7 +924,6 @@ public class TableRepositoryGeneratorTenancyTests
          }
          """);
 
-      // Once per unpinned tenancy column, so twice here: neither table's AccountId is in the pair.
       var diagnostics = result.Diagnostics.Where(x => x.Id == "PGSQL0027").ToList();
 
       diagnostics.Should().HaveCount(2);
@@ -995,9 +933,6 @@ public class TableRepositoryGeneratorTenancyTests
    [Fact]
    public void RelationThatWarns_IsStillMirroredOntoTheDataTypeAndStillRegistered()
    {
-      // PGSQL0027 drops nothing at all — not the relation, not the table — unlike every other relation diagnostic,
-      // which drops the relation, and unlike PGSQL0025/26, which drop the table. This shape reports it twice: see
-      // RelationToOneRow_PairedAgainstAnUnrelatedProperty_ReportsPGSQL0027_TheStrictForm above.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;

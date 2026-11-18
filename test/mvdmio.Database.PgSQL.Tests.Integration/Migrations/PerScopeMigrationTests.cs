@@ -13,11 +13,6 @@ using Testcontainers.PostgreSql;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.Migrations;
 
-/// <summary>
-///    End-to-end tests for per-scope pending migrations: two assemblies migrating the same database advance
-///    independently, legacy scope-less tables are upgraded and backfilled in place, and unattributed rows
-///    warn instead of silently suppressing migrations. These tests use their own PostgreSQL container.
-/// </summary>
 public class PerScopeMigrationTests : IAsyncLifetime
 {
    private PostgreSqlContainer _dbContainer = null!;
@@ -45,8 +40,6 @@ public class PerScopeMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithSecondScopeBehindFirstScopesWatermark_RunsAllOfSecondScopesMigrations()
    {
-      // The core regression: scope A has already advanced to a high identifier. Scope B's migrations carry
-      // lower identifiers; a global watermark would silently skip them, per-scope watermarks must not.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       var scopeARetriever = new FixedMigrationSet(
@@ -73,8 +66,6 @@ public class PerScopeMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_OnLegacyDatabase_UpgradesTableAndBackfillsScopes()
    {
-      // An existing populated database created by the previous major version: legacy table shape and
-      // scope-less rows. The next run must upgrade the table, attribute the rows, and not re-run anything.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       await db.Dapper.ExecuteAsync(
@@ -101,16 +92,13 @@ public class PerScopeMigrationTests : IAsyncLifetime
 
       var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
 
-      // Legacy rows are attributed to the scope of the discovered migrations with matching identifiers.
       executedMigrations.Should().Contain(m => m.Identifier == 202505181000 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration");
       executedMigrations.Should().Contain(m => m.Identifier == 202505181500 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration");
 
-      // Already-applied migrations are not re-run; the one pending migration is.
       executedMigrations.Should().HaveCount(3);
       executedMigrations.Should().Contain(m => m.Identifier == 202505192230 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration");
       (await db.Management.TableExistsAsync("public", "complex_table")).Should().BeTrue();
 
-      // The table itself is upgraded: no primary key, scope column present.
       var primaryKeyCount = await db.Dapper.ExecuteScalarAsync<long>(
          """
          SELECT COUNT(*)
@@ -126,8 +114,6 @@ public class PerScopeMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithUnattributableLegacyRow_WarnsAndDoesNotSuppressOtherScopes()
    {
-      // A legacy row no discovered migration claims must stay scope-less, emit one warning, and must not act
-      // as a watermark for any scope: migrations with lower identifiers still run.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       await db.Dapper.ExecuteAsync(
@@ -152,7 +138,6 @@ public class PerScopeMigrationTests : IAsyncLifetime
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
-      // The lower-identifier migration ran despite the higher unattributed row.
       (await db.Management.TableExistsAsync("public", "scope_a_table")).Should().BeTrue();
 
       var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
@@ -165,10 +150,6 @@ public class PerScopeMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithMultipleSchemaFirstAssemblies_RecordsBaselinePerScopeAndRunsPostBaselineMigrations()
    {
-      // A single migrator bootstrapping an empty database from two schema-first assemblies: every assembly's
-      // schema is applied, each scope gets its own baseline, and each scope's post-baseline migrations run.
-      // The secondary assembly's 202505181100 migration mirrors its schema baseline: if the baseline did not
-      // suppress it, the CREATE TABLE would collide with the schema-created table and the run would fail.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly, SecondaryAssembly);
@@ -181,11 +162,9 @@ public class PerScopeMigrationTests : IAsyncLifetime
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
-      // Tables from both schemas exist.
       (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
       (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeTrue();
 
-      // Each scope's post-baseline migrations ran.
       (await db.Management.TableExistsAsync("public", "post_cutoff_table")).Should().BeTrue();
       (await db.Management.TableExistsAsync("public", "complex_table")).Should().BeTrue();
       (await db.Management.TableExistsAsync("public", "secondary_follow_up_table")).Should().BeTrue();
@@ -195,16 +174,12 @@ public class PerScopeMigrationTests : IAsyncLifetime
       executedMigrations.Should().Contain(m => m.Identifier == 202505181100 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
       executedMigrations.Should().Contain(m => m.Identifier == 202505190000 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
 
-      // The baseline row covers the folded-in 202505181100 migration: exactly one row carries that identifier.
       executedMigrations.Count(m => m.Identifier == 202505181100).Should().Be(1);
    }
 
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithOneScopeAlreadyPresent_AppliesOnlyTheEmptyAssemblySchema()
    {
-      // HealthCheck/Statistics shape: one migrator receives a watermarked shared assembly and an empty app
-      // assembly. Only the empty scope's schema is applied; re-applying the watermarked schema would fail
-      // because simple_table is created without IF NOT EXISTS.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       var firstMigrator = new DatabaseMigrator(
@@ -241,10 +216,6 @@ public class PerScopeMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithMultipleLegacyScopelessSchemaHeaders_RecordsABaselinePerHeaderAndHealsEach()
    {
-      // Both assemblies' schema.legacymulti.sql files carry legacy scope-less headers (1000 and 1100).
-      // Each header must be recorded as its own baseline row — collapsing them to the highest would leave
-      // the primary scope without a watermark, and its folded-in SimpleTable migration would re-run against
-      // the schema-created table. The backfill then attributes each baseline to its scope by identifier.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly, SecondaryAssembly);
@@ -264,7 +235,6 @@ public class PerScopeMigrationTests : IAsyncLifetime
       executedMigrations.Should().Contain(m => m.Identifier == 202505181000 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration");
       executedMigrations.Should().Contain(m => m.Identifier == 202505181100 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
 
-      // Post-baseline migrations of both scopes ran; the folded-in ones did not re-run.
       (await db.Management.TableExistsAsync("public", "complex_table")).Should().BeTrue();
       (await db.Management.TableExistsAsync("public", "secondary_follow_up_table")).Should().BeTrue();
       executedMigrations.Count(m => m.Identifier is 202505181000 or 202505181100).Should().Be(2);
@@ -293,8 +263,6 @@ public class PerScopeMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithOutOfOrderMigration_RunsItLateAndWarnsOnce()
    {
-      // Issue #2: another branch's later-numbered migration ran first; the branch carrying the earlier-numbered
-      // migration merges afterwards. The next run must apply it and warn that it ran out of order.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       var scopeAOne = new CreateTableMigration(202601010000, "ScopeAOne", "ScopeA", "scope_a_one");
@@ -322,8 +290,6 @@ public class PerScopeMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithFoldedMigrationBelowBootstrapBaseline_DoesNotRunIt()
    {
-      // A folded migration file still present below the bootstrap baseline row must stay ignored, on the
-      // bootstrapping run and on every later run. Running it would create folded_table.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       var migrations = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly).RetrieveMigrations()
@@ -389,8 +355,7 @@ public class PerScopeMigrationTests : IAsyncLifetime
       }
    }
 
-   // These helpers set Identifier/Name/Scope explicitly, so the class-name-format analyzer does not apply.
-#pragma warning disable PGSQL0001
+#pragma warning disable PGSQL0001 // These helpers set Identifier/Name/Scope explicitly, so the class-name-format analyzer does not apply.
    private sealed class CreateTableMigration(long identifier, string name, string scope, string tableName) : IDbMigration
    {
       public long Identifier => identifier;

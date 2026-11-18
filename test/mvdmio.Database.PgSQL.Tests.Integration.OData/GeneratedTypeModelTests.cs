@@ -4,15 +4,6 @@ using mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData;
 
-/// <summary>
-///    What OData's convention model builder makes of the types the generator emits. The conformance entity is held to a
-///    standard — every one of its properties must be an EDM primitive — while the rest are characterization tests: a
-///    table definition admits property types with no straightforward EDM equivalent, and these record what actually
-///    happens to each, so a consumer can plan around it and a version bump that changes it fails the build.
-/// </summary>
-/// <remarks>
-///    No database here: what is being asked is a question about the model, and the model is built from CLR types alone.
-/// </remarks>
 public class GeneratedTypeModelTests
 {
    private static readonly IEdmModel _model = ODataConfiguration.BuildAwkwardModel();
@@ -30,8 +21,6 @@ public class GeneratedTypeModelTests
    [Fact]
    public void ConventionModelBuilder_BuildsAModelForEveryMappableType()
    {
-      // The headline finding: none of these makes model building fail. A repository generated from a real table will
-      // start up, whatever its column types.
       AwkwardEntityType().DeclaredProperties.Select(x => x.Name).Should().BeEquivalentTo(
          nameof(AwkwardData.AwkwardId),
          nameof(AwkwardData.HomePage),
@@ -68,8 +57,6 @@ public class GeneratedTypeModelTests
    [Fact]
    public void ConventionModelBuilder_MapsAUri_ToAComplexTypeRatherThanAString()
    {
-      // Not filterable or comparable as a value: OData reflects over Uri and keeps whichever of its members it can map,
-      // which is one collection of path segments. The query surface stores the same property as text.
       var propertyType = PropertyOf(nameof(AwkwardData.HomePage)).Type;
 
       propertyType.IsComplex().Should().BeTrue();
@@ -82,9 +69,6 @@ public class GeneratedTypeModelTests
    [Fact]
    public void ConventionModelBuilder_MapsADictionary_ToACollectionOfAComplexTypeWithNoProperties()
    {
-      // Unusable: a dictionary is an IEnumerable of key-value pairs to the convention builder, and the pair's members
-      // are not properties it maps, so the collection element carries nothing. The query surface stores the same
-      // property as JSONB.
       var propertyType = PropertyOf(nameof(AwkwardData.Metadata)).Type;
 
       propertyType.IsCollection().Should().BeTrue();

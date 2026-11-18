@@ -4,11 +4,6 @@ using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.Migrations;
 
-/// <summary>
-///    Tests for the migrations-table manager: fresh create, in-place upgrade of a legacy table, idempotency,
-///    and shape equality between fresh and upgraded tables. Each test drops and recreates the table inside
-///    the rolled-back test transaction, so the shared fixture database is not affected.
-/// </summary>
 public class MigrationsTableManagerTests : TestBase
 {
    public MigrationsTableManagerTests(TestFixture fixture)
@@ -49,7 +44,6 @@ public class MigrationsTableManagerTests : TestBase
       (await GetPrimaryKeyCountAsync()).Should().Be(0);
       (await GetIndexNamesAsync()).Should().Contain(MigrationsTableManager.UNIQUE_INDEX_NAME);
 
-      // Existing rows survive the upgrade with a still-null scope.
       var scopes = (await Db.Dapper.QueryAsync<string?>(
          """SELECT scope FROM "mvdmio"."migrations" """,
          ct: CancellationToken)).ToArray();
@@ -163,10 +157,6 @@ public class MigrationsTableManagerTests : TestBase
          ct: CancellationToken)).ToArray();
    }
 
-   /// <summary>
-   ///    Serializes the full observable shape (columns in order + primary-key count + index definitions)
-   ///    so two shapes can be compared with a single equality assertion.
-   /// </summary>
    private async Task<string> GetShapeAsync()
    {
       var columns = await GetColumnsAsync();

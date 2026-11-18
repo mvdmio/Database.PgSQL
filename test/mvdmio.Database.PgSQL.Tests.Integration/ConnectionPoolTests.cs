@@ -6,15 +6,6 @@ using System.Diagnostics.Metrics;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration;
 
-/// <summary>
-///    That every data source the library builds caps its pool and names it after the entry assembly, unless a factory
-///    setting or a connection string keyword says otherwise, as Postgres and Npgsql show it from outside.
-/// </summary>
-/// <remarks>
-///    Not derived from <c>TestBase</c>: the point is the data source each test builds itself. Under xUnit v3 the test
-///    project runs as its own executable, so the entry assembly is this test assembly. Each exhaustion test uses a
-///    <c>Timeout=1</c> keyword so the 11th open gives up after a second instead of Npgsql's default 15.
-/// </remarks>
 public class ConnectionPoolTests
 {
    private const string ENTRY_ASSEMBLY_NAME = "mvdmio.Database.PgSQL.Tests.Integration";
@@ -240,7 +231,6 @@ public class ConnectionPoolTests
       maxByPool.Should().ContainKey(poolName).WhoseValue.Should().Be(cap);
    }
 
-   // Npgsql publishes each pool's cap as db.client.connection.max, tagged with the data source's diagnostic name.
    private static Dictionary<string, long> ObserveMaxConnectionsByPoolName()
    {
       var maxByPool = new Dictionary<string, long>();

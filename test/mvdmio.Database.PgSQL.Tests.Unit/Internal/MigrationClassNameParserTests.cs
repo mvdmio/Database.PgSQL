@@ -6,10 +6,6 @@ namespace mvdmio.Database.PgSQL.Tests.Unit.Internal;
 
 public class MigrationClassNameParserTests
 {
-   // -----------------------------------------------------------------------
-   // ParseIdentifier
-   // -----------------------------------------------------------------------
-
    [Fact]
    public void ParseIdentifier_WithValidName_ReturnsIdentifier()
    {
@@ -37,7 +33,6 @@ public class MigrationClassNameParserTests
    [Fact]
    public void ParseIdentifier_WithIdentifierTooShort_ThrowsFormatException()
    {
-      // 10 digits, not 12
       var act = () => MigrationClassNameParser.ParseIdentifier("_2023101910_AddUsers");
 
       act.Should().Throw<FormatException>();
@@ -50,10 +45,6 @@ public class MigrationClassNameParserTests
 
       act.Should().Throw<FormatException>();
    }
-
-   // -----------------------------------------------------------------------
-   // ParseName
-   // -----------------------------------------------------------------------
 
    [Fact]
    public void ParseName_WithValidName_ReturnsName()
@@ -87,17 +78,13 @@ public class MigrationClassNameParserTests
       act.Should().Throw<FormatException>();
    }
 
-   // -----------------------------------------------------------------------
-   // IsValidClassName
-   // -----------------------------------------------------------------------
-
    [Theory]
    [InlineData("_202310191050_AddUsersTable", true)]
    [InlineData("202310191050_AddUsersTable", true)]
    [InlineData("_202310191050_Add_Users_Table", true)]
    [InlineData("AddUsersTableMigration", false)]
-   [InlineData("_2023101910_AddUsers", false)]   // 10 digits
-   [InlineData("_202310191050_", false)]          // empty name
+   [InlineData("_2023101910_AddUsers", false)]
+   [InlineData("_202310191050_", false)]
    [InlineData("", false)]
    public void IsValidClassName_ReturnsExpectedResult(string className, bool expectedResult)
    {
@@ -105,10 +92,6 @@ public class MigrationClassNameParserTests
 
       result.Should().Be(expectedResult);
    }
-
-   // -----------------------------------------------------------------------
-   // IDbMigration default property integration
-   // -----------------------------------------------------------------------
 
    [Fact]
    public void IDbMigration_DefaultIdentifier_ParsedFromClassName()
@@ -126,7 +109,6 @@ public class MigrationClassNameParserTests
       migration.Name.Should().Be("TestMigration");
    }
 
-   // Minimal concrete migration used only for the integration tests above
    private sealed class _202310191050_TestMigration : IDbMigration
    {
       public Task UpAsync(DatabaseConnection db) => Task.CompletedTask;

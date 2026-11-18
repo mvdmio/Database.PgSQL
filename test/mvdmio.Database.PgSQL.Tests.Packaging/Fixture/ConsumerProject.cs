@@ -1,24 +1,11 @@
 namespace mvdmio.Database.PgSQL.Tests.Packaging.Fixture;
 
-/// <summary>
-///    The throwaway project the packed package is installed into: what it references, where it looks for packages, and the
-///    one table definition it exercises the whole release through.
-/// </summary>
-/// <remarks>
-///    Held as source text rather than as a checked-in project, because a checked-in one would be restored and built by
-///    every solution-wide command — and it can only build once the package it references exists.
-/// </remarks>
 internal static class ConsumerProject
 {
    public const string ASSEMBLY_NAME = "PackagingConsumer";
 
-   /// <summary>The frameworks the library targets, each of which has to resolve its own <c>lib/</c> folder.</summary>
    public static readonly string[] TargetFrameworks = ["net10.0", "net11.0"];
 
-   /// <summary>
-   ///    Warnings are errors so that the analyzer reporting something the release does not intend fails this test. The
-   ///    package's own diagnostics are what would show up here.
-   /// </summary>
    public static string Csproj(string packageVersion)
    {
       return $"""
@@ -40,10 +27,6 @@ internal static class ConsumerProject
          """;
    }
 
-   /// <summary>
-   ///    Only the local feed and nuget.org, with anything the developer configured cleared away — so the package under
-   ///    test can come from nowhere but the folder this run packed into.
-   /// </summary>
    public static string NuGetConfig(string feedDirectory)
    {
       return $"""
@@ -58,16 +41,6 @@ internal static class ConsumerProject
          """;
    }
 
-   /// <summary>
-   ///    One table exercising the release at once: a <c>[Generated]</c> timestamp that is not publicly settable, an
-   ///    unclaimed enum stored as text, a <c>string</c> on a <c>jsonb</c> column, a caller-supplied
-   ///    <c>required … { get; init; }</c> column, and a <c>Query()</c> predicate over the enum. Every one of those either
-   ///    did not compile or did not run before this release, and none of it compiles at all unless the generator shipped.
-   /// </summary>
-   /// <remarks>
-   ///    The connection string arrives as an argument: the test starts one container and hands it over, rather than each
-   ///    scaffolded run starting its own.
-   /// </remarks>
    public const string PROGRAM = """"
       using LinqToDB;
       using mvdmio.Database.PgSQL;

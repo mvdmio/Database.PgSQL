@@ -6,9 +6,6 @@ using System.Reflection;
 
 namespace mvdmio.Database.PgSQL.Tool.Migrations;
 
-/// <summary>
-///    Builds the configured project and loads its migrations.
-/// </summary>
 internal class MigrationProjectLoader
 {
    private readonly IProjectAssemblyBuilder _assemblyBuilder;

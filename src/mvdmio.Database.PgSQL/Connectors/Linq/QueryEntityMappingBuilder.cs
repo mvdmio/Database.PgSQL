@@ -189,11 +189,6 @@ public sealed class QueryEntityMappingBuilder<TEntity>
       return this;
    }
 
-   /// <summary>The column, its name, and its storage claim where the provider can represent one.</summary>
-   /// <remarks>
-   ///    A claim the provider has no equivalent for is left unstated rather than refused: the Dapper surface still honours
-   ///    it and the build warns that the two diverge, which beats a registration that throws at startup.
-   /// </remarks>
    private PropertyMappingBuilder<TEntity, TProperty> MapColumn<TProperty>(
       Expression<Func<TEntity, TProperty>> property,
       string columnName,
@@ -209,11 +204,6 @@ public sealed class QueryEntityMappingBuilder<TEntity>
       return propertyBuilder;
    }
 
-   /// <summary>What every <c>Column</c> overload settles the same way, whatever it says about storage.</summary>
-   /// <remarks>
-   ///    The key rule lives here rather than in the generator, because this builder is public surface a consumer calls
-   ///    by hand: a key member cannot hold null, so every caller gets that without having to say it.
-   /// </remarks>
    private static void Configure<TProperty>(PropertyMappingBuilder<TEntity, TProperty> propertyBuilder, bool isPrimaryKey, bool isNotNull)
    {
       if (isPrimaryKey)

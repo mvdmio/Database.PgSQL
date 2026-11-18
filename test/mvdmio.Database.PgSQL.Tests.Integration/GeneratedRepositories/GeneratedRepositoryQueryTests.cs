@@ -5,11 +5,6 @@ using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>
-///    Covers the query surface end to end: the generator, the emitted mapping, the adapter, the decorator, the
-///    query provider and PostgreSQL. <see cref="TestBase" /> opens a transaction for every test, so each of these
-///    also proves the adapter binds to the ambient transaction.
-/// </summary>
 public class GeneratedRepositoryQueryTests : TestBase
 {
    private readonly TestFixture _fixture;
@@ -119,8 +114,6 @@ public class GeneratedRepositoryQueryTests : TestBase
       (await counted.CountAsync(CancellationToken)).Should().Be(3);
       counted.Count().Should().Be(3);
 
-      // The count came from the database, not from a materialized sequence: the last statement sent was a COUNT that
-      // never selected a column.
       var sql = QueryDiagnostics.LastSql(counted)!.ToUpperInvariant();
       sql.Should().Contain("COUNT(");
       sql.Should().NotContain("HANDLE");

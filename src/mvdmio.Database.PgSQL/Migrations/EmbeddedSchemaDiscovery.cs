@@ -32,7 +32,6 @@ public static class EmbeddedSchemaDiscovery
       if (assemblies.Length == 0)
          return null;
 
-      // If environment is specified, try environment-specific schema first
       if (!string.IsNullOrWhiteSpace(environment))
       {
          var envSchemaName = $"{SCHEMA_PREFIX}{environment.ToLowerInvariant()}{SCHEMA_SUFFIX}";
@@ -41,17 +40,14 @@ public static class EmbeddedSchemaDiscovery
          if (envResult is not null)
             return envResult;
 
-         // Fall back to default schema.sql
          return FindResourceByName(assemblies, DEFAULT_SCHEMA_NAME);
       }
 
-      // No environment specified: prefer schema.sql, then any schema.*.sql
       var defaultResult = FindResourceByName(assemblies, DEFAULT_SCHEMA_NAME);
 
       if (defaultResult is not null)
          return defaultResult;
 
-      // Try to find any schema file
       return FindAnySchemaResource(assemblies);
    }
 
@@ -190,11 +186,9 @@ public static class EmbeddedSchemaDiscovery
          if (ResourceExists(assemblies, envSchemaName))
             return true;
 
-         // Fall back to default schema.sql
          return ResourceExists(assemblies, DEFAULT_SCHEMA_NAME);
       }
 
-      // No environment specified: check for schema.sql or any schema.*.sql
       if (ResourceExists(assemblies, DEFAULT_SCHEMA_NAME))
          return true;
 
@@ -216,7 +210,6 @@ public static class EmbeddedSchemaDiscovery
       if (resource is null)
          return null;
 
-      // Dispose the stream since we only need the name
       resource.Value.Stream.Dispose();
       return resource.Value.ResourceName;
    }
@@ -227,7 +220,6 @@ public static class EmbeddedSchemaDiscovery
       {
          var manifestResourceNames = assembly.GetManifestResourceNames();
 
-         // Look for exact match first (LogicalName was set to just the filename)
          var exactMatch = manifestResourceNames.FirstOrDefault(
             name => name.Equals(resourceName, StringComparison.OrdinalIgnoreCase));
 
@@ -239,7 +231,6 @@ public static class EmbeddedSchemaDiscovery
                return (stream, exactMatch);
          }
 
-         // Look for match at end of resource name (for resources without LogicalName)
          var suffixMatch = manifestResourceNames.FirstOrDefault(
             name => name.EndsWith("." + resourceName, StringComparison.OrdinalIgnoreCase) ||
                     name.EndsWith(resourceName, StringComparison.OrdinalIgnoreCase));
@@ -262,7 +253,6 @@ public static class EmbeddedSchemaDiscovery
       {
          var manifestResourceNames = assembly.GetManifestResourceNames();
 
-         // Find any resource that looks like a schema file
          var schemaResource = manifestResourceNames.FirstOrDefault(name =>
          {
             var fileName = GetResourceFileName(name);
@@ -288,11 +278,9 @@ public static class EmbeddedSchemaDiscovery
       {
          var manifestResourceNames = assembly.GetManifestResourceNames();
 
-         // Check for exact match
          if (manifestResourceNames.Any(name => name.Equals(resourceName, StringComparison.OrdinalIgnoreCase)))
             return true;
 
-         // Check for suffix match
          if (manifestResourceNames.Any(name =>
                 name.EndsWith("." + resourceName, StringComparison.OrdinalIgnoreCase) ||
                 name.EndsWith(resourceName, StringComparison.OrdinalIgnoreCase)))
@@ -326,32 +314,22 @@ public static class EmbeddedSchemaDiscovery
 
    private static string GetResourceFileName(string resourceName)
    {
-      // Resource names can be either:
-      // 1. Just the filename (when LogicalName is set): "schema.local.sql"
-      // 2. Namespace-qualified: "MyApp.Data.Schemas.schema.local.sql"
-
-      // If it contains no dots or only the expected dots, it's already a filename
       if (!resourceName.Contains('.'))
          return resourceName;
 
-      // Try to extract just the schema.*.sql part
       var parts = resourceName.Split('.');
 
-      // If the last part is "sql" and second-to-last starts with "schema", reconstruct
       if (parts.Length >= 2 && parts[^1].Equals("sql", StringComparison.OrdinalIgnoreCase))
       {
-         // Find where "schema" starts in the parts
          for (var i = 0; i < parts.Length - 1; i++)
          {
             if (parts[i].Equals("schema", StringComparison.OrdinalIgnoreCase))
             {
-               // Reconstruct from "schema" to end
                return string.Join(".", parts.Skip(i));
             }
          }
       }
 
-      // Return the original name if we can't parse it
       return resourceName;
    }
 }

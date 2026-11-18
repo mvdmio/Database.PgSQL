@@ -29,10 +29,6 @@ public sealed class LinqDatabaseConnector
 {
    private readonly DatabaseConnection _databaseConnection;
 
-   /// <summary>
-   ///    Guards the context and the disposed flag. Always taken *after* the database connection's own lock — see
-   ///    <see cref="ResolveContext" /> — because disposal arrives holding that one.
-   /// </summary>
    private readonly object _lock = new();
 
    private BoundContext? _bound;
@@ -132,16 +128,10 @@ public sealed class LinqDatabaseConnector
          await context.DisposeAsync().ConfigureAwait(false);
    }
 
-   /// <summary>
-   ///    Returns the context to run against right now, rebuilding it when the connection or ambient transaction has
-   ///    changed since it was built, and applying this query's command timeout to it.
-   /// </summary>
    private DataConnection ResolveContext(TimeSpan? commandTimeout)
    {
       ObjectDisposedException.ThrowIf(_disposed, this);
 
-      // Opening takes the database connection's lock, so it happens before ours: disposal arrives in the opposite
-      // order — holding that lock, then taking ours — and nesting them the other way round here would deadlock.
       _databaseConnection.Open();
 
       var connection = _databaseConnection.Connection!;
@@ -156,8 +146,6 @@ public sealed class LinqDatabaseConnector
 
          _bound ??= new BoundContext(CreateContext(connection, transaction), connection, transaction);
 
-         // The provider takes a timeout per context, not per query, and one connection executes one query at a time,
-         // so applying it here — at execution, not composition — gives it per-query scope.
          if (commandTimeout is null)
             _bound.Context.ResetCommandTimeout();
          else
@@ -178,7 +166,6 @@ public sealed class LinqDatabaseConnector
       return new DataConnection(options.UseMappingSchema(QueryMappings.Schema));
    }
 
-   /// <summary>The SQL most recently sent to the database, or null when none was. Never throws.</summary>
    private string? GetLastSql()
    {
       lock (_lock)

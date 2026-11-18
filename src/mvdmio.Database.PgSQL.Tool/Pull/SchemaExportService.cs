@@ -3,9 +3,6 @@ using mvdmio.Database.PgSQL.Connectors.Schema.Models;
 
 namespace mvdmio.Database.PgSQL.Tool.Pull;
 
-/// <summary>
-///    Exports schema metadata from a PostgreSQL database.
-/// </summary>
 internal class SchemaExportService
 {
    private readonly ISchemaExportClientFactory _clientFactory;

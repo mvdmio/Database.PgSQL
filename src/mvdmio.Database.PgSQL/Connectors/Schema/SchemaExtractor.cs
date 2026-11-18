@@ -94,10 +94,6 @@ public sealed class SchemaExtractor
       if (!tableExists)
          return [];
 
-      // The scope column only exists once the new migrator has touched the database; exporting from a
-      // not-yet-upgraded database must still work, so fall back to a scope-less select in that case.
-      // The owned-scopes filter does not apply there: every row is scope-less, and scope-less rows keep
-      // their representation regardless of the filter.
       var scopeColumnExists = await MigrationsTableManager.ScopeColumnExistsAsync(_db, cancellationToken);
 
       if (!scopeColumnExists)
@@ -301,8 +297,6 @@ public sealed class SchemaExtractor
       var currentMigrations = await GetCurrentMigrationVersionAsync(cancellationToken);
       if (currentMigrations.Count > 0)
       {
-         // One line per scope. Rows without a scope (legacy, not yet backfilled) keep the legacy
-         // scope-less line format so the header stays round-trippable.
          foreach (var migration in currentMigrations)
          {
             sb.AppendLine($"-- Migration version: {SchemaFileParser.FormatMigrationVersion(migration.Identifier, migration.Name, migration.Scope)}");
@@ -529,8 +523,6 @@ public sealed class SchemaExtractor
 
       foreach (var index in indexes)
       {
-         // pg_get_indexdef returns "CREATE INDEX name ON ..." or "CREATE UNIQUE INDEX name ON ..."
-         // We need to inject "IF NOT EXISTS" after "CREATE INDEX" or "CREATE UNIQUE INDEX"
          var def = index.Definition;
          def = InjectIfNotExistsIntoIndexDef(def);
 
@@ -554,10 +546,8 @@ public sealed class SchemaExtractor
 
       foreach (var func in functions)
       {
-         // pg_get_functiondef returns "CREATE OR REPLACE FUNCTION ..." already
          var def = func.Definition;
 
-         // Ensure it uses CREATE OR REPLACE
          if (!def.Contains("OR REPLACE", StringComparison.OrdinalIgnoreCase))
          {
             def = def.Replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", StringComparison.OrdinalIgnoreCase);
@@ -566,7 +556,6 @@ public sealed class SchemaExtractor
 
          sb.AppendLine(def);
 
-         // pg_get_functiondef may or may not end with a semicolon
          if (!def.TrimEnd().EndsWith(';'))
             sb.AppendLine(";");
 
@@ -588,8 +577,6 @@ public sealed class SchemaExtractor
 
       foreach (var trigger in triggers)
       {
-         // pg_get_triggerdef returns "CREATE TRIGGER ..."
-         // Convert to "CREATE OR REPLACE TRIGGER ..." for idempotency (PG 14+)
          var def = trigger.Definition;
 
          if (!def.Contains("OR REPLACE", StringComparison.OrdinalIgnoreCase))
@@ -631,7 +618,6 @@ public sealed class SchemaExtractor
 
    private static string InjectIfNotExistsIntoIndexDef(string indexDef)
    {
-      // Handle "CREATE UNIQUE INDEX name" and "CREATE INDEX name"
       const string CREATE_UNIQUE_INDEX = "CREATE UNIQUE INDEX ";
       const string CREATE_INDEX = "CREATE INDEX ";
 

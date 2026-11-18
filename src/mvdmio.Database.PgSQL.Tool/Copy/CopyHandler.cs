@@ -2,9 +2,6 @@ using mvdmio.Database.PgSQL.Tool.Configuration;
 
 namespace mvdmio.Database.PgSQL.Tool.Copy;
 
-/// <summary>
-///    Orchestrates the db copy workflow.
-/// </summary>
 internal sealed class CopyHandler
 {
    private readonly CopyService _copyService;

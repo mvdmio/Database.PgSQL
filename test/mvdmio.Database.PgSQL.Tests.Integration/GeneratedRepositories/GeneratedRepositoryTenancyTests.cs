@@ -5,12 +5,6 @@ using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>
-///    What a declared tenancy column buys over a real PostgreSQL container: which rows the generated reads return,
-///    which rows the generated deletes leave in place, and what the generated writes put in the column. Covered on
-///    both shapes ADR 0009 distinguishes — the tenancy column as part of the primary key
-///    (<see cref="TenancyDocumentTable" />) and outside a surrogate key (<see cref="TenancySettingTable" />).
-/// </summary>
 public class GeneratedRepositoryTenancyTests : TestBase
 {
    private const long FIRST_ACCOUNT = 1;
@@ -133,8 +127,6 @@ public class GeneratedRepositoryTenancyTests : TestBase
       var mine = await _documents.GetByCodeAsync(FIRST_ACCOUNT, "doc-first-a", CancellationToken);
       mine.Should().NotBeNull();
 
-      // The signature takes only the key — the tenant is already one of its members — so the wrong account cannot
-      // even be asked for separately from the key itself.
       var row = await _documents.GetByPrimaryKeyAsync(FIRST_ACCOUNT, mine!.DocumentId, CancellationToken);
 
       row.Should().NotBeNull();
@@ -168,7 +160,6 @@ public class GeneratedRepositoryTenancyTests : TestBase
          CancellationToken
       );
 
-      // Wrapped the same way any update against a missing key already throws — a mismatched WHERE, not a special case.
       await action.Should().ThrowAsync<QueryException>();
 
       var stillMine = await _documents.GetByCodeAsync(FIRST_ACCOUNT, "doc-first-a", CancellationToken);
@@ -186,7 +177,6 @@ public class GeneratedRepositoryTenancyTests : TestBase
          CancellationToken
       );
 
-      // Wrapped the same way any update against a missing key already throws — a mismatched WHERE, not a special case.
       await action.Should().ThrowAsync<QueryException>();
 
       var stillMine = await _settings.GetByCodeAsync(SECOND_ACCOUNT, "setting-second-a", CancellationToken);
@@ -223,9 +213,6 @@ public class GeneratedRepositoryTenancyTests : TestBase
          CancellationToken
       );
    }
-
-   // A per-tenant singleton whose whole primary key is the tenancy column — reached by pairing that one column plus
-   // a Relation condition. See TenancyDocumentTable.Profile and the Settled section of the relation-definitions spec.
 
    [Fact]
    public async Task Include_ReachesThePerTenantSingleton_ThroughTheTenancyColumnAlonePlusACondition()

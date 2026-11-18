@@ -3,9 +3,6 @@ using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
 
-/// <summary>
-///    Command: db pull
-/// </summary>
 internal static class PullCommand
 {
    public static Command Create()

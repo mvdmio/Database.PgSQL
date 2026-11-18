@@ -3,9 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>
-///    Query() is declared on the generated interface, so a caller can be handed a fake instead of a database.
-/// </summary>
 public class GeneratedRepositoryInterfaceTests
 {
    [Fact]

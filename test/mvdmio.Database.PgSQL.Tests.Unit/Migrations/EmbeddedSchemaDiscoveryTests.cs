@@ -3,9 +3,6 @@ using mvdmio.Database.PgSQL.Migrations;
 
 namespace mvdmio.Database.PgSQL.Tests.Unit.Migrations;
 
-/// <summary>
-///    Unit tests for <see cref="EmbeddedSchemaDiscovery"/>.
-/// </summary>
 public class EmbeddedSchemaDiscoveryTests
 {
    [Fact]
@@ -19,8 +16,7 @@ public class EmbeddedSchemaDiscoveryTests
    [Fact]
    public void SchemaResourceExists_WithAssemblyWithoutSchemas_ReturnsFalse()
    {
-      // Use an assembly that doesn't have embedded schema resources
-      var assembly = typeof(string).Assembly; // mscorlib/System.Private.CoreLib
+      var assembly = typeof(string).Assembly;
 
       var result = EmbeddedSchemaDiscovery.SchemaResourceExists([assembly], null);
 

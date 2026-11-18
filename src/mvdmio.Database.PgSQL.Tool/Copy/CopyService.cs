@@ -3,10 +3,6 @@ using mvdmio.Database.PgSQL.Connectors.Schema.Models;
 
 namespace mvdmio.Database.PgSQL.Tool.Copy;
 
-/// <summary>
-///    Copies all data from a source PostgreSQL database to a destination PostgreSQL database
-///    by truncating destination tables and streaming binary COPY between connections.
-/// </summary>
 internal class CopyService
 {
    private readonly ICopyDatabaseFactory _databaseFactory;
@@ -48,22 +44,15 @@ internal class CopyService
 
       var report = new List<CopyTableResult>(orderedTables.Length);
 
-      // Pin both connections open for the duration of the copy. The destination needs this so the
-      // session-level SET session_replication_role survives across operations; the source is pinned
-      // to avoid re-opening for every table.
       await source.OpenAsync(cancellationToken);
       await destination.OpenAsync(cancellationToken);
 
       try
       {
-         // Disable triggers and FK checks for the duration of the copy on the destination.
          await destination.SetSessionReplicationRoleAsync("replica", cancellationToken);
 
          try
          {
-            // Phase 1: truncate all destination tables in a single CASCADE statement so we don't
-            // wipe data we just copied. (Truncating tables one-by-one would CASCADE into already-
-            // copied child tables.)
             var truncatable = orderedTables
                .Where(t => t.Columns.Any(c => !c.IsGeneratedStored && !string.Equals(c.IdentityGeneration, "ALWAYS", StringComparison.Ordinal)))
                .Select(t => (t.Schema, t.Name))
@@ -72,7 +61,6 @@ internal class CopyService
             if (truncatable.Length > 0)
                await destination.TruncateManyAsync(truncatable, cancellationToken);
 
-            // Phase 2: copy each table.
             foreach (var table in orderedTables)
             {
                cancellationToken.ThrowIfCancellationRequested();
@@ -144,10 +132,6 @@ internal class CopyService
 
    private static async Task ResetOwnedSequencesAsync(ICopyDatabaseClient destination, IReadOnlyList<TableInfo> tables, IReadOnlyCollection<string>? schemas, CancellationToken cancellationToken)
    {
-      // Reset identity / serial sequences via pg_get_serial_sequence which covers both
-      // GENERATED ... AS IDENTITY columns (deptype='i' in pg_depend) and SERIAL columns
-      // (deptype='a'). We iterate the destination table list rather than pg_sequence so
-      // identity-owned sequences are picked up regardless of the dependency type.
       foreach (var table in tables)
       {
          if (schemas is { Count: > 0 } && !schemas.Contains(table.Schema))
@@ -155,9 +139,6 @@ internal class CopyService
 
          foreach (var col in table.Columns)
          {
-            // Only reset identity columns (BY DEFAULT or ALWAYS) and serial-style sequences.
-            // We don't know SERIAL from metadata alone; pg_get_serial_sequence returns NULL
-            // for non-serial/non-identity columns so the reset is a safe no-op.
             if (!col.IsIdentity)
                continue;
 
@@ -165,7 +146,6 @@ internal class CopyService
          }
       }
 
-      // Also reset explicitly-owned sequences (legacy SERIAL columns and ALTER SEQUENCE ... OWNED BY).
       var sequences = await destination.GetSequencesAsync(cancellationToken);
       foreach (var seq in sequences)
       {
@@ -265,8 +245,6 @@ internal sealed class CopyDatabaseClient : ICopyDatabaseClient
       if (tables.Count == 0)
          return Task.CompletedTask;
 
-      // Single TRUNCATE on multiple tables truncates them simultaneously, so CASCADE
-      // doesn't wipe sibling tables that are also in the list.
       var qualified = string.Join(", ", tables.Select(t => $"\"{t.Schema}\".\"{t.Name}\""));
       return _connection.Dapper.ExecuteAsync($"TRUNCATE TABLE {qualified} RESTART IDENTITY CASCADE", ct: cancellationToken);
    }
@@ -283,7 +261,6 @@ internal sealed class CopyDatabaseClient : ICopyDatabaseClient
 
    public Task SetSessionReplicationRoleAsync(string role, CancellationToken cancellationToken)
    {
-      // Validated against a fixed allow-list to avoid SQL injection via this knob.
       var validated = role switch
       {
          "origin" => "origin",
@@ -296,7 +273,6 @@ internal sealed class CopyDatabaseClient : ICopyDatabaseClient
 
    public Task ResetSequenceToColumnMaxAsync(string sequenceSchema, string sequenceName, string tableName, string columnName, CancellationToken cancellationToken)
    {
-      // setval(seq, max(col), true). When the column is empty we reset to start value via is_called=false.
       var sql = $"""
          SELECT setval('"{sequenceSchema}"."{sequenceName}"',
                        COALESCE((SELECT MAX("{columnName}") FROM "{sequenceSchema}"."{tableName}"), 1),
@@ -307,9 +283,6 @@ internal sealed class CopyDatabaseClient : ICopyDatabaseClient
 
    public Task ResetSerialSequenceAsync(string tableSchema, string tableName, string columnName, CancellationToken cancellationToken)
    {
-      // pg_get_serial_sequence returns the sequence backing the given column for
-      // SERIAL/BIGSERIAL/IDENTITY columns, regardless of pg_depend deptype.
-      // It is a no-op (returns NULL -> setval skipped) when no sequence is associated.
       var qualified = $"\"{tableSchema}\".\"{tableName}\"";
       var sql = $"""
          SELECT setval(seq, mx, has_rows)

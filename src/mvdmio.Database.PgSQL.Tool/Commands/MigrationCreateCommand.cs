@@ -4,9 +4,6 @@ using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
 
-/// <summary>
-///    Command: db migration create &lt;name&gt;
-/// </summary>
 internal static class MigrationCreateCommand
 {
    public static Command Create()
@@ -26,7 +23,6 @@ internal static class MigrationCreateCommand
          var config = ToolConfigurationLoader.Load();
          var migrationsDir = ToolPathResolver.GetMigrationsDirectoryPath(config);
 
-         // Ensure migrations directory exists
          Directory.CreateDirectory(migrationsDir);
 
          var identifier = MigrationScaffolder.GenerateIdentifier();

@@ -6,7 +6,6 @@ using System.Linq.Expressions;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>One of the two kinds <see cref="PolymorphicLinkTable" /> reaches — the "Person" kind.</summary>
 [Table("public.generated_link_people")]
 public partial class LinkPersonTable
 {
@@ -18,10 +17,6 @@ public partial class LinkPersonTable
 
    private List<LinksRelation> Links { get; set; } = [];
 
-   /// <summary>
-   ///    The reverse direction, declared on its own with the same class and the same kind of condition — declaring
-   ///    this never implies the forward one declared on <see cref="PolymorphicLinkTable" />.
-   /// </summary>
    private class LinksRelation : RelationDefinition<LinkPersonTable, PolymorphicLinkTable>
    {
       public override IReadOnlyList<RelationKey> Keys => [

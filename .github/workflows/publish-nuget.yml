@@ -6,6 +6,7 @@ on:
     paths:
       - "src/**"
       - "Directory.Build.props"
+      - "Directory.Build.targets"
   workflow_dispatch:
 
 # Nothing here writes to the repository. Only the publish job can request an OIDC token, which

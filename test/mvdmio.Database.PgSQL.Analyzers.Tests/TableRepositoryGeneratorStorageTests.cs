@@ -2,20 +2,8 @@ using AwesomeAssertions;
 
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
-/// <summary>
-///    Covers what a table definition says about how each of its columns is stored: the value the generated command binds,
-///    the type it binds it as, and what the registration therefore states to the query surface.
-/// </summary>
-/// <remarks>
-///    Both surfaces are asserted for every row of the matrix, because a claim reaching one and not the other is the defect
-///    the claim exists to remove — an assertion covering only the binding would pass while the two disagreed again.
-/// </remarks>
 public class TableRepositoryGeneratorStorageTests
 {
-   /// <summary>
-   ///    Every row of the storage matrix on one definition, so one run pins the whole rule set rather than one row at a
-   ///    time. <c>State</c> and <c>Priority</c> are the same enum stored two ways on purpose.
-   /// </summary>
    private const string EVERY_SHAPE = """
       using mvdmio.Database.PgSQL.Attributes;
       using NpgsqlTypes;
@@ -102,10 +90,6 @@ public class TableRepositoryGeneratorStorageTests
       repository.Should().Contain($"""["{propertyName}"] = {expected},""", because);
    }
 
-   /// <summary>
-   ///    The <c>jsonb</c> case, and the only one that states the type on the parameter rather than converting the value:
-   ///    the string travels as it stands and PostgreSQL will not cast text to <c>jsonb</c> implicitly.
-   /// </summary>
    [Theory]
    [InlineData("Document", "Jsonb")]
    [InlineData("Draft", "Json")]
@@ -118,10 +102,6 @@ public class TableRepositoryGeneratorStorageTests
       );
    }
 
-   /// <summary>
-   ///    A claim the driver would not infer from the value, on a type this library converts nothing for. Permitted and
-   ///    stated, which is what "permitted rather than curated" means at the binding site.
-   /// </summary>
    [Fact]
    public void ClaimOnATypeWithNoConversion_StatesTheTypeOnTheParameter()
    {
@@ -168,10 +148,6 @@ public class TableRepositoryGeneratorStorageTests
       registration.Should().Contain(expected, because);
    }
 
-   /// <summary>
-   ///    One enum, two columns, two representations. This is what a registry keyed by type cannot express, and the reason
-   ///    the claim is stated per column.
-   /// </summary>
    [Fact]
    public void TwoColumnsOfOneEnum_AreStoredIndependently()
    {
@@ -186,10 +162,6 @@ public class TableRepositoryGeneratorStorageTests
       registration.Should().Contain("NpgsqlDbType.Integer, static x => (int)x");
    }
 
-   /// <summary>
-   ///    A claim outside the exercised matrix, on a type the driver has a mapping for. Permitted, because refusal is
-   ///    grounded in demonstrated failure rather than in the absence of a test.
-   /// </summary>
    [Fact]
    public void ClaimOutsideTheExercisedMatrix_IsPermitted()
    {
@@ -213,10 +185,6 @@ public class TableRepositoryGeneratorStorageTests
       diagnostic.GetMessage().Should().Contain("Text, Json or Jsonb", "a diagnostic that refuses something has to name what is legal");
    }
 
-   /// <summary>
-   ///    The refused claim is dropped rather than carried, so the column binds the way an unclaimed one would and the
-   ///    build reports one error instead of a cascade from types that were never emitted.
-   /// </summary>
    [Fact]
    public void ClaimDemonstratedToFailForTheType_IsDroppedAndTheTableStillGenerates()
    {
@@ -244,10 +212,6 @@ public class TableRepositoryGeneratorStorageTests
       diagnostic.GetMessage().Should().Contain(typeName).And.Contain("int, long or decimal");
    }
 
-   /// <summary>
-   ///    The unmappable-type warning would say to register a conversion, and there is nothing to convert to. One
-   ///    diagnostic, naming the real problem.
-   /// </summary>
    [Fact]
    public void UnsignedIntegerColumn_DoesNotAlsoWarnThatTheQuerySurfaceCannotMapIt()
    {
@@ -270,10 +234,6 @@ public class TableRepositoryGeneratorStorageTests
       diagnostic.GetMessage().Should().Contain("Inet").And.Contain("Query()");
    }
 
-   /// <summary>
-   ///    The claim is still honoured where it can be — the divergence is made visible, not enforced by dropping the claim
-   ///    from both surfaces.
-   /// </summary>
    [Fact]
    public void ClaimTheQuerySurfaceCannotRepresent_StillReachesTheDapperSurface()
    {
@@ -285,7 +245,6 @@ public class TableRepositoryGeneratorStorageTests
       GeneratorHarness.RepositorySource(result).Should().Contain("TypedQueryParameter(data.Address, global::NpgsqlTypes.NpgsqlDbType.Inet)");
    }
 
-   /// <summary>One definition carrying every setter shape a column is now allowed to have.</summary>
    private const string EVERY_SETTER_SHAPE = """
       using mvdmio.Database.PgSQL.Attributes;
       using System;
@@ -325,11 +284,6 @@ public class TableRepositoryGeneratorStorageTests
       GeneratorHarness.AssertGeneratedSourcesCompile(EVERY_SETTER_SHAPE);
    }
 
-   /// <summary>
-   ///    The half of the definition's own encapsulation that is worth keeping: a caller of the generated data type cannot
-   ///    assign a column the database populates. <c>required</c> and <c>init</c> are flattened, because these types have no
-   ///    constructor that could satisfy the one and every other column has to stay assignable for a command to be built.
-   /// </summary>
    [Fact]
    public void GeneratedDataType_MirrorsGeneratedColumnsAsNonPubliclySettable()
    {
@@ -342,10 +296,6 @@ public class TableRepositoryGeneratorStorageTests
       dataType.Should().Contain("public long Count { get; set; }");
    }
 
-   /// <summary>
-   ///    A command's properties stay publicly settable, generated or not: an update addresses its row by a primary key
-   ///    that may itself be generated, so the caller has to be able to supply it.
-   /// </summary>
    [Fact]
    public void GeneratedCommandTypes_KeepEveryColumnPubliclySettable()
    {
@@ -355,10 +305,6 @@ public class TableRepositoryGeneratorStorageTests
       TypeBody(repository, "public partial class CreateRowCommand").Should().NotContain("private set;");
    }
 
-   /// <summary>
-   ///    Relaxing the setter rule must not turn a computed value into a column that does not exist, and the requirement
-   ///    that a setter be there is what keeps that from happening.
-   /// </summary>
    [Theory]
    [InlineData("public string Computed => \"x\";", "an expression-bodied member")]
    [InlineData("public string Computed { get { return \"x\"; } }", "a get-only member")]
@@ -370,7 +316,6 @@ public class TableRepositoryGeneratorStorageTests
       result.GeneratedSources.Should().BeEmpty();
    }
 
-   /// <summary>A table definition carrying one extra member, for the tests that ask about exactly one column.</summary>
    private static string ColumnSource(string member)
    {
       return $$"""
@@ -394,10 +339,6 @@ public class TableRepositoryGeneratorStorageTests
          """;
    }
 
-   /// <summary>
-   ///    The emitted source of one generated type, so an assertion about a property's setter cannot be satisfied by the
-   ///    same property on one of the other four types the same file declares.
-   /// </summary>
    private static string TypeBody(string source, string declaration)
    {
       var start = source.IndexOf(declaration, StringComparison.Ordinal);

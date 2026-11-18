@@ -1,8 +1,5 @@
 namespace mvdmio.Database.PgSQL.Tool.Migrations;
 
-/// <summary>
-///    Describes the requested migration target.
-/// </summary>
 internal sealed record MigrateRequest(long? TargetIdentifier)
 {
    public static MigrateRequest Latest { get; } = new((long?)null);

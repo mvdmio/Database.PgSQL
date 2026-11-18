@@ -2,12 +2,6 @@ using AwesomeAssertions;
 
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
-/// <summary>
-///    Covers a relation definition's <c>Condition</c>: the lift of its body into the emitted join, the rewrite of its
-///    two parameters to the generated join lambda's own ("x" and "y"), a constant reaching the join as a literal
-///    rather than a parameter, reaching through another relation property inside a condition, a condition calling
-///    something the Query surface may not translate, and <c>PGSQL0032</c>.
-/// </summary>
 public class TableRepositoryGeneratorRelationConditionTests
 {
    private const string CONDITIONED_RELATIONS = """
@@ -89,8 +83,6 @@ public class TableRepositoryGeneratorRelationConditionTests
       var result = GeneratorHarness.RunGenerator(CONDITIONED_RELATIONS);
       var registration = GeneratorHarness.RegistrationSource(result);
 
-      // The key pair and the condition are combined with &&, and the condition's own parameters ("link" and
-      // "person") are rewritten to the join lambda's own ("x" and "y") rather than left as the developer wrote them.
       registration.Should().Contain(".Relation<global::Demo.PersonData>(x => x.Person, (x, y) => x.TargetId == y.PersonId && (x.Kind == global::Demo.LinkKind.Person))");
       registration.Should().Contain(".Relation<global::Demo.LinkData>(x => x.Links, (x, y) => x.PersonId == y.TargetId && (y.Kind == global::Demo.LinkKind.Person))");
    }
@@ -101,11 +93,6 @@ public class TableRepositoryGeneratorRelationConditionTests
       var result = GeneratorHarness.RunGenerator(CONDITIONED_RELATIONS);
       var registration = GeneratorHarness.RegistrationSource(result);
 
-      // The enum member is inlined verbatim, fully qualified because the emitted file carries none of the developer's
-      // own using directives, and nothing is wrapped around it. The query surface already renders a constant in an
-      // association predicate as a literal on its own; the one case it does not — a column carrying a value
-      // conversion — no wrapper fixes, and Sql.ToSql would force a literal past the conversion and so emit the wrong
-      // one. See ADR 0010.
       registration.Should().Contain("(x.Kind == global::Demo.LinkKind.Person)");
       registration.Should().NotContain("Sql.Constant");
       registration.Should().NotContain("Sql.ToSql");
@@ -330,8 +317,6 @@ public class TableRepositoryGeneratorRelationConditionTests
       diagnostic.GetMessage().Should().Contain("ToString");
       diagnostic.GetMessage().Should().Contain("AuthorTable");
 
-      // The relation is dropped, but the table itself still generates — with no relations left to mirror, it does
-      // not even get a Relations.g.cs file.
       result.GeneratedSources.Should().Contain(x => x.HintName == "Demo_BookTable.Repository.g.cs");
       result.GeneratedSources.Should().NotContain(x => x.HintName == "Demo_BookTable.Relations.g.cs");
    }
@@ -339,11 +324,6 @@ public class TableRepositoryGeneratorRelationConditionTests
    [Fact]
    public void AConditionReachingThroughARelationThatWasItselfDropped_ProducesDiagnostic_AndCompiles()
    {
-      // Reaching through another relation inside a condition is allowed, but only as far as the generated data type
-      // actually mirrors it — and it mirrors the relations that resolved, not the ones that were declared. Here
-      // Publisher is dropped because its target is not a table definition, so a condition reading Book.Publisher has
-      // to be dropped in turn. Checking against the declared relations instead would pass this and then fail inside
-      // generated source, which is the one failure this diagnostic exists to prevent.
       const string SOURCE = """
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -405,7 +385,6 @@ public class TableRepositoryGeneratorRelationConditionTests
       var diagnostic = result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0032").Subject;
       diagnostic.GetMessage().Should().Contain("Publisher").And.Contain("BookTable");
 
-      // Both relations are gone, so nothing is mirrored and nothing registered names a member that does not exist.
       result.GeneratedSources.Should().NotContain(x => x.HintName == "Demo_BookTable.Relations.g.cs");
       GeneratorHarness.AssertGeneratedSourcesCompile(SOURCE);
    }

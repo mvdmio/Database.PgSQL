@@ -3,11 +3,6 @@ using mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData;
 
-/// <summary>
-///    One case per <c>$filter</c> function, grouped by family so a family's results read as a table. Each case names
-///    the function, the filter it stands for, and the rows it must return; a function that did not translate would
-///    surface as <c>QueryTranslationException</c> rather than a wrong row set.
-/// </summary>
 public class FilterFunctionConformanceTests : SampleConformanceTestBase
 {
    public FilterFunctionConformanceTests(ODataTestFixture fixture)

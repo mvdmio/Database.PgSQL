@@ -2,9 +2,6 @@ using mvdmio.Database.PgSQL.Tool.Configuration;
 
 namespace mvdmio.Database.PgSQL.Tool.Pull;
 
-/// <summary>
-///    Orchestrates the db pull workflow.
-/// </summary>
 internal sealed class PullHandler
 {
    private readonly SchemaExportService _schemaExportService;

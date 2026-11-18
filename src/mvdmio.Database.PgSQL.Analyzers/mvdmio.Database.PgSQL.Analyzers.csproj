@@ -10,7 +10,6 @@
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <!-- Do not output a regular library — this is an analyzer-only assembly -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
-    <GenerateDocumentationFile>True</GenerateDocumentationFile>
   </PropertyGroup>
 
   <!--

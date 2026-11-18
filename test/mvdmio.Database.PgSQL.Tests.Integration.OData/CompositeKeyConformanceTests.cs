@@ -4,11 +4,6 @@ using System.Text.RegularExpressions;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData;
 
-/// <summary>
-///    Every query option this suite covers, applied to an entity whose key is two columns, plus the two constructs where
-///    the key arity is visible in what reaches the database: <c>$select</c>, which appends every key column, and a
-///    navigation path, whose join carries every key column.
-/// </summary>
 public class CompositeKeyConformanceTests : CompositeKeyConformanceTestBase
 {
    public CompositeKeyConformanceTests(ODataTestFixture fixture)
@@ -32,7 +27,6 @@ public class CompositeKeyConformanceTests : CompositeKeyConformanceTestBase
    [Fact]
    public async Task Filter_OnAKeyMember_ReachesTheDatabaseLikeAnyOtherColumn()
    {
-      // A key member is an ordinary filterable column; nothing about it being part of the key changes the predicate.
       (await CodesAsync(ApplyToProjects($"$filter=AccountId eq {SECOND_ACCOUNT}&$orderby=Code"))).Should().Equal("aurora", "vega");
    }
 
@@ -45,7 +39,6 @@ public class CompositeKeyConformanceTests : CompositeKeyConformanceTestBase
 
       (await CodesAsync(descending)).Should().Equal("vega", "borealis", "aurora", "apollo");
 
-      // Compound ordering over both key members, which is the ordering a stable page boundary is built on.
       (await CodesAsync(ApplyToProjects("$orderby=AccountId desc,ProjectId"))).Should().Equal("aurora", "vega", "apollo", "borealis");
    }
 
@@ -73,11 +66,6 @@ public class CompositeKeyConformanceTests : CompositeKeyConformanceTestBase
       ApplyToProjects($"$count=true&$filter=AccountId eq {FIRST_ACCOUNT}").TotalCount.Should().Be(2L);
    }
 
-   /// <remarks>
-   ///    Worth stating rather than leaving as a surprise: OData adds the key to every projection so the entity stays
-   ///    addressable, and over a composite key that means <em>every</em> key column, not one. A narrowed projection is
-   ///    therefore two columns wider than the client asked for.
-   /// </remarks>
    [Fact]
    public void Select_OverACompositeKeyEntity_AppendsEveryKeyColumn()
    {
@@ -132,24 +120,16 @@ public class CompositeKeyConformanceTests : CompositeKeyConformanceTestBase
 
       applied.RenderSql().Should().ContainAll("NOT EXISTS(", "odata_tenant_tasks");
 
-      // borealis matches, and vega has no tasks at all, which satisfies "all" vacuously as OData Part 2 specifies.
       (await CodesAsync(applied)).Should().Equal("borealis", "vega");
    }
 
    [Fact]
    public async Task Filter_ThroughANavigationProperty_StaysInsideTheTenantEvenWhenTheFarKeyMemberCollides()
    {
-      // Both accounts have a task numbered 10. Reaching from a task to its project carries the tenancy column, so the
-      // two never cross.
       (await CodesAsync(ApplyToProjects("$filter=Tasks/any(task: task/TaskId eq 10)&$orderby=Code")))
          .Should().Equal("apollo", "aurora");
    }
 
-   /// <remarks>
-   ///    Server-driven paging over a composite key. The token names one value per ordering property, and the predicate it
-   ///    becomes is a lexicographic ladder: strictly greater on the first member, or equal on it and greater on the next.
-   ///    That is what makes a page boundary stable when the first member repeats.
-   /// </remarks>
    [Fact]
    public async Task SkipToken_OverACompositeKey_PagesByALexicographicLadderAcrossEveryKeyMember()
    {
@@ -157,14 +137,11 @@ public class CompositeKeyConformanceTests : CompositeKeyConformanceTestBase
       var applied = ApplyToProjects($"$orderby=AccountId,ProjectId&$skiptoken=AccountId-{FIRST_ACCOUNT},ProjectId-{borealisId}");
       var sql = applied.RenderSql();
 
-      // The ladder itself, in the statement: a strict comparison on the first key member, and a further one on the second
-      // for the rows where the first is equal.
       sql.Should().Contain("WHERE");
       sql.Should().MatchRegex(@"account_id\s*>");
       sql.Should().MatchRegex(@"project_id\s*>");
       sql.Should().MatchRegex(@"account_id\s*=");
 
-      // Everything after (1, borealis) in that ordering, and nothing before it — borealis itself included.
       (await CodesAsync(applied)).Should().Equal("aurora", "vega");
    }
 
@@ -182,7 +159,6 @@ public class CompositeKeyConformanceTests : CompositeKeyConformanceTestBase
       (await CodesAsync(secondPage)).Should().Equal("aurora", "vega");
    }
 
-   /// <summary>An equality on the same column across two table aliases, whichever aliases the provider chose.</summary>
    private static string CrossTableEquality(string columnName)
    {
       var column = Regex.Escape(columnName);

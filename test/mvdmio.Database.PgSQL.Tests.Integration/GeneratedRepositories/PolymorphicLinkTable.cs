@@ -6,19 +6,12 @@ using System.Linq.Expressions;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>The two kinds a <see cref="PolymorphicLinkTable" /> row's identifier may point at.</summary>
 public enum LinkTargetKind
 {
    Person,
    Asset
 }
 
-/// <summary>
-///    A link table carrying a kind column beside an identifier, reaching two different targets through that same
-///    pair of columns — the polymorphic shape the spec's problem statement describes. Each relation's Relation
-///    condition fixes the kind value it reaches, so the per-kind column this shape would otherwise need never
-///    appears in C#.
-/// </summary>
 [Table("public.generated_polymorphic_links")]
 public partial class PolymorphicLinkTable
 {

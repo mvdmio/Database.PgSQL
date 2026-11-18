@@ -3,16 +3,6 @@ using mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData;
 
-/// <summary>
-///    <c>$expand</c> over the composite-key pair, in both cardinalities and two levels deep. The pair to
-///    <see cref="ExpandConformanceTests" />, which covers the same constructs over single-column keys.
-/// </summary>
-/// <remarks>
-///    Nothing else guards <c>$expand</c> against a composite key, and it is the construct with most to go wrong: OData
-///    binds an expansion as a projection of its own and selects the navigation property inside it, so what makes the
-///    projected member translatable is the provider-level association the generator registers — which is exactly the part
-///    a composite key changes, from a pair of key expressions to a predicate.
-/// </remarks>
 public class CompositeKeyExpandConformanceTests : CompositeKeyConformanceTestBase
 {
    public CompositeKeyExpandConformanceTests(ODataTestFixture fixture)
@@ -34,7 +24,6 @@ public class CompositeKeyExpandConformanceTests : CompositeKeyConformanceTestBas
       rows.Select(x => x["Title"]).Should().Equal("assemble", "launch", "observe", "survey");
       rows[0].Expanded(nameof(TenantTaskData.Project))!["Code"].Should().Be("apollo");
 
-      // The task numbered 10 under the other account reaches that account's project, not the first one's.
       rows[2].Expanded(nameof(TenantTaskData.Project))!["Code"].Should().Be("aurora");
    }
 
@@ -43,7 +32,6 @@ public class CompositeKeyExpandConformanceTests : CompositeKeyConformanceTestBas
    {
       var applied = ApplyToProjects("$expand=Tasks&$orderby=Code");
 
-      // Like the single-key case, the related table is nowhere in the statement the query renders to.
       applied.RenderSql().Should().NotContain("odata_tenant_tasks");
 
       var rows = applied.ProjectedRows();
@@ -52,16 +40,12 @@ public class CompositeKeyExpandConformanceTests : CompositeKeyConformanceTestBas
       rows[0].ExpandedMany(nameof(TenantProjectData.Tasks)).Select(x => x["Title"]).Should().BeEquivalentTo(new[] { "assemble", "launch" });
       rows[1].ExpandedMany(nameof(TenantProjectData.Tasks)).Select(x => x["Title"]).Should().Equal("observe");
 
-      // The project with no tasks, so an empty expanded collection is observable rather than assumed.
       rows[3].ExpandedMany(nameof(TenantProjectData.Tasks)).Should().BeEmpty();
    }
 
    [Fact]
    public void Expand_ToManyRowsOverACompositeKey_ScopesTheRelatedRowsByEveryKeyColumn()
    {
-      // Both accounts have a task numbered 10. If the detail query correlated on the project column alone the two would
-      // still not cross, because project identifiers happen to be unique — so this asserts the tenancy column the other
-      // way round: the second account's project gets its own task and none of the first account's.
       var rows = ApplyToProjects($"$filter=AccountId eq {SECOND_ACCOUNT}&$expand=Tasks&$orderby=Code").ProjectedRows();
 
       rows.Select(x => x["Code"]).Should().Equal("aurora", "vega");
@@ -98,7 +82,6 @@ public class CompositeKeyExpandConformanceTests : CompositeKeyConformanceTestBas
 
       tasks.Select(x => x["Title"]).Should().Equal("survey");
 
-      // A nested $select narrows to exactly what was asked for, so neither key column is added back.
       tasks[0].Keys.Should().Equal("Title");
    }
 

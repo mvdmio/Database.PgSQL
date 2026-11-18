@@ -3,18 +3,8 @@ using Microsoft.CodeAnalysis;
 
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
-/// <summary>
-///    Covers what a relation's resolved key pairs have to claim, replacing the old foreign-key-arity check: that a
-///    relation to one row pairs against something the target claims unique (<c>PGSQL0031</c>), that a pair whose two
-///    columns can both hold null is refused wherever it appears, unique target or not (<c>PGSQL0035</c>), and that a
-///    conditioned relation and an unconditioned one sharing the same key pairs are flagged as a forgotten condition
-///    (<c>PGSQL0034</c>). These checks read the pairs the resolver produced, so each is exercised through the
-///    definition form.
-/// </summary>
 public class TableRepositoryGeneratorRelationKeyClaimsTests
 {
-   // PGSQL0031 — a relation to one row whose pairs contain nothing the target claims unique.
-
    [Fact]
    public void RelationToOneRow_PairedAgainstTheTargetsPrimaryKey_ReportsNoWarning()
    {
@@ -59,7 +49,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void RelationToOneRow_PairedAgainstAUniqueColumn_ReportsNoWarning()
    {
-      // A natural key, not the primary key — a first-class way to relate per the spec.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -104,7 +93,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void RelationToOneRow_PairedAgainstASupersetOfAUniqueSet_ReportsNoWarning()
    {
-      // A superset of a unique set is still unique and must pass — the whole primary key plus an extra column.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -198,9 +186,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void RelationToOneRow_WhoseConditionMakesThePairingUnique_StillReportsPGSQL0031()
    {
-      // A claim, not a check: a Relation condition that happens to make the pairing unique at run time does not
-      // suppress the warning, because the generator never evaluates it — it only reads what the pairs themselves
-      // claim.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -249,7 +234,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void RelationToManyRows_PairedAgainstNothingUnique_ReportsNoPGSQL0031()
    {
-      // Reaching several rows is the point of a relation to many, so the uniqueness claim does not apply to it.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -289,15 +273,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
       result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0031");
    }
 
-   // PGSQL0035 — a Relation key pair whose two columns can both hold null. Uniqueness of the target no longer takes
-   // part: a not-null foreign key against a nullable [Unique] target column is left alone below, and a pair of two
-   // nullable columns is refused whether or not either side is [Unique].
-
-   /// <summary>
-   ///    One relation pairing <c>BookTable.AuthorCode</c> against <c>AuthorTable.Code</c>, where the two column
-   ///    declarations are the only thing the cases below differ by — so each case reads as the pair of declarations it
-   ///    is about rather than as thirty lines of table definition repeated per case.
-   /// </summary>
    private static string PairedColumns(string declaringColumn, string targetColumn)
    {
       return $$"""
@@ -341,9 +316,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void RelationPairedAgainstANullableUniqueColumn_ReportsNoPGSQL0035_AndRegistersTheRelation()
    {
-      // A not-null foreign key against a nullable [Unique] target column: the equality join it emits simply cannot
-      // reach a row whose unique column is null, which is well-defined and costs nothing. The relation reaches the
-      // assembly registration like any ordinary relation, rather than being dropped.
       var result = GeneratorHarness.RunGenerator(
          PairedColumns(
             "public string AuthorCode { get; set; } = string.Empty;",
@@ -353,8 +325,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
 
       result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0035");
 
-      // A nullable [Unique] column still satisfies the uniqueness claim, so a relation to one row against it warns
-      // about nothing.
       result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0031");
 
       var registration = GeneratorHarness.RegistrationSource(result);
@@ -377,9 +347,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void RelationPairedAgainstTwoColumnsThatCanBothHoldNull_ReportsPGSQL0035_AndDropsOnlyThatRelation()
    {
-      // Neither side is [Unique] — the case that is silent today — and both can hold null, via a [Column(Null = true)]
-      // claim over an otherwise non-nullable string. Widened to "equal, or both are null" by the query provider,
-      // which is the shape the rule now exists to refuse.
       var result = GeneratorHarness.RunGenerator(
          PairedColumns(
             "[Column(Null = true)] public string AuthorCode { get; set; } = string.Empty;",
@@ -392,7 +359,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
       diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
       diagnostic.GetMessage().Should().Contain("AuthorCode").And.Contain("AuthorTable").And.Contain("Code");
 
-      // The relation is dropped, but the rest of the table still generates.
       result.GeneratedSources.Should().NotBeEmpty();
 
       var registration = GeneratorHarness.RegistrationSource(result);
@@ -402,9 +368,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void RelationPairedAgainstTwoColumnsThatCanBothHoldNull_WhereTheTargetIsUnique_ReportsPGSQL0035()
    {
-      // The same refusal against a [Unique] target column, which the retired rule was the only shape to catch and
-      // which this one catches for the opposite reason: uniqueness is no longer an input, so the pair is refused here
-      // exactly as it is against a target that claims nothing.
       var result = GeneratorHarness.RunGenerator(
          PairedColumns(
             "public string? AuthorCode { get; set; }",
@@ -421,11 +384,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void RelationPairedAgainstTwoNullableTypedColumns_IsNotClearedByANotNullClaim_ButIsClearedByANonNullableType()
    {
-      // The commonest offending shape: two string? columns in a file where nullable annotations are on. The claim is
-      // not the fix for it — [Column(NotNull = true)] over a type that can hold null contradicts the type, so
-      // PGSQL0021 refuses the claim, the column keeps what its type says, and the pair is still refused. Claiming it
-      // would leave the developer with two errors instead of none, so the message names the fix that does work here:
-      // the type itself.
       var claimed = GeneratorHarness.RunGenerator(
          PairedColumns(
             "[Column(NotNull = true)] public string? AuthorCode { get; set; }",
@@ -450,10 +408,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void RelationPairedAgainstTwoUnannotatedStringsInANullableObliviousFile_ReportsPGSQL0035_AndClearsWithNotNullClaim()
    {
-      // An unannotated string in a nullable-oblivious file counts as able to hold null, because the annotation that
-      // would carry the fact cannot be written there at all — the rule reads the Nullability claim, which defaults
-      // to nullable exactly where the type states nothing. This is the shape [Column(NotNull = true)] is the answer
-      // to, and the only one: where the type can hold null the claim contradicts it and the type is the fix instead.
       const string TARGET_COLUMN = "public string Code { get; set; } = string.Empty;";
 
       var offending = GeneratorHarness.RunGenerator(
@@ -470,8 +424,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
 
       cleared.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0035");
 
-      // The claim is believed rather than refused here, which is what makes it the fix: over a type that can hold
-      // null it would earn PGSQL0021 and change nothing.
       cleared.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0021");
    }
 
@@ -530,8 +482,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void RelationPairedAgainstTwoColumnsThatCanBothHoldNull_WithARelationConditionExcludingNulls_StillReportsPGSQL0035()
    {
-      // A Relation condition recovers the rows a widened join would wrongly match, but not the lost index, so it
-      // cannot rescue a refused pair — unlike PGSQL0031, which a condition can rescue outright.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -578,8 +528,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
 
       result.Diagnostics.Should().ContainSingle(x => x.Id == "PGSQL0035");
    }
-
-   // PGSQL0034 — a conditioned relation and an unconditioned one over the same key pairs, declared on one table.
 
    private const string FORGOTTEN_CONDITION = """
       using mvdmio.Database.PgSQL.Attributes;
@@ -658,10 +606,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void UnconditionedRelation_SharingItsKeyPairsWithAConditionedOneToADifferentTarget_ReportsPGSQL0034()
    {
-      // The polymorphic shape the warning exists for: relations sharing one pair reach different targets and only
-      // the condition tells them apart, so the unconditioned one really does resolve every kind. Relations are
-      // grouped by their pairs alone for exactly this reason — grouping by target as well would put each in a group
-      // of its own and the warning would never fire on the case that motivates it.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -735,7 +679,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void TwoConditionedRelations_SharingTheirKeyPairs_ReportNoPGSQL0034()
    {
-      // Both narrow by kind, so neither silently resolves every kind — the shape PGSQL0034 exists to permit.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -800,7 +743,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void TwoUnconditionedRelations_SharingTheirKeyPairs_ReportNoPGSQL0034()
    {
-      // Neither carries a condition, so neither is "forgetting" one relative to the other — nothing to warn about.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -850,8 +792,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void UnconditionedRelation_PairingDifferentColumns_ReportsNoPGSQL0034()
    {
-      // A conditioned relation and an unconditioned one exist on the same table, but they pair different columns —
-      // not the same shape at all, so nothing is forgotten.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -910,8 +850,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
 
       result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0034");
    }
-
-   // Tenancy across the pairs — PGSQL0027 permits the shape a conditioned relation exists to enable.
 
    [Fact]
    public void ConditionedRelation_PairingTheTenancyColumnOnBothSides_ReportsNoPGSQL0027()
@@ -978,9 +916,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void RelationPairingTheTenancyColumnAlonePlusACondition_WhereTheTargetsWholePrimaryKeyIsTheTenancyColumn_ReportsNoWarning()
    {
-      // The shape the Settled section carves out: a per-tenant singleton whose whole primary key is the tenancy
-      // column, reached by pairing that one column plus a condition — unique by construction, so PGSQL0031 stays
-      // quiet, and pair-based, so PGSQL0027 stays quiet too.
       var result = GeneratorHarness.RunGenerator("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;
@@ -1072,11 +1007,6 @@ public class TableRepositoryGeneratorRelationKeyClaimsTests
    [Fact]
    public void EveryValueTypeNullabilityCombination_BindsAgainstTheOneKeyOverload_AndCompiles()
    {
-      // The one same-type Key(...) overload infers its type argument from both lambdas together, so it accepts every
-      // combination of nullability on the two sides — including a non-nullable value type paired against a nullable
-      // one either way round. Proven by compiling rather than assumed, so the analyzer is the only thing that could
-      // ever refuse a shape here, not the compiler. Whichever pairs the analyzer refuses as both-nullable are simply
-      // dropped from the emitted registration, which still has to compile with the rest of the table intact.
       GeneratorHarness.AssertGeneratedSourcesCompile("""
          using mvdmio.Database.PgSQL.Attributes;
          using mvdmio.Database.PgSQL.Relations;

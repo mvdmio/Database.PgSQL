@@ -14,6 +14,8 @@
 
 The library also references `mvdmio.Database.PgSQL.Analyzers` as an analyzer (netstandard2.0) and packs it into `analyzers/dotnet/cs` inside the NuGet package — added once from the outer build, not per target framework, or the same file would land three times. Its `Microsoft.CodeAnalysis.CSharp` version is a **floor**: an analyzer referencing a newer Roslyn than the host compiler is skipped with a warning (`CS9057`/`CS8032`) rather than failing, which is indistinguishable from the generator not shipping at all. 4.8.0 corresponds to SDK 8.0.1xx, the oldest SDK that can target the library's oldest framework, so raising it drops SDKs and lowering it buys nothing.
 
+`mvdmio.Database.PgSQL.Lint` is never packed: it holds the `MVDM0053` comment rule ([ADR 0013](../../docs/adr/0013-code-carries-no-comments.md)). `Directory.Build.targets` references it from every other project as an analyzer only (`ReferenceOutputAssembly="false"`, `PrivateAssets="all"`), so it stays out of the library's `.nuspec`, and the library's pack item names only `mvdmio.Database.PgSQL.Analyzers.dll`, so its DLL stays out of the package. The rule therefore never reaches a consumer's build.
+
 ## CLI tool (`mvdmio.Database.PgSQL.Tool`)
 
 | Package | Purpose |
@@ -47,7 +49,7 @@ No mocking framework is used — testability comes from interface seams (e.g. `I
 ## CI/CD
 
 - **Pipeline:** `.github/workflows/publish-nuget.yml`, every job on `ubuntu-latest` with a `timeout-minutes`. The pipeline exists to **publish**; the format check and the tests are the gate on that act, which is why it is not widened to every change.
-- **Triggers:** push to `main` touching `src/**` or `Directory.Build.props` (`PgSqlVersion` lives there, so a version bump alone can trigger a re-release), or manual `workflow_dispatch`. A change touching only test projects triggers nothing — it is covered by the next run that publishes.
+- **Triggers:** push to `main` touching `src/**`, `Directory.Build.props` or `Directory.Build.targets` (`PgSqlVersion` lives in the props file, so a version bump alone can trigger a re-release), or manual `workflow_dispatch`. A change touching only test projects triggers nothing — it is covered by the next run that publishes.
 - **Concurrency:** one `publish-nuget` group with `cancel-in-progress: false`, so runs serialize and an in-flight upload is never cancelled by a newer push.
 - **Three jobs, each gating the next:**
   - `build` — `dotnet format --verify-no-changes` first (cheapest failure), then restore and build the solution in Release, then `dotnet pack` the tool with `--no-build`. This is the only compile. Uploads two artifacts: the build output (`bin` **and** `obj` — `--no-build` still evaluates each project, and evaluation reads the generated files under `obj`) and the packages.

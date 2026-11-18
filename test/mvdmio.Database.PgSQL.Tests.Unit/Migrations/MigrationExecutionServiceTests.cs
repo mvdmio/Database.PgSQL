@@ -65,9 +65,6 @@ public class MigrationExecutionServiceTests
    [Fact]
    public async Task ExecuteAsync_LatestWithSameIdentifierExecutedInAnotherScope_StillRunsMigrator()
    {
-      // An executed row in a DIFFERENT scope shares the identifier of this project's pending migration
-      // (legal under UNIQUE (scope, identifier)). The up-to-date short-circuit must follow the migrator's
-      // per-scope pending rule, not identifier membership, or the migration is silently skipped.
       var runtime = new FakeMigrationRuntime
       {
          IsDatabaseEmptyResult = false,
@@ -96,8 +93,6 @@ public class MigrationExecutionServiceTests
    [Fact]
    public async Task ExecuteAsync_LatestWithScopeBaselineCoveringAllMigrations_ReportsUpToDateAndSkipsMigrator()
    {
-      // A baseline row above every migration's identifier (schema-first bootstrap) covers them all within
-      // the scope, even though no row matches any migration identifier exactly.
       var runtime = new FakeMigrationRuntime
       {
          IsDatabaseEmptyResult = false,
@@ -154,8 +149,6 @@ public class MigrationExecutionServiceTests
    [Fact]
    public async Task ExecuteAsync_LatestOnSharedDatabaseWithEmptyVouchedScope_ReportsSchemaPathAndRunsMigrator()
    {
-      // Another scope already has rows. This project's vouched scope does not — schema-first must still report
-      // and call the migrator even though IsDatabaseEmptyAsync is false.
       var runtime = new FakeMigrationRuntime
       {
          IsDatabaseEmptyResult = false,
@@ -194,8 +187,6 @@ public class MigrationExecutionServiceTests
    [Fact]
    public async Task ExecuteAsync_LatestOnSharedDatabaseWithFoldedSchemaAndEmptyScope_RunsMigratorDespiteZeroPending()
    {
-      // Every incremental is folded into the schema, so the pending count is 0. The reporter must still call
-      // the migrator so the baseline is applied on a shared database.
       var runtime = new FakeMigrationRuntime
       {
          IsDatabaseEmptyResult = false,
@@ -215,7 +206,6 @@ public class MigrationExecutionServiceTests
       };
       var reporter = new FakeMigrateReporter();
       var service = new MigrationExecutionService(runtimeFactory, schemaResourceService, reporter);
-      // No incremental migrations left in the project — they were all folded into the schema file.
       var project = CreateProjectContext([]);
 
       await service.ExecuteAsync(
@@ -379,10 +369,6 @@ public class MigrationExecutionServiceTests
       );
    }
 
-   /// <summary>
-   ///    Runs the service against a scope whose rows are 202602161400 (baseline) and 202602161600 (watermark).
-   ///    202602161500 has no row and sits between them: it is out-of-order and still pending.
-   /// </summary>
    private static async Task<(FakeMigrationRuntime Runtime, FakeMigrateReporter Reporter)> ExecuteWithOutOfOrderMigrationAsync(MigrateRequest request)
    {
       ExecutedMigrationModel[] rows =

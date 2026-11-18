@@ -1,0 +1,12 @@
+<Project>
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'mvdmio.Database.PgSQL.Lint' And '$(ReferencesLintDirectly)' != 'true'">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)src\mvdmio.Database.PgSQL.Lint\mvdmio.Database.PgSQL.Lint.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <CompilerVisibleProperty Include="GenerateDocumentationFile" />
+  </ItemGroup>
+</Project>

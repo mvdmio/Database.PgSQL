@@ -5,13 +5,6 @@ using System.Linq.Expressions;
 
 namespace mvdmio.Database.PgSQL.Tests.Unit.Connectors.Linq;
 
-/// <summary>
-///    The rewriter's contract is expression in, expression out: which steps it found, in what order, and what it left of
-///    the rest of the composition. What a step then does to the provider's query is captured in the step's own delegate,
-///    so what distinguishes one kind of materialization from another is invisible here — which operator records which
-///    step belongs to <see cref="QueryableExtensionsTests" />, and what the provider makes of it, to the integration
-///    tests.
-/// </summary>
 public class IncludeRewriterTests
 {
    private static readonly IQueryable<int> _source = Array.Empty<int>().AsQueryable();
@@ -115,7 +108,6 @@ public class IncludeRewriterTests
       return Expression.Call(composed.Method, source, Expression.Constant(tag));
    }
 
-   /// <remarks>Stands in for any operator that composes over a queryable without changing its element type.</remarks>
    private static IQueryable<int> Operator(IQueryable<int> source, string tag)
    {
       return source;

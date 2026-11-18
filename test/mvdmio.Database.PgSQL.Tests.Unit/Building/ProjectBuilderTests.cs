@@ -75,8 +75,6 @@ public sealed class ProjectBuilderTests : IDisposable
    [Fact]
    public void BuildAndLoadAssembly_WhenATypeDerivesFromAPackageType_LoadsEveryType()
    {
-      // A class library's bin/ holds no package assemblies. Without resolving them, GetTypes throws
-      // ReflectionTypeLoadException, and db cleanup cannot discover the project's migrations.
       var projectDirectory = CreateDirectory("PackageProject");
       var csprojPath = Path.Combine(projectDirectory, "PackageProject.csproj");
       File.WriteAllText(
@@ -94,8 +92,6 @@ public sealed class ProjectBuilderTests : IDisposable
    [Fact]
    public void BuildAndLoadAssembly_WhenTheProjectReferencesANewerVersionOfAToolPackage_LoadsEveryType()
    {
-      // The tool already carries its own Npgsql. A project on a newer Npgsql must get the tool's copy, because a
-      // second copy of the same assembly cannot load into the default context.
       var projectDirectory = CreateDirectory("NewerPackageProject");
       var csprojPath = Path.Combine(projectDirectory, "NewerPackageProject.csproj");
       File.WriteAllText(

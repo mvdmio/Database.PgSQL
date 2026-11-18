@@ -58,12 +58,6 @@ public static class QueryMappings
       }
    }
 
-   /// <remarks>
-   ///    Mirrors the Dapper type handlers registered in <c>DefaultConfig</c> so both surfaces read the same types.
-   ///    <see cref="DateOnly" /> and <see cref="TimeOnly" /> need no conversion — the provider maps them natively.
-   ///    The analyzer's <c>QueryMappableTypes</c> decides which property types warn at build time; it cannot reference
-   ///    this assembly, so adding a conversion here means adding the type there too.
-   /// </remarks>
    private static MappingSchema BuildSchema()
    {
       var schema = new MappingSchema();

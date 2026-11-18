@@ -1,19 +1,13 @@
 using AwesomeAssertions;
 using mvdmio.Database.PgSQL.Tests.Packaging.Fixture;
+using System.Xml.Linq;
 
 namespace mvdmio.Database.PgSQL.Tests.Packaging;
 
-/// <summary>
-///    That installing the published package gives a consumer a working source generator — asserted against the produced
-///    <c>.nupkg</c>, a project scaffolded at test time, and a real database.
-/// </summary>
-/// <remarks>
-///    All the work happens once, in <see cref="PackagingFixture" />; each test reads one part of the result. That keeps the
-///    slowest test in the repository to a single pack, a single restore and one build per framework, and it means a
-///    packaging failure is reported by the test that describes it rather than by whichever ran first.
-/// </remarks>
 public class PackagedGeneratorTests
 {
+   private const string COMMENT_RULE_PROJECT = "mvdmio.Database.PgSQL.Lint";
+
    private readonly PackagingFixture _fixture;
 
    public PackagedGeneratorTests(PackagingFixture fixture)
@@ -27,24 +21,41 @@ public class PackagedGeneratorTests
       _fixture.Pack.Succeeded.Should().BeTrue(_fixture.Pack.Report("dotnet pack"));
    }
 
-   /// <summary>
-   ///    The generator's location inside the package, asserted directly. A consumer's compiler looks for it at exactly this
-   ///    path and silently runs no generator at all when it is not there, which is the defect this suite exists for.
-   /// </summary>
    [Fact]
    public void Package_CarriesTheAnalyzerWhereTheCompilerLooksForIt()
    {
       _fixture.PackageContents.Should().Contain("analyzers/dotnet/cs/mvdmio.Database.PgSQL.Analyzers.dll");
    }
 
-   /// <summary>
-   ///    Added once rather than per target framework: the package targets three, and an item contributed by each inner
-   ///    build would land the same file three times and warn about it.
-   /// </summary>
    [Fact]
    public void Package_CarriesTheAnalyzerExactlyOnce()
    {
       _fixture.PackageContents.Count(x => x.EndsWith("mvdmio.Database.PgSQL.Analyzers.dll", StringComparison.Ordinal)).Should().Be(1);
+   }
+
+   [Fact]
+   public void Package_CarriesNoFileOfTheCommentRule()
+   {
+      _fixture.PackageContents.Should().Contain("analyzers/dotnet/cs/mvdmio.Database.PgSQL.Analyzers.dll");
+
+      var leaked = _fixture.PackageContents.Where(x => x.Contains(COMMENT_RULE_PROJECT, StringComparison.Ordinal)).ToList();
+
+      leaked.Should().BeEmpty($"the comment rule MVDM0053 must never reach a consumer, and these package entries carry {COMMENT_RULE_PROJECT}");
+   }
+
+   [Fact]
+   public void Package_DeclaresNoDependencyOnTheCommentRule()
+   {
+      _fixture.PackageContents.Should().Contain("analyzers/dotnet/cs/mvdmio.Database.PgSQL.Analyzers.dll");
+
+      var leaked = XDocument.Parse(_fixture.PackageNuspec)
+         .Descendants()
+         .Where(x => x.Name.LocalName == "dependency")
+         .Select(x => (string?)x.Attribute("id"))
+         .Where(x => x is not null && x.Contains(COMMENT_RULE_PROJECT, StringComparison.Ordinal))
+         .ToList();
+
+      leaked.Should().BeEmpty($"the comment rule MVDM0053 must never reach a consumer, and the nuspec lists these dependencies on {COMMENT_RULE_PROJECT}");
    }
 
    [Theory]
@@ -55,11 +66,6 @@ public class PackagedGeneratorTests
       _fixture.PackageContents.Should().Contain($"lib/{targetFramework}/mvdmio.Database.PgSQL.dll");
    }
 
-   /// <summary>
-   ///    The whole point: a table definition in another project, compiled against nothing but the installed package,
-   ///    produces the repository, the command types and the data type it needs. Warnings are errors in the scaffolded
-   ///    project, so a diagnostic the release does not intend fails here too.
-   /// </summary>
    [Fact]
    public void Consumer_CompilesAgainstTheInstalledPackage()
    {
@@ -75,8 +81,6 @@ public class PackagedGeneratorTests
 
       run.Succeeded.Should().BeTrue(run.Report($"the scaffolded consumer on {targetFramework}"));
 
-      // One line per thing the release changed, so a partial failure names which part broke rather than only that the
-      // process exited non-zero.
       run.Output.Should().Contain("generatedKey=True", "a [Generated] primary key with a private setter has to materialize");
       run.Output.Should().Contain("generatedTimestamp=True", "a [Generated] timestamp with a private setter has to materialize");
       run.Output.Should().Contain("storedState=Closed", "an unclaimed enum column holds the text of its member name");
@@ -84,10 +88,6 @@ public class PackagedGeneratorTests
       run.Output.Should().Contain("queryMatched=1", "Query() filters the enum column the same way CreateAsync wrote it");
    }
 
-   /// <summary>
-   ///    The README's own repository walkthrough, compiled and run against the published package — so the documentation is
-   ///    something a reader can trust rather than something they have to test.
-   /// </summary>
    [Theory]
    [InlineData("net10.0")]
    [InlineData("net11.0")]

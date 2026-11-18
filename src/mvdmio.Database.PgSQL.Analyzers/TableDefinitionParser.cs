@@ -4,14 +4,6 @@ using System.Collections.Immutable;
 
 namespace mvdmio.Database.PgSQL.Analyzers;
 
-/// <summary>
-///    Decides whether one table definition is usable, and produces the model every generated type derives from.
-/// </summary>
-/// <remarks>
-///    What the symbols say is read by <see cref="TableDefinitionSymbols" />; this file decides what each fact earns.
-///    Every check up to and including the relations either abandons the table — a malformed key, name or column leaves
-///    every generated signature undefined — or, for a relation-level problem, drops just that relation.
-/// </remarks>
 internal static class TableDefinitionParser
 {
    internal sealed class ParseResult
@@ -62,11 +54,6 @@ internal static class TableDefinitionParser
 
       var compilation = context.SemanticModel.Compilation;
 
-      // The relation split is entirely type-driven: a property typed as a class deriving from RelationDefinition<,>,
-      // or a supported collection of one, is a relation on its own. [Relation] is an optional marker that changes
-      // nothing about the split — a property carrying it whose type is not a relation reports PGSQL0033 below rather
-      // than being treated as one. Split in one pass, so the two sides are answers to a single question rather than
-      // to a question and its negation.
       var bySide = classSymbol.GetMembers()
          .OfType<IPropertySymbol>()
          .ToLookup(x => TableDefinitionSymbols.IsRelationProperty(x, compilation));
@@ -112,8 +99,6 @@ internal static class TableDefinitionParser
 
       ReportStorageDiagnostics(classSymbol, classSyntax, mappedProperties, properties, diagnostics);
 
-      // Abandons nothing: the claim has already been dropped, so every generated signature is still well-defined and
-      // the consumer reads this one error rather than type-not-found errors from everything naming a missing type.
       foreach (var property in properties.Where(x => x.Nullability.Contradiction is not null))
       {
          diagnostics.Add(Diagnostic.Create(
@@ -125,8 +110,6 @@ internal static class TableDefinitionParser
          ));
       }
 
-      // Declaration order, because GetMembers returns source order, and that order is the key order the generated
-      // lookup, delete and update all count on.
       var primaryKeys = properties.Where(x => x.IsPrimaryKey).ToImmutableArray();
       if (primaryKeys.IsEmpty)
       {
@@ -156,9 +139,6 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
-      // Reports every tenancy column matching isRefused, and answers whether the table has to be abandoned. Both
-      // refusals below abandon it, the same as a nullable key member does: generating the table anyway would emit
-      // precisely the unguarded surface a tenancy column exists to remove.
       bool RefusesTenancyColumns(Func<PropertyDefinitionModel, bool> isRefused, DiagnosticDescriptor descriptor)
       {
          var refused = properties.Where(x => x.IsTenancy && isRefused(x)).ToImmutableArray();
@@ -176,16 +156,9 @@ internal static class TableDefinitionParser
          return !refused.IsEmpty;
       }
 
-      // A null tenant matches no row, so every generated member would return nothing. The Nullability claim already
-      // folds the property's type and a Null = true claim into one answer (a dropped contradiction falls back to the
-      // type), so checking it here catches both without checking each separately. A key member that is also nullable is
-      // already caught above and this table already abandoned, so a property malformed both ways reports one clear
-      // reason rather than two.
       if (RefusesTenancyColumns(x => !x.Nullability.IsNotNull, TableRepositoryDiagnostics.NullableTenancyColumn))
          return new ParseResult(null, diagnostics.ToImmutable());
 
-      // A generated column is on no command type, so there is no property to make required, and the developer would
-      // learn that at run time instead of build time.
       if (RefusesTenancyColumns(x => x.IsGenerated, TableRepositoryDiagnostics.GeneratedTenancyColumn))
          return new ParseResult(null, diagnostics.ToImmutable());
 
@@ -205,8 +178,6 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
-      // The primary key is not a lookup property any more: its lookup and delete are named after the key rather than
-      // after a property, so that every repository names them the same way.
       var lookupProperties = properties.Where(x => x.IsUnique).ToImmutableArray();
       var duplicateLookup = lookupProperties
          .Select(x => TableRepositorySourceBuilder.LookupMethodName(x))
@@ -242,10 +213,6 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
-      // A tenancy column is excluded here whether or not it is a key member: the generated update never assigns it, so a
-      // row cannot change tenant through the generated surface. It still reaches the update command type — the model
-      // derives TableDefinitionModel.UpdateProperties by widening this set back out with the key and the tenancy
-      // columns outside it, because the WHERE clause needs their values even though the SET list never does.
       var mutableUpdateProperties = properties.Where(x => !x.IsPrimaryKey && !x.IsGenerated && !x.IsTenancy).ToImmutableArray();
       if (mutableUpdateProperties.Length == 0)
       {
@@ -282,14 +249,10 @@ internal static class TableDefinitionParser
          return new ParseResult(null, diagnostics.ToImmutable());
       }
 
-      // Declaration order, same as the primary key above: it fixes the parameter order of every generated member that
-      // takes a tenancy column's value.
       var tenancyColumns = properties.Where(x => x.IsTenancy).ToImmutableArray();
 
       var relations = RelationDeclarationParser.ParseRelations(classSymbol, relationProperties, compilation, diagnostics);
       var accessibility = classSymbol.DeclaredAccessibility == Accessibility.Public ? "public" : "internal";
-      // Named throughout: four of these are same-typed property collections, so a transposition would compile and only
-      // show up as wrong generated SQL.
       var model = new TableDefinitionModel(
          namespaceName: classSymbol.ContainingNamespace.IsGlobalNamespace ? string.Empty : classSymbol.ContainingNamespace.ToDisplayString(),
          accessibility: accessibility,
@@ -315,20 +278,6 @@ internal static class TableDefinitionParser
       return new ParseResult(model, diagnostics.ToImmutable());
    }
 
-   /// <summary>
-   ///    Everything one column's storage earns: an unwritable property type, a claim that cannot be honoured for it, a
-   ///    claim only one of the two surfaces can carry, and a type neither the claim nor a registered conversion covers.
-   /// </summary>
-   /// <remarks>
-   ///    Abandons nothing. Each of these leaves every generated signature well-defined, so reporting and carrying on
-   ///    gives the consumer the one message describing the mistake rather than that message buried under type-not-found
-   ///    errors from everything naming a type that was never emitted.
-   ///    <para>
-   ///       <paramref name="properties" /> is <paramref name="mappedProperties" /> in the same order, one model per
-   ///       symbol, so the two are read by index: the diagnostics need the symbol for its location and the type name the
-   ///       developer wrote, and the model for what its storage settled.
-   ///    </para>
-   /// </remarks>
    private static void ReportStorageDiagnostics(
       INamedTypeSymbol classSymbol,
       ClassDeclarationSyntax classSyntax,
@@ -355,8 +304,6 @@ internal static class TableDefinitionParser
                TableRepositoryDiagnostics.WRITABLE_ALTERNATIVES_FOR_UNSIGNED_INTEGERS
             ));
 
-            // The unmappable-type warning would only add noise here: its advice is to register a conversion, and the
-            // error above is that there is no PostgreSQL type to convert to.
             continue;
          }
 

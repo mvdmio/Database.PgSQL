@@ -10,24 +10,13 @@ using Testcontainers.PostgreSql;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.Migrations;
 
-/// <summary>
-///    Tests for schema-first migration functionality using embedded schema resources.
-///    These tests use their own PostgreSQL container without pre-applied migrations.
-/// </summary>
 public class SchemaFirstMigrationTests : IAsyncLifetime
 {
    private PostgreSqlContainer _dbContainer = null!;
    private DatabaseConnectionFactory _connectionFactory = null!;
 
-   /// <summary>
-   ///    Gets the test assembly which contains embedded schema resources.
-   /// </summary>
    private static Assembly TestAssembly => typeof(SchemaFirstMigrationTests).Assembly;
 
-   /// <summary>
-   ///    Gets the secondary test support assembly which embeds its own <c>schema.sql</c> and
-   ///    <c>schema.local.sql</c> for multi-assembly schema discovery tests.
-   /// </summary>
    private static Assembly SecondaryAssembly => typeof(AssemblyMarker).Assembly;
 
    protected static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
@@ -62,7 +51,6 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      // Create the migrations table but don't add any entries
       await db.Dapper.ExecuteAsync("""
          CREATE SCHEMA IF NOT EXISTS "mvdmio";
          CREATE TABLE "mvdmio"."migrations" (
@@ -85,7 +73,6 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      // Create the migrations table and add an entry
       await db.Dapper.ExecuteAsync("""
          CREATE SCHEMA IF NOT EXISTS "mvdmio";
          CREATE TABLE "mvdmio"."migrations" (
@@ -108,8 +95,6 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task IsDatabaseEmptyAsync_WithOnlyOtherScopeRows_ReturnsFalse()
    {
-      // The public empty check stays global: a row for any scope means the database is not empty,
-      // even when the caller's own scope has never been touched.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       var firstMigrator = new DatabaseMigrator(db, NullLoggerFactory.Instance, typeof(TestFixture).Assembly);
@@ -130,8 +115,6 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithOtherScopeAlreadyPresent_AppliesSecondarySchemaAndBaseline()
    {
-      // Product case: Auth-style first scope already has rows. A second, separate migrator for another
-      // assembly still applies that assembly's embedded schema and records its baseline.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       var firstMigrator = new DatabaseMigrator(
@@ -186,22 +169,19 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      // Use the embedded schema.sql from the test assembly
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
-         null, // Will pick up schema.sql
+         null,
          NullLoggerFactory.Instance,
          [TestAssembly],
          migrationRetriever);
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
-      // Verify the table was created (from schema)
       var tableExists = await db.Management.TableExistsAsync("public", "simple_table");
       tableExists.Should().BeTrue();
 
-      // Verify the migration was recorded
       var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
       executedMigrations.Should().Contain(m => m.Identifier == 202505181000);
    }
@@ -211,22 +191,19 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      // Use the embedded schema.local.sql from the test assembly
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
-         "local", // Will pick up schema.local.sql
+         "local",
          NullLoggerFactory.Instance,
          [TestAssembly],
          migrationRetriever);
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
-      // Verify the table was created
       var tableExists = await db.Management.TableExistsAsync("public", "simple_table");
       tableExists.Should().BeTrue();
 
-      // Verify the migration was recorded
       var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
       executedMigrations.Should().Contain(m => m.Identifier == 202505181000);
    }
@@ -236,18 +213,16 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      // Use uppercase environment name - should still find schema.local.sql
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
-         "LOCAL", // Case-insensitive lookup
+         "LOCAL",
          NullLoggerFactory.Instance,
          [TestAssembly],
          migrationRetriever);
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
-      // Verify the table was created
       var tableExists = await db.Management.TableExistsAsync("public", "simple_table");
       tableExists.Should().BeTrue();
    }
@@ -257,13 +232,11 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      // First apply some migrations normally (without embedded schema)
       var migratorWithoutSchema = new DatabaseMigrator(db, NullLoggerFactory.Instance, typeof(TestFixture).Assembly);
       await migratorWithoutSchema.MigrateDatabaseToLatestAsync(CancellationToken);
 
       var initialMigrationCount = (await migratorWithoutSchema.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).Count();
 
-      // Create a new migrator with embedded schema discovery
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migratorWithSchema = new DatabaseMigrator(
          db,
@@ -272,10 +245,8 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
          [TestAssembly],
          migrationRetriever);
 
-      // This should NOT re-apply the schema since database already has migrations
       await migratorWithSchema.MigrateDatabaseToLatestAsync(CancellationToken);
 
-      // Migration count should be unchanged
       var finalMigrationCount = (await migratorWithSchema.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).Count();
       finalMigrationCount.Should().Be(initialMigrationCount);
    }
@@ -325,8 +296,6 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      // The embedded schema contains migration 202505181000 (SimpleTable)
-      // The TestFixture assembly has migrations 202505181000 and 202505192230 (ComplexTable)
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
@@ -337,11 +306,9 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
-      // Verify the simple_table was created (from schema)
       var simpleTableExists = await db.Management.TableExistsAsync("public", "simple_table");
       simpleTableExists.Should().BeTrue();
 
-      // Verify all migrations are now recorded (schema + subsequent migrations)
       var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
       executedMigrations.Length.Should().BeGreaterThan(1);
       executedMigrations.Should().Contain(m => m.Identifier == 202505181000);
@@ -353,18 +320,16 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      // Pass an empty array for schema assemblies - no embedded schema will be found
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
          null,
          NullLoggerFactory.Instance,
-         [], // No assemblies for schema discovery
+         [],
          migrationRetriever);
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
-      // Verify migrations were applied
       var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
       executedMigrations.Should().NotBeEmpty();
    }
@@ -374,18 +339,16 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      // Use an environment that doesn't have a specific schema file
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
-         "nonexistent", // No schema.nonexistent.sql exists
+         "nonexistent",
          NullLoggerFactory.Instance,
          [TestAssembly],
          migrationRetriever);
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
-      // Should fall back to schema.sql and create the table
       var tableExists = await db.Management.TableExistsAsync("public", "simple_table");
       tableExists.Should().BeTrue();
    }
@@ -393,7 +356,6 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task EmbeddedSchemaDiscovery_FindsSchemaResources_InTestAssembly()
    {
-      // Verify that the test assembly has embedded schema resources
       var schemaExists = EmbeddedSchemaDiscovery.SchemaResourceExists([TestAssembly], null);
       schemaExists.Should().BeTrue();
 
@@ -426,8 +388,6 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      // Primary assembly's schema.sql has version 202505181000 (SimpleTable).
-      // Secondary assembly's schema.sql has version 202505181100 (SecondaryTable).
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
@@ -438,11 +398,9 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
-      // Tables from BOTH schemas must exist.
       (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
       (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeTrue();
 
-      // Each applied schema records a baseline row for its own scope.
       var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
       executedMigrations.Should().Contain(m => m.Identifier == 202505181000 && m.Name == "SimpleTable" && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration");
       executedMigrations.Should().Contain(m => m.Identifier == 202505181100 && m.Name == "SecondaryTable" && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
@@ -454,7 +412,6 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      // Reverse order: secondary first, primary second.
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
@@ -468,7 +425,6 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
       (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeTrue();
 
-      // Both per-scope baselines are recorded regardless of assembly order.
       var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
       executedMigrations.Should().Contain(m => m.Identifier == 202505181000 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration");
       executedMigrations.Should().Contain(m => m.Identifier == 202505181100 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
@@ -479,9 +435,6 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
-      // Both assemblies ship schema.local.sql. Both local variants must be applied.
-      // Primary's schema.local.sql creates simple_table (same as non-local); secondary's
-      // schema.local.sql creates secondary_table_local (distinct from non-local secondary_table).
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
       var migrator = new DatabaseMigrator(
          db,
@@ -493,15 +446,12 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
       (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
-      // The local variant was applied (not the non-local secondary_table).
       (await db.Management.TableExistsAsync("public", "secondary_table_local")).Should().BeTrue();
       (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeFalse();
 
       var executedMigrations = (await migrator.RetrieveAlreadyExecutedMigrationsAsync(CancellationToken)).ToArray();
       executedMigrations.Should().Contain(m => m.Identifier == 202505181200 && m.Name == "SecondaryTableLocal" && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
 
-      // The primary schema.local.sql carries a legacy scope-less header: its baseline row is recorded without
-      // a scope and then healed by the backfill, because the matching migration is discovered by the retriever.
       executedMigrations.Should().Contain(m => m.Identifier == 202505181000 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration");
    }
 
@@ -526,8 +476,6 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public void EmbeddedSchemaDiscovery_FindAllSchemaResources_SkipsAssembliesWithoutSchema()
    {
-      // typeof(TestFixture).Assembly is the integration-tests assembly itself, which also has embedded schemas.
-      // Use the mvdmio.Database.PgSQL main assembly as a "no schema" assembly.
       var noSchemaAssembly = typeof(DatabaseMigrator).Assembly;
 
       var resources = EmbeddedSchemaDiscovery.FindAllSchemaResources(
@@ -549,27 +497,21 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithForeignScopeInSchemaHeader_IgnoresGhostBaselineAndRunsThatScopesMigrations()
    {
-      // Models an app whose pulled schema header names another assembly's scope (a `db pull` from a shared
-      // database), bootstrapped together with that other assembly — which has migrations but no schema file
-      // of its own. The ghost header line must not fabricate a baseline for the other scope: all of its
-      // migrations run from zero, and the ignored line is warned about.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       var loggerFactory = new CapturingLoggerFactory();
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly, SecondaryAssembly);
       var migrator = new DatabaseMigrator(
          db,
-         environment: "ghostheader", // schema.ghostheader.sql exists only in the primary assembly
+         environment: "ghostheader",
          loggerFactory,
          [TestAssembly],
          migrationRetriever);
 
       await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
 
-      // The primary schema was applied and its own scope's baseline holds.
       (await db.Management.TableExistsAsync("public", "simple_table")).Should().BeTrue();
 
-      // Every secondary-scope migration ran — the ghost header line did not suppress them.
       (await db.Management.TableExistsAsync("public", "secondary_table")).Should().BeTrue();
       (await db.Management.TableExistsAsync("public", "secondary_follow_up_table")).Should().BeTrue();
 
@@ -578,11 +520,8 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
       executedMigrations.Should().Contain(m => m.Identifier == 202505181100 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
       executedMigrations.Should().Contain(m => m.Identifier == 202505190000 && m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema");
 
-      // No ghost baseline row: the secondary scope's rows all come from actually-run migrations, and the
-      // ignored header line (202505190000) exists exactly once — as the executed migration, not a baseline.
       executedMigrations.Count(m => m.Scope == "mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema").Should().Be(2);
 
-      // The ignored header line was warned about, naming the file and the foreign scope.
       loggerFactory.Entries.Should().ContainSingle(e =>
          e.Level == LogLevel.Warning &&
          e.Message.Contains("mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema") &&
@@ -592,8 +531,6 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    [Fact]
    public async Task MigrateDatabaseToAsync_WithTargetBelowSecondarySchemaHeader_SkipsOnlyThatSchema()
    {
-      // Primary schema header = 202505181000, secondary = 202505181100.
-      // Targeting a value between them skips only the secondary schema; the primary schema still applies.
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
 
       var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly, SecondaryAssembly);

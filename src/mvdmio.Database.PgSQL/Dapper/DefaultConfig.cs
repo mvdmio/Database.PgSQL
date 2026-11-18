@@ -16,6 +16,5 @@ internal static class DefaultConfig
 
    public static void EnsureInitialized()
    {
-      // Don't have to do anything here.
    }
 }

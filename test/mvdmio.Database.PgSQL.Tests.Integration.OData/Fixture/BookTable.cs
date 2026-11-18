@@ -3,10 +3,6 @@ using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
-/// <summary>
-///    The other half of the relation-bearing pair. Its foreign key is nullable, so a row whose key points nowhere makes
-///    an expansion that finds nothing observable.
-/// </summary>
 [Table("public.odata_books")]
 public partial class BookTable
 {

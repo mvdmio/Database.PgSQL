@@ -5,10 +5,6 @@ using System.Linq.Expressions;
 
 namespace mvdmio.Database.PgSQL.Tests.Unit;
 
-/// <summary>
-///    What the materialization operators do before a database is involved: which query they accept, and what they leave
-///    behind in the composed expression for the rewriter to find.
-/// </summary>
 public class QueryableExtensionsTests
 {
    [Fact]
@@ -30,11 +26,6 @@ public class QueryableExtensionsTests
       StepsRecordedBy(query).Should().HaveCount(1);
    }
 
-   /// <remarks>
-   ///    The filter travels inside the step rather than in the expression, so this is the only place the recording of a
-   ///    scoped materialization is observable without a database. That the filter itself reaches the provider correctly
-   ///    is proven at the integration seam, where it can reference another repository's query.
-   /// </remarks>
    [Fact]
    public void Include_WithAFilter_RecordsOneStepThatTheRewriterStrips()
    {

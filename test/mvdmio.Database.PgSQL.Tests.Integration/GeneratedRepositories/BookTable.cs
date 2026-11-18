@@ -3,10 +3,6 @@ using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>
-///    A table definition with two relations at the same target and two nullable foreign keys, so that outer-join
-///    semantics are observable on a row whose key points nowhere.
-/// </summary>
 [Table("public.generated_books")]
 public partial class BookTable
 {

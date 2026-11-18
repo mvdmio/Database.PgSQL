@@ -3,10 +3,6 @@ using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
-/// <summary>
-///    The other half of the composite-key pair. Its whole key is caller-supplied, and its relation to a project is keyed on
-///    the tenancy column it shares with its own key plus a column that is in no key at all.
-/// </summary>
 [Table("public.odata_tenant_tasks")]
 public partial class TenantTaskTable
 {

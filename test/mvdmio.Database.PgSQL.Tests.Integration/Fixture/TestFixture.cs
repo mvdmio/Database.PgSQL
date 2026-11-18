@@ -20,14 +20,6 @@ public sealed class TestFixture : IAsyncLifetime
    {
       await DbContainer.StartAsync();
 
-      // Every test in this assembly therefore runs with the enum type handlers registered. Deliberate rather than
-      // incidental: a Dapper type handler is a process-wide registration that cannot be undone, so registering it once
-      // here is the only way the suite can be sure which state it is in — and the state worth being sure of is the one
-      // where an opt-in convenience is present and must still change nothing a generated repository does.
-      //
-      // The blast radius is one enum. This assembly declares only WorkState, so nothing that was passing before is
-      // affected; the unregistered case is covered where it lands naturally, by the OData suite and by the packaging
-      // suite's scaffolded consumer, neither of which registers anything.
       new ServiceCollection().AddEnumDapperTypeHandlers([typeof(TestFixture).Assembly]);
 
       await using var connection = new DatabaseConnection(DbContainer.GetConnectionString());
@@ -35,7 +27,6 @@ public sealed class TestFixture : IAsyncLifetime
       var databaseMigrator = new DatabaseMigrator(connection, NullLoggerFactory.Instance, GetType().Assembly);
       await databaseMigrator.MigrateDatabaseToLatestAsync();
 
-      // Committed rather than migrated: the migration tests assert on the exact set of migrations this assembly ships.
       await connection.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.generated_profiles (
@@ -90,8 +81,6 @@ public sealed class TestFixture : IAsyncLifetime
          """
       );
 
-      // The polymorphic-link table set: a link table carrying a kind column beside an identifier, reaching two
-      // different targets through that same pair, condition-narrowed rather than through a generated column per kind.
       await connection.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.generated_link_people (
@@ -120,8 +109,6 @@ public sealed class TestFixture : IAsyncLifetime
          """
       );
 
-      // Both text columns permit null while the definition over them claims otherwise, which is what makes the failure
-      // mode of an unverified nullability claim observable.
       await connection.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.generated_unverified_claims (
@@ -132,9 +119,6 @@ public sealed class TestFixture : IAsyncLifetime
          """
       );
 
-      // One column per cell of the documented storage matrix, so every promise it makes is a promise about a real
-      // column. Each column's PostgreSQL type is the one its claim says it is, so a claim reaching the wrong column
-      // shows up as a type error rather than as a wrong value — five of these are the same enum stored five ways.
       await connection.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.generated_storage_claims (
@@ -161,10 +145,6 @@ public sealed class TestFixture : IAsyncLifetime
          """
       );
 
-      // The composite-key table set, separate from the author-and-book one so that set keeps pinning the single-column
-      // key path. Real composite foreign keys, and a matching index on each side of the relation the join tests read —
-      // except for primary_task_id, which carries none because tasks already reference projects and a constraint the
-      // other way could not be satisfied by either insertion order.
       await connection.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.generated_tenant_projects (
@@ -198,8 +178,6 @@ public sealed class TestFixture : IAsyncLifetime
          """
       );
 
-      // project_ref is stored and generated, non-null only for its own kind. A composite foreign key over it is valid
-      // even so: under MATCH SIMPLE a row with a null in the key satisfies the constraint.
       await connection.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.generated_tenant_links (
@@ -214,9 +192,6 @@ public sealed class TestFixture : IAsyncLifetime
          )
          """
       );
-      // The tenancy column table set: one table where it is part of the primary key, one where it sits outside a
-      // surrogate key — the two shapes ADR 0009 covers. Each carries a UNIQUE column and two assignable non-tenancy
-      // columns, so the generated update has something left to assign once the tenancy column leaves its SET list.
       await connection.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.generated_tenancy_documents (
@@ -242,9 +217,6 @@ public sealed class TestFixture : IAsyncLifetime
          """
       );
 
-      // A per-tenant singleton whose whole primary key is the tenancy column — reached from
-      // generated_tenancy_documents by pairing that one column plus a Relation condition narrowing to an active
-      // profile.
       await connection.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.generated_tenancy_profiles (
@@ -255,10 +227,6 @@ public sealed class TestFixture : IAsyncLifetime
          """
       );
 
-      // The nullable-unique-relation-target pair, separate from generated_authors/generated_books so those tables'
-      // existing assertions stay untouched. A real UNIQUE constraint over a nullable column — PostgreSQL admits any
-      // number of nulls under one, which is what makes it honest cover for the shape: a not-null foreign key on the
-      // declaring side paired against a target column that is both [Unique] and nullable.
       await connection.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.generated_catalog_entries (

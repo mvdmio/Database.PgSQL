@@ -5,25 +5,6 @@ using Testcontainers.PostgreSql;
 [assembly: AssemblyFixture(typeof(PackagingFixture))]
 namespace mvdmio.Database.PgSQL.Tests.Packaging.Fixture;
 
-/// <summary>
-///    Packs the library, installs the package into a project scaffolded here and now, builds it for every framework the
-///    library targets, and runs it against a real database.
-/// </summary>
-/// <remarks>
-///    This exists because the produced <c>.nupkg</c> has no other entry point in the repository, which is exactly why a
-///    package shipping without its source generator went unnoticed: every other test project reaches the analyzer through
-///    a project reference and none of them looks at the package.
-///    <para>
-///       Two isolations, and both matter. The package is versioned uniquely per run, so no stale copy of it can satisfy the
-///       consumer's reference; and the consumer restores into a package folder under this run's temporary directory, so
-///       nothing is served from the developer's cache and nothing is left in it.
-///    </para>
-///    <para>
-///       Known gap, accepted: this proves the generator loads under the SDK that runs the test, not under the oldest SDK the
-///       library claims to support. Testing the minimum SDK would mean installing an older one, so it is documented in the
-///       README instead.
-///    </para>
-/// </remarks>
 public sealed class PackagingFixture : IAsyncLifetime
 {
    private const string PACKAGE_ID = "mvdmio.Database.PgSQL";
@@ -32,31 +13,23 @@ public sealed class PackagingFixture : IAsyncLifetime
    private readonly string _workingDirectory;
    private readonly string _repositoryRoot;
 
-   /// <summary>The version this run packs under, which nothing else can have published or cached.</summary>
    public string PackageVersion { get; }
 
-   /// <summary>What packing the library did, so a test can report the SDK's own output when it failed.</summary>
    public ProcessRun Pack { get; private set; } = ProcessRun.NotAttempted("packing the library");
 
-   /// <summary>What building the scaffolded consumer did, across all three frameworks in one invocation.</summary>
-   /// <remarks>
-   ///    Never left unset, even when packing failed and no build was attempted: a test reading this has to report what
-   ///    happened rather than fail with a null reference and leave the pack output unread.
-   /// </remarks>
    public ProcessRun Build { get; private set; } = ProcessRun.NotAttempted("building the scaffolded consumer");
 
-   /// <summary>What the consumer wrote when run, per target framework. Empty when nothing was built to run.</summary>
    public IReadOnlyDictionary<string, ProcessRun> Runs { get; private set; } = new Dictionary<string, ProcessRun>();
 
-   /// <summary>Everything the packed <c>.nupkg</c> contains, as relative paths with forward slashes.</summary>
    public IReadOnlyCollection<string> PackageContents { get; private set; } = [];
+
+   public string PackageNuspec { get; private set; } = string.Empty;
 
    public PackagingFixture()
    {
       _container = new PostgreSqlBuilder("postgres:18").Build();
       _repositoryRoot = RepositoryRoot();
 
-      // Unique per run, and prefixed with a letter so the prerelease label cannot be read as a numeric identifier.
       PackageVersion = $"0.0.0-packagingtest{Guid.NewGuid():N}";
       _workingDirectory = Path.Combine(Path.GetTempPath(), "mvdmio-pgsql-packaging", PackageVersion);
    }
@@ -78,6 +51,7 @@ public sealed class PackagingFixture : IAsyncLifetime
          return;
 
       PackageContents = ReadPackageContents();
+      PackageNuspec = ReadPackageNuspec();
       ScaffoldTheConsumer();
 
       Build = BuildTheConsumer();
@@ -92,8 +66,6 @@ public sealed class PackagingFixture : IAsyncLifetime
       await _container.StopAsync();
       await _container.DisposeAsync();
 
-      // Best effort: a left-behind temporary directory is untidy, while failing the run over one would hide whatever the
-      // tests actually found.
       try
       {
          Directory.Delete(_workingDirectory, recursive: true);
@@ -106,12 +78,6 @@ public sealed class PackagingFixture : IAsyncLifetime
       }
    }
 
-   /// <remarks>
-   ///    <c>GeneratePackageOnBuild</c> is switched off for this invocation, and that is load-bearing rather than tidiness:
-   ///    with it on, NuGet's <c>Pack</c> target does not depend on <c>Build</c> — because a build is what normally invokes
-   ///    it — so <c>dotnet pack</c> silently packs whatever happens to be in <c>bin/</c>. This test would then assert
-   ///    against a stale library and a stale analyzer, which is the one failure mode it cannot afford.
-   /// </remarks>
    private ProcessRun PackTheLibrary()
    {
       return Dotnet.Run(
@@ -169,10 +135,16 @@ public sealed class PackagingFixture : IAsyncLifetime
       return archive.Entries.Select(x => x.FullName.Replace('\\', '/')).ToList();
    }
 
-   /// <remarks>
-   ///    Read from an assembly attribute the project sets, rather than searched for by walking up from the test binary: the
-   ///    project knows where it sits relative to the root and a search would have to guess what marks it.
-   /// </remarks>
+   private string ReadPackageNuspec()
+   {
+      var package = Directory.GetFiles(FeedDirectory, $"{PACKAGE_ID}.{PackageVersion}.nupkg").Single();
+
+      using var archive = System.IO.Compression.ZipFile.OpenRead(package);
+      using var reader = new StreamReader(archive.GetEntry($"{PACKAGE_ID}.nuspec")!.Open());
+
+      return reader.ReadToEnd();
+   }
+
    private static string RepositoryRoot()
    {
       var configured = typeof(PackagingFixture).Assembly

@@ -62,8 +62,6 @@ public class PoolSettingsResolverTests
       result.MaxPoolSize.Should().Be(100);
    }
 
-   // ADO.NET's connection string parser drops a keyword with an empty value, so Npgsql never sees it either: the keyword
-   // counts as absent and the default applies.
    [Fact]
    public void Resolve_WithAnEmptyNameKeyword_TreatsItAsAbsent()
    {
@@ -162,7 +160,6 @@ public class PoolSettingsResolverTests
       result.Should().Be(new PoolSettings(10, "Setting.App"));
    }
 
-   // A value that is set is used exactly as given, so an explicit empty name beats the keyword and the default.
    [Fact]
    public void Resolve_WithAnExplicitEmptyName_KeepsItAsGiven()
    {

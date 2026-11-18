@@ -5,9 +5,6 @@ using mvdmio.Database.PgSQL.Migrations.Models;
 
 namespace mvdmio.Database.PgSQL.Tool.Migrations;
 
-/// <summary>
-///    Executes migrations for the selected target.
-/// </summary>
 internal class MigrationExecutionService
 {
    private readonly IMigrationRuntimeFactory _runtimeFactory;
@@ -101,14 +98,6 @@ internal class MigrationExecutionService
       return null;
    }
 
-   /// <summary>
-   ///    Reports the schema-first path when this project has a schema file and at least one vouched scope has
-   ///    no rows yet (the same per-scope rule as the migrator, via <see cref="SchemaBootstrapSelector"/>).
-   ///    A globally empty migrations table is just the case where every scope is empty. Returns true when the
-   ///    caller should skip the incremental pending-count short-circuit and invoke the migrator — including a
-   ///    fully folded schema (zero pending incrementals) on a shared database, and a migrate-to target older
-   ///    than the schema header.
-   /// </summary>
    private async Task<bool> TryReportSchemaPathAsync(
       MigrateRequest request,
       string? environmentName,
@@ -279,7 +268,6 @@ internal sealed class ConsoleLoggerFactory : ILoggerFactory
 
    public void AddProvider(ILoggerProvider provider)
    {
-      // No-op.
    }
 
    public void Dispose()
@@ -287,10 +275,6 @@ internal sealed class ConsoleLoggerFactory : ILoggerFactory
    }
 }
 
-/// <summary>
-///    Surfaces migrator warnings (e.g. out-of-order migrations, or executed rows that could not be attributed to a
-///    scope) on the console, since the CLI has no logging infrastructure.
-/// </summary>
 internal sealed class ConsoleMigratorLogger : ILogger<DatabaseMigrator>
 {
    public IDisposable? BeginScope<TState>(TState state)

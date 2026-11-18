@@ -1,9 +1,5 @@
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>
-///    Commands filling every column of <see cref="StorageClaimTable" />, so the two test classes over that table agree
-///    about what a row holds and neither has to be edited when the matrix gains a cell.
-/// </summary>
 internal static class StorageClaimRows
 {
    public const string DOCUMENT = """{"kind": "invoice"}""";
@@ -12,10 +8,6 @@ internal static class StorageClaimRows
    public const string PLAIN_NOTE = "a plain note";
    public const sbyte OFFSET_HOURS = -3;
 
-   /// <remarks>
-   ///    The three enum arguments are spread across the five enum columns rather than each column taking its own, so that a
-   ///    claim landing on the wrong column is visible instead of masked by every column holding the same member.
-   /// </remarks>
    public static CreateStorageClaimCommand Create(WorkState state, WorkState priority, WorkState? reviewState)
    {
       return new CreateStorageClaimCommand
@@ -40,10 +32,6 @@ internal static class StorageClaimRows
       };
    }
 
-   /// <summary>
-   ///    An update carrying every column forward unchanged, so a test can change the one column it is about. Written from
-   ///    the row rather than from literals, so that adding a matrix column cannot silently start writing null into it.
-   /// </summary>
    public static UpdateStorageClaimCommand UpdateFrom(StorageClaimData row)
    {
       ArgumentNullException.ThrowIfNull(row);

@@ -12,7 +12,7 @@ TDD is the expectation: write tests before implementing, and always add/modify t
 | `test/mvdmio.Database.PgSQL.Tests.Integration/` | net11.0 | Database tests via Testcontainers |
 | `test/mvdmio.Database.PgSQL.Tests.Integration.SecondarySchema/` | — | A second assembly with its own migrations/schema, referenced by the integration suite to exercise multi-assembly / multi-scope and embedded-schema scenarios |
 | `test/mvdmio.Database.PgSQL.Tests.Integration.OData/` | net11.0 | OData conformance suite over the query surface — its own container, its own fixtures, and the only project that takes an OData dependency |
-| `test/mvdmio.Database.PgSQL.Analyzers.Tests/` | net11.0 | Roslyn analyzer and source generator tests — drives the generator over a source string and asserts on the diagnostics and emitted source |
+| `test/mvdmio.Database.PgSQL.Analyzers.Tests/` | net11.0 | Roslyn analyzer and source generator tests — drives the generator over a source string and asserts on the diagnostics and emitted source; also the `MVDM0053` comment-rule tests (`CommentBanTests`), which run the `mvdmio.Database.PgSQL.Lint` analyzer over snippets and assert the diagnostic ID and line |
 | `test/mvdmio.Database.PgSQL.Tests.Packaging/` | net11.0 | Packs the library, installs the package into a project scaffolded at test time, builds it for both target frameworks and runs it against a container. The slowest suite, and the only one that references neither the library nor the analyzer — the artifact under test is the `.nupkg` |
 
 ## Unit tests
@@ -61,7 +61,7 @@ TDD is the expectation: write tests before implementing, and always add/modify t
 ## Packaging tests
 
 - Location: `test/mvdmio.Database.PgSQL.Tests.Packaging/`. **Docker and network access are both required** — the scaffolded consumer restores its transitive dependencies from nuget.org into a package folder under the run's temporary directory.
-- Deliberately references nothing from `src/`: a project reference is what made a package shipping without its source generator invisible, since every other suite sees the analyzer that way and none of them looks at the package.
+- Deliberately references no library or analyzer assembly, and its only reference into `src/` is the analyzer-only, no-output reference to `mvdmio.Database.PgSQL.Lint` that `Directory.Build.targets` gives every project: a project reference is what made a package shipping without its source generator invisible, since every other suite sees the analyzer that way and none of them looks at the package.
 - The library is packed under a run-unique prerelease version, so no stale copy can satisfy the consumer's reference. Note that packing passes `-p:GeneratePackageOnBuild=false`: with that property on — which is how the library is configured — NuGet's `Pack` target does not depend on `Build`, so `dotnet pack` silently packs whatever is already in `bin/`.
 - Add to `Fixture/ConsumerProject.cs`'s single table definition rather than adding another consumer: one build per framework is what keeps this suite affordable.
 - Its child processes run with MSBuild node reuse off (orphaned MSBuild workers keep the redirected pipes open and stall the run) and stop after 5 minutes with a report naming the command.

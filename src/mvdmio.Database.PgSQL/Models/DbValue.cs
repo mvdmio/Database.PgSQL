@@ -26,7 +26,7 @@ public readonly struct DbValue : IEquatable<DbValue>
    public DbValue(object? value)
    {
       Value = value;
-      Type = NpgsqlDbType.Unknown; // Default type if not specified
+      Type = NpgsqlDbType.Unknown;
    }
 
    /// <summary>

@@ -4,16 +4,6 @@ using mvdmio.Database.PgSQL.Tests.Integration.Fixture;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>
-///    What a nullability claim buys and what it costs, over a table whose columns all permit null.
-/// </summary>
-/// <remarks>
-///    A claim is never verified against the real table, so this is where the accepted risk is pinned rather than
-///    described. Both halves are provider behaviour, asserted here rather than reasoned about, because an upgrade could
-///    change either: a wrong claim is not caught when the row is read — the null arrives in a property typed
-///    non-nullable — and what it does cost is a row set, because the null alternative it removed is what would have
-///    matched the null rows.
-/// </remarks>
 public class GeneratedRepositoryNullabilityTests : TestBase
 {
    private UnverifiedClaimRepository _claims = null!;
@@ -39,8 +29,6 @@ public class GeneratedRepositoryNullabilityTests : TestBase
 
       claim.Label.Should().Be("kept");
 
-      // Typed non-nullable, and holding null anyway: withdrawing the claim is what lets the read complete at all, and
-      // the property type is not what the value has to satisfy.
       ((string?)claim.Note).Should().BeNull();
    }
 
@@ -51,7 +39,6 @@ public class GeneratedRepositoryNullabilityTests : TestBase
 
       var claim = await _claims.Query().Where(x => x.ClaimId == 2).SingleAsync(CancellationToken);
 
-      // The read path does not enforce the claim, so a wrong one is not caught here.
       ((string?)claim.Label).Should().BeNull();
    }
 
@@ -65,8 +52,6 @@ public class GeneratedRepositoryNullabilityTests : TestBase
          .Where(x => x.ClaimId >= 3 && x.Label != "kept")
          .ToListAsync(CancellationToken);
 
-      // This is what a wrong claim actually costs, and it is why the claim is a statement about the table rather than a
-      // hint: dropping the null alternative drops the rows the alternative would have matched.
       labels.Should().BeEmpty();
    }
 

@@ -6,11 +6,6 @@ using System.Linq.Expressions;
 
 namespace mvdmio.Database.PgSQL.Tests.Unit.Connectors.Linq;
 
-/// <summary>
-///    Guards the decorator's asynchronous paths. If the decorator stops advertising asynchronous execution the
-///    provider silently falls back to enumerating synchronously on a pool thread, which no behavioural assertion
-///    would notice — so the fake provider underneath refuses to be used synchronously at all.
-/// </summary>
 public class TranslatedQueryableAsyncTests
 {
    [Fact]
@@ -60,9 +55,6 @@ public class TranslatedQueryableAsyncTests
       return new TranslatedQueryable<string>(new LinqQuerySource(new object(), () => root, () => null));
    }
 
-   /// <summary>
-   ///    Stands in for the provider's queryable: asynchronous execution works, synchronous execution throws.
-   /// </summary>
    private sealed class AsyncOnlyQueryable<T> : IQueryable<T>, IAsyncEnumerable<T>, IQueryProviderAsync
    {
       private readonly List<T> _items;

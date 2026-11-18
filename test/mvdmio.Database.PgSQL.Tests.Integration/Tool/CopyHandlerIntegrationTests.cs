@@ -6,10 +6,6 @@ using Npgsql;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.Tool;
 
-/// <summary>
-///    End-to-end integration tests for the <c>db copy</c> command via <see cref="CopyHandler"/>.
-///    Uses two databases on the shared PostgreSQL container as source and destination.
-/// </summary>
 public class CopyHandlerIntegrationTests : IAsyncLifetime
 {
    private readonly TestFixture _fixture;
@@ -61,7 +57,6 @@ public class CopyHandlerIntegrationTests : IAsyncLifetime
       await ExecuteAsync(_sourceConnectionString, DDL);
       await ExecuteAsync(_destConnectionString, DDL);
 
-      // Seed source.
       await using (var src = new DatabaseConnection(_sourceConnectionString))
       {
          await src.Dapper.ExecuteAsync("""
@@ -73,7 +68,6 @@ public class CopyHandlerIntegrationTests : IAsyncLifetime
             """, ct: CancellationToken);
       }
 
-      // Pre-populate destination with garbage that must be wiped.
       await using (var dst = new DatabaseConnection(_destConnectionString))
       {
          await dst.Dapper.ExecuteAsync("""
@@ -111,7 +105,6 @@ public class CopyHandlerIntegrationTests : IAsyncLifetime
       orders[0].UserId.Should().Be(10);
       orders[0].Amount.Should().Be(9.99m);
 
-      // After copy, sequences should be advanced past the max id so new inserts work.
       var newUserId = await verify.Dapper.QuerySingleAsync<long>(
          "INSERT INTO app.users (name) VALUES ('Carol') RETURNING id",
          ct: CancellationToken
@@ -188,7 +181,7 @@ public class CopyHandlerIntegrationTests : IAsyncLifetime
       keep.Should().BeEquivalentTo([1]);
 
       var skip = (await verify.Dapper.QueryAsync<int>("SELECT id FROM public.skip_me ORDER BY id", ct: CancellationToken)).ToArray();
-      skip.Should().BeEquivalentTo([99]); // untouched
+      skip.Should().BeEquivalentTo([99]);
    }
 
    private async Task<string> CreateDatabaseAsync(string dbName)

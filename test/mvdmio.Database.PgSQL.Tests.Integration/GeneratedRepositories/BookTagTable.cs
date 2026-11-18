@@ -3,10 +3,6 @@ using mvdmio.Database.PgSQL.Relations;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.GeneratedRepositories;
 
-/// <summary>
-///    The join table of a many-to-many. It is an ordinary table definition with a relation at each side, which is why
-///    many-to-many needs no concept of its own.
-/// </summary>
 [Table("public.generated_book_tags")]
 public partial class BookTagTable
 {

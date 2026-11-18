@@ -3,17 +3,8 @@ using Microsoft.CodeAnalysis;
 
 namespace mvdmio.Database.PgSQL.Analyzers.Tests;
 
-/// <summary>
-///    What a table definition whose primary key has more than one member generates, and the diagnostics that stop a
-///    malformed one reaching run time.
-/// </summary>
 public class TableRepositoryGeneratorCompositeKeyTests
 {
-   /// <summary>
-   ///    A tenant-scoped pair: both keys are two columns and both share <c>AccountId</c>, so a relation whose foreign key
-   ///    overlaps the declaring table's own key is the ordinary case here rather than a special one. The project's second
-   ///    key member is database-generated, which is what makes a part-supplied, part-generated key observable.
-   /// </summary>
    private const string COMPOSITE_KEY_TABLES = """
       using mvdmio.Database.PgSQL.Attributes;
       using mvdmio.Database.PgSQL.Relations;
@@ -97,7 +88,6 @@ public class TableRepositoryGeneratorCompositeKeyTests
       project.Should().Contain("Task<ProjectData?> GetByPrimaryKeyAsync(long accountId, long projectId, CancellationToken ct = default);");
       project.Should().Contain("Task<bool> DeleteByPrimaryKeyAsync(long accountId, long projectId, CancellationToken ct = default);");
 
-      // Declaration order, not alphabetical and not column order: the file already states it.
       project.Should().Contain("""WHERE "account_id" = :accountId AND "project_id" = :projectId""");
    }
 
@@ -111,7 +101,6 @@ public class TableRepositoryGeneratorCompositeKeyTests
       task.Should().Contain("""WHERE "account_id" = :AccountId AND "task_id" = :TaskId""");
       task.Should().Contain("""DELETE FROM "public"."tasks" """.TrimEnd());
 
-      // The update command carries every key member, so the caller can name the row it means.
       task.Should().Contain("public partial class UpdateTaskCommand");
       task.Should().ContainAll("[\"AccountId\"] = data.AccountId", "[\"TaskId\"] = data.TaskId");
    }
@@ -122,8 +111,6 @@ public class TableRepositoryGeneratorCompositeKeyTests
       var result = GeneratorHarness.RunGenerator(COMPOSITE_KEY_TABLES);
       var project = GeneratorHarness.GeneratedSource(result, "Demo_ProjectTable.Repository.g.cs");
 
-      // A key that is part caller-supplied and part database-computed needs no special handling: the create command
-      // already excludes generated columns per property.
       project.Should().Contain("""INSERT INTO "public"."projects" ("account_id", "name")""");
       project.Should().Contain("""RETURNING "account_id" AS "AccountId", "project_id" AS "ProjectId", "name" AS "Name" """.TrimEnd());
    }
@@ -139,8 +126,6 @@ public class TableRepositoryGeneratorCompositeKeyTests
          """.Column(x => x.TaskId, "task_id", isPrimaryKey: true)"""
       );
 
-      // A non-key column stays a plain column even when it is a relation's foreign key — it only states that its type
-      // cannot hold null, which every key member states through the key argument instead.
       registration.Should().Contain(""".Column(x => x.ProjectId, "project_id", isNotNull: true)""");
    }
 
@@ -158,12 +143,6 @@ public class TableRepositoryGeneratorCompositeKeyTests
       );
    }
 
-   /// <remarks>
-   ///    The defensive half of the pair above. The provider's key-based overloads leave their key type parameters
-   ///    unconstrained, so an anonymous type compiles there, registers as a single key named after its constructor, and
-   ///    fails only at the first query with a coercion error naming the two entity types. Nothing but a source assertion
-   ///    can hold the generator off that shape.
-   /// </remarks>
    [Fact]
    public void Relation_IsNeverRegisteredThroughAKeyExpression()
    {
@@ -171,7 +150,6 @@ public class TableRepositoryGeneratorCompositeKeyTests
 
       registration.Should().NotContainAny("x => new", "y => new", "ValueTuple", "System.Tuple");
 
-      // Every relation now registers through the predicate overload, so no three-argument key-based call may appear.
       registration.Should().NotContain(".Relation<global::Demo.TaskData, ");
       registration.Should().NotContain(".Relation<global::Demo.ProjectData, ");
    }
@@ -215,7 +193,6 @@ public class TableRepositoryGeneratorCompositeKeyTests
       diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
       diagnostic.GetMessage().Should().Contain("at least one");
 
-      // A malformed key leaves every generated signature undefined, so the table is abandoned rather than half emitted.
       result.GeneratedSources.Should().BeEmpty();
    }
 

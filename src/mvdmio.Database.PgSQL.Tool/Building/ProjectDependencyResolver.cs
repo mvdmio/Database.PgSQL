@@ -4,32 +4,12 @@ using System.Text.Json;
 
 namespace mvdmio.Database.PgSQL.Tool.Building;
 
-/// <summary>
-///    Resolves the NuGet package assemblies of a built project.
-///    <para>
-///       A class library's build output holds its own project references but not its packages, so a
-///       migrations assembly loaded from <c>bin/</c> cannot load a type that names a package type. This reads
-///       the project's <c>.deps.json</c> for the runtime assets of each package and finds them in the package
-///       folders restore recorded in <c>obj/project.assets.json</c>.
-///    </para>
-///    <para>
-///       An assembly the project does not list stays unresolved, so loading a type that needs it still fails.
-///       The tool must never skip a type it cannot load: cleanup deletes the file of every migration it did not
-///       discover.
-///    </para>
-/// </summary>
 internal static class ProjectDependencyResolver
 {
    private static readonly Dictionary<string, string> _assemblyPaths = new(StringComparer.OrdinalIgnoreCase);
    private static readonly object _lock = new();
    private static bool _registered;
 
-   /// <summary>
-   ///    Makes the package assemblies of the project that built <paramref name="assemblyPath" /> resolvable in the
-   ///    default load context.
-   /// </summary>
-   /// <param name="assemblyPath">The built assembly, next to its <c>.deps.json</c>.</param>
-   /// <param name="projectDir">The project directory, which holds <c>obj/project.assets.json</c>.</param>
    public static void Register(string assemblyPath, string projectDir)
    {
       var paths = ReadPackageAssemblyPaths(assemblyPath, projectDir);
@@ -119,8 +99,6 @@ internal static class ProjectDependencyResolver
       if (name.Name is null)
          return null;
 
-      // The tool carries its own copy of some packages, such as Npgsql. A project on another version of one gets
-      // the tool's copy: the default context holds one assembly per name, so a second copy cannot load.
       var loaded = context.Assemblies.FirstOrDefault(x => string.Equals(x.GetName().Name, name.Name, StringComparison.OrdinalIgnoreCase));
 
       if (loaded is not null)
@@ -130,13 +108,10 @@ internal static class ProjectDependencyResolver
       {
          try
          {
-            // Without a version, the request binds to the tool's own copy when the tool ships one. A miss raises
-            // this event again for the versionless name, which skips this branch.
             return context.LoadFromAssemblyName(new AssemblyName(name.Name));
          }
          catch (FileNotFoundException)
          {
-            // The tool has no copy, so the project's own package resolves below.
          }
       }
 

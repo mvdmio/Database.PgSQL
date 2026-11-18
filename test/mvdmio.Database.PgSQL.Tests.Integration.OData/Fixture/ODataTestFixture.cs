@@ -5,14 +5,6 @@ using Testcontainers.PostgreSql;
 
 namespace mvdmio.Database.PgSQL.Tests.Integration.OData.Fixture;
 
-/// <summary>
-///    Owns this assembly's PostgreSQL container. A second container in the test run is the accepted cost of keeping
-///    the OData dependency out of the main integration suite.
-/// </summary>
-/// <remarks>
-///    The table DDL is committed here rather than expressed as a migration: this project ships no migrations and
-///    asserts nothing about them.
-/// </remarks>
 public sealed class ODataTestFixture : IAsyncLifetime
 {
    public PostgreSqlContainer DbContainer { get; }
@@ -63,8 +55,6 @@ public sealed class ODataTestFixture : IAsyncLifetime
          """
       );
 
-      // The relation-bearing pair the expansion tests query through. Real foreign-key constraints, even though a
-      // relation neither emits nor verifies one, so the fixture does not model something PostgreSQL would reject.
       await connection.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.odata_authors (
@@ -85,8 +75,6 @@ public sealed class ODataTestFixture : IAsyncLifetime
          """
       );
 
-      // The composite-key pair, alongside the single-key one rather than replacing it. Real composite foreign keys, for
-      // the same reason as above.
       await connection.Dapper.ExecuteAsync(
          """
          CREATE TABLE IF NOT EXISTS public.odata_tenant_projects (

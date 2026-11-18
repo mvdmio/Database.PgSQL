@@ -116,13 +116,9 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
       finally
       {
-         // Must be set to true before releasing the lock to prevent race conditions with other dispose calls.
          _disposed = true;
 
          _connectionLock.Release();
-
-         // Not disposing the semaphore so that other operations who are awaiting the lock can complete gracefully.
-         // _connectionLock.Dispose();
       }
    }
 
@@ -155,13 +151,9 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
       finally
       {
-         // Must be set to true before releasing the lock to prevent race conditions with other dispose calls.
          _disposed = true;
 
          _connectionLock.Release();
-
-         // Not disposing the semaphore so that other operations who are awaiting the lock can complete gracefully.
-         // _connectionLock.Dispose();
       }
    }
 
@@ -287,7 +279,6 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       if (Transaction is not null)
          return false;
 
-      // Open also locks the connection, so don't call this inside the wait block.
       _transactionOpenedConnection = Open();
 
       _connectionLock.Wait();
@@ -320,7 +311,6 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       if (Transaction is not null)
          return false;
 
-      // Open also locks the connection, so don't call this inside the wait block.
       _transactionOpenedConnection = await OpenAsync(ct);
 
       await _connectionLock.WaitAsync(ct);
@@ -363,7 +353,6 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       {
          _connectionLock.Release();
 
-         // Close also locks the connection, so don't call this inside the wait block.
          if (_transactionOpenedConnection)
             Close();
       }
@@ -393,7 +382,6 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       {
          _connectionLock.Release();
 
-         // Close also locks the connection, so don't call this inside the wait block.
          if (_transactionOpenedConnection)
             await CloseAsync(ct);
       }
@@ -421,7 +409,6 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
          }
          finally
          {
-            // Clear the transaction even when the rollback throws, so a broken connection does not stay stuck on a dead transaction.
             Transaction.Dispose();
             Transaction = null;
          }
@@ -430,7 +417,6 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       {
          _connectionLock.Release();
 
-         // Close also locks the connection, so don't call this inside the wait block.
          if (_transactionOpenedConnection)
             Close();
       }
@@ -458,7 +444,6 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
          }
          finally
          {
-            // Clear the transaction even when the rollback throws, so a broken connection does not stay stuck on a dead transaction.
             await Transaction.DisposeAsync();
             Transaction = null;
          }
@@ -467,7 +452,6 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       {
          _connectionLock.Release();
 
-         // Close also locks the connection, so don't call this inside the wait block.
          if (_transactionOpenedConnection)
             await CloseAsync(ct);
       }
@@ -496,7 +480,6 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
             }
             catch
             {
-               // Rollback failed too; the action's own exception is what the caller needs.
             }
          }
 
@@ -528,7 +511,6 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
             }
             catch
             {
-               // Rollback failed too; the action's own exception is what the caller needs.
             }
          }
 
@@ -562,7 +544,6 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
             }
             catch
             {
-               // Rollback failed too; the action's own exception is what the caller needs.
             }
          }
 
@@ -624,7 +605,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
       catch (Exception ex) when (ex is TaskCanceledException or OperationCanceledException)
       {
-         throw; // Forward cancellation exceptions
+         throw;
       }
       catch (Exception exception)
       {
@@ -649,7 +630,7 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
       catch (Exception ex) when (ex is TaskCanceledException or OperationCanceledException)
       {
-         throw; // Forward cancellation exceptions
+         throw;
       }
       catch (Exception exception)
       {
@@ -701,7 +682,6 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
       finally
       {
-         // Closes without the caller's token: with a cancelled token CloseAsync throws before it closes anything.
          if (connectionOpened)
             await CloseAsync();
       }
@@ -746,19 +726,11 @@ public class DatabaseConnection : IDisposable, IAsyncDisposable
       }
       finally
       {
-         // Closes without the caller's token: with a cancelled token CloseAsync throws before it closes anything.
          if (connectionOpened)
             await CloseAsync();
       }
    }
 
-   /// <remarks>
-   ///    The builder comes from <see cref="DataSourceBuilderDefaults" />, as the factory's builders do, so dynamic JSON and
-   ///    the pool cap and name match the factory's and no pool the library builds escapes the cap. This path passes empty
-   ///    <see cref="DatabaseConnectionFactorySettings" />, as a factory built without settings does, so only a keyword or
-   ///    the builder action changes the defaults.
-   ///    <c>IncludeErrorDetail</c> and <c>LogParameters</c> stay factory-only.
-   /// </remarks>
    private static NpgsqlDataSource BuildDataSource(string connectionString, Action<NpgsqlDataSourceBuilder> builderAction)
    {
       var builder = DataSourceBuilderDefaults.Create(connectionString, new DatabaseConnectionFactorySettings());

@@ -10,8 +10,6 @@ public class PendingMigrationSelectorTests
    [Fact]
    public void SelectPending_WithTwoScopesAndInterleavedIdentifiers_RunsLowerTimestampScope()
    {
-      // The core regression: scope B's migrations carry lower timestamps than scope A's already-executed
-      // migrations. A global watermark would silently skip them; per-scope selection must not.
       var executed = new[]
       {
          Executed(202601010000, "A1", "ScopeA"),
@@ -69,7 +67,6 @@ public class PendingMigrationSelectorTests
    [Fact]
    public void SelectPending_WithNullScopeRows_ExcludesThemFromEveryBaselineAndWatermark()
    {
-      // An un-backfilled legacy row must not act as a baseline or watermark for any concrete scope.
       var executed = new[] { Executed(202606010000, "Legacy", scope: null) };
 
       var discovered = new IDbMigration[]
@@ -87,7 +84,6 @@ public class PendingMigrationSelectorTests
    [Fact]
    public void SelectPending_WithNullScopeRowBelowFoldedMigration_DoesNotUnhideIt()
    {
-      // A scope-less row lower than the scope's baseline must not become the baseline and unhide a folded migration.
       var executed = new[]
       {
          Executed(202501010000, "Legacy", scope: null),
@@ -139,8 +135,6 @@ public class PendingMigrationSelectorTests
    [Fact]
    public void SelectPending_WithMigrationBetweenBaselineAndWatermark_SelectsItAsOutOfOrder()
    {
-      // Replay of Issue #2: another branch's 202610061205 and 202610061300 ran first, then the branch carrying
-      // 202610061047 merged. The scope's baseline row predates both branches, so 202610061047 must still run.
       var executed = new[]
       {
          Executed(202609010000, "Baseline", "mvdmio.Compliance.Db"),
@@ -178,8 +172,6 @@ public class PendingMigrationSelectorTests
    [Fact]
    public void SelectPending_WithMigrationBelowFirstRowOfNeverBootstrappedScope_DoesNotSelectIt()
    {
-      // Accepted gap: the lowest row is the baseline whether or not a bootstrap wrote it, so a migration numbered
-      // below the first row of a scope that was never bootstrapped stays skipped.
       var executed = new[]
       {
          Executed(202610061205, "OtherBranchOne", "mvdmio.Compliance.Db"),
@@ -270,7 +262,6 @@ public class PendingMigrationSelectorTests
          (202606010000L, false));
    }
 
-   // Issue #2's migrations: 202610061047 from one branch, 202610061205 and 202610061300 from another.
    private static IDbMigration[] ComplianceMigrations =>
    [
       Migration(202610061047, "VoiceCallReplacesMeetingSession", "mvdmio.Compliance.Db"),

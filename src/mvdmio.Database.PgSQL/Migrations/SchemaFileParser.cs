@@ -11,11 +11,6 @@ namespace mvdmio.Database.PgSQL.Migrations;
 [PublicAPI]
 public static partial class SchemaFileParser
 {
-   /// <summary>
-   ///    The regex pattern used to extract migration versions from the schema file header.
-   ///    Matches both the current per-scope form "-- Migration version: 202602161430 (AddUsersTable) [MyApp.Data]"
-   ///    and the legacy scope-less form "-- Migration version: 202602161430 (AddUsersTable)".
-   /// </summary>
    [GeneratedRegex(@"^--\s*Migration version:\s*(\d+)\s*\(([^)]+)\)\s*(?:\[([^\]]+)\])?\s*$", RegexOptions.Multiline)]
    private static partial Regex MigrationVersionRegex();
 
