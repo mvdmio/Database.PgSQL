@@ -18,6 +18,12 @@ A comprehensive `.editorconfig` governs formatting. Run `dotnet format` before b
 - **Implicit usings:** enabled in all projects.
 - **`LangVersion`:** `latest`. **`EnforceExtendedAnalyzerRules`** is on for the library.
 
+## Comments
+
+- Code carries no comments ([ADR 0013](../../docs/adr/0013-code-carries-no-comments.md)). Explain the code through names and structure. A reason a name cannot carry goes into an ADR. The build fails on a comment with `MVDM0053`.
+- A `///` doc comment stays only on a public or protected member of the library, because its users read it in IntelliSense. A `///` anywhere else fails, the Tool, the analyzer and the test projects included.
+- A justified `#pragma warning disable` carries its reason at the end of the pragma line, never on the line above.
+
 ## Visibility
 
 - Public surface is annotated with `[PublicAPI]` (JetBrains.Annotations).
