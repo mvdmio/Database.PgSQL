@@ -32,6 +32,7 @@ A comprehensive `.editorconfig` governs formatting. Run `dotnet format` before b
 ## Error handling
 
 - The deliberate best-effort swallow around advisory-lock release in `DatabaseMigrator` is the one documented silent catch — match that bar before adding another.
+- Test cleanup that deletes temp files or folders may catch `IOException` and `UnauthorizedAccessException` and ignore them, because Windows keeps loaded DLLs locked (`PackagingFixture`, `ProjectBuilderTests`). Name those two exceptions, never a bare `catch`, and nowhere else.
 - In tests, assert the exact behavior or message when it matters.
 
 ## Targets
