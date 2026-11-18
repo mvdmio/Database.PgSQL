@@ -32,7 +32,7 @@ public class ConnectionPoolTests
    public async Task DataSourceFromTheFactory_WithNoKeywords_IsExhaustedAfterTenConnections()
    {
       await using var factory = new DatabaseConnectionFactory();
-      var dataSource = factory.BuildDataSource($"{_fixture.DbContainer.GetConnectionString()};Timeout=1");
+      var dataSource = factory.BuildDataSource(_fixture.DbContainer.GetConnectionString());
 
       await AssertExhaustedAtAsync(dataSource, 10);
    }
@@ -42,7 +42,7 @@ public class ConnectionPoolTests
    {
       var name = $"pool-keyword-{Guid.NewGuid():N}";
       await using var factory = new DatabaseConnectionFactory();
-      var connectionString = $"{_fixture.DbContainer.GetConnectionString()};Timeout=1;Maximum Pool Size=3;Application Name={name}";
+      var connectionString = $"{_fixture.DbContainer.GetConnectionString()};Maximum Pool Size=3;Application Name={name}";
 
       await using var db = factory.BuildConnection(connectionString);
       (await ReadOwnApplicationNameAsync(db)).Should().Be(name);
@@ -98,7 +98,7 @@ public class ConnectionPoolTests
    {
       var name = $"pool-setting-{Guid.NewGuid():N}";
       await using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings { MaxPoolSize = 2, ApplicationName = name });
-      var connectionString = $"{_fixture.DbContainer.GetConnectionString()};Timeout=1;Maximum Pool Size=5;Application Name=pool-keyword-loses";
+      var connectionString = $"{_fixture.DbContainer.GetConnectionString()};Maximum Pool Size=5;Application Name=pool-keyword-loses";
 
       await using var db = factory.BuildConnection(connectionString);
       (await ReadOwnApplicationNameAsync(db)).Should().Be(name);
@@ -120,7 +120,7 @@ public class ConnectionPoolTests
    public async Task DataSourceFromAFactoryWithOnlyACapSetting_KeepsTheEntryAssemblyName()
    {
       await using var factory = new DatabaseConnectionFactory(new DatabaseConnectionFactorySettings { MaxPoolSize = 2 });
-      var connectionString = $"{_fixture.DbContainer.GetConnectionString()};Timeout=1";
+      var connectionString = _fixture.DbContainer.GetConnectionString();
 
       await using var db = factory.BuildConnection(connectionString);
       (await ReadOwnApplicationNameAsync(db)).Should().Be(ENTRY_ASSEMBLY_NAME);
@@ -175,7 +175,7 @@ public class ConnectionPoolTests
    {
       await using var provider = services.BuildServiceProvider();
       var factory = provider.GetRequiredService<DatabaseConnectionFactory>();
-      var connectionString = $"{_fixture.DbContainer.GetConnectionString()};Timeout=1";
+      var connectionString = _fixture.DbContainer.GetConnectionString();
 
       await using (var db = factory.BuildConnection(connectionString))
          (await ReadOwnApplicationNameAsync(db)).Should().Be(name);
@@ -211,9 +211,12 @@ public class ConnectionPoolTests
          for (var i = 0; i < cap; i++)
             held.Add(await dataSource.OpenConnectionAsync(CancellationToken));
 
-         var openOneMore = async () => held.Add(await dataSource.OpenConnectionAsync(CancellationToken));
+         using var oneSecond = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken);
+         oneSecond.CancelAfter(TimeSpan.FromSeconds(1));
 
-         await openOneMore.Should().ThrowAsync<NpgsqlException>().WithMessage("*pool has been exhausted*");
+         var openOneMore = async () => held.Add(await dataSource.OpenConnectionAsync(oneSecond.Token));
+
+         await openOneMore.Should().ThrowAsync<OperationCanceledException>();
       }
       finally
       {

@@ -57,6 +57,7 @@ TDD is the expectation: write tests before implementing, and always add/modify t
 
 - Descriptive test names that state what is verified, e.g. `QueryAsync_WithValidSql_ReturnsResults`, `BulkCopy_WithEmptyTable_CompletesSuccessfully`.
 - Test only external behavior — observable outputs and database state — not implementation details.
+- Every suite must pass on Windows as well as Linux, though CI runs only on Linux. A test that starts an operating-system program branches with `OperatingSystem.IsWindows()`, as the process-tree helper does, rather than skipping.
 - Prior art: `Migrations/SchemaFileParserTests.cs` (unit), `Migrations/SchemaFirstMigrationTests.cs` (integration).
 
 ## Packaging tests
