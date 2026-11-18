@@ -167,8 +167,19 @@ public sealed class ProjectBuilderTests : IDisposable
 
    public void Dispose()
    {
-      if (Directory.Exists(_tempDirectory))
+      if (!Directory.Exists(_tempDirectory))
+         return;
+
+      try
+      {
          Directory.Delete(_tempDirectory, true);
+      }
+      catch (IOException)
+      {
+      }
+      catch (UnauthorizedAccessException)
+      {
+      }
    }
 
    private static async Task<IReadOnlyCollection<int>> WaitForHeldCommandAsync(int rootId)
