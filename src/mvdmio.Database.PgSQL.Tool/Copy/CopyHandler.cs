@@ -18,13 +18,13 @@ internal sealed class CopyHandler
       _reporter = reporter;
    }
 
-   public Task HandleAsync(string fromEnvironment, string toEnvironment, IReadOnlyCollection<string>? schemasOverride, IReadOnlyCollection<string>? excludeTables, CancellationToken cancellationToken = default)
+   public Task<int> HandleAsync(string fromEnvironment, string toEnvironment, IReadOnlyCollection<string>? schemasOverride, IReadOnlyCollection<string>? excludeTables, CancellationToken cancellationToken = default)
    {
       var config = ToolConfigurationLoader.Load();
       return HandleAsync(config, fromEnvironment, toEnvironment, schemasOverride, excludeTables, cancellationToken);
    }
 
-   internal async Task HandleAsync(
+   internal async Task<int> HandleAsync(
       ToolConfiguration config,
       string fromEnvironment,
       string toEnvironment,
@@ -37,20 +37,20 @@ internal sealed class CopyHandler
       if (string.IsNullOrWhiteSpace(sourceConnectionString))
       {
          WriteUnknownEnvironmentError(config, fromEnvironment, "source");
-         return;
+         return ExitCodes.FAILURE;
       }
 
       var destinationConnectionString = ConnectionStringResolver.ResolveConnectionString(config, null, toEnvironment);
       if (string.IsNullOrWhiteSpace(destinationConnectionString))
       {
          WriteUnknownEnvironmentError(config, toEnvironment, "destination");
-         return;
+         return ExitCodes.FAILURE;
       }
 
       if (string.Equals(sourceConnectionString, destinationConnectionString, StringComparison.Ordinal))
       {
          _reporter.WriteError("Error: Source and destination resolve to the same connection string. Refusing to copy a database onto itself.");
-         return;
+         return ExitCodes.FAILURE;
       }
 
       var schemas = schemasOverride is { Count: > 0 } ? schemasOverride : config.Schemas;
@@ -78,11 +78,12 @@ internal sealed class CopyHandler
       catch (InvalidOperationException ex)
       {
          _reporter.WriteError($"Error: {ex.Message}");
-         return;
+         return ExitCodes.FAILURE;
       }
 
       _reporter.WriteInfo(string.Empty);
       _reporter.WriteInfo($"Done. {result.Tables.Count} table(s), {result.TotalRows} row(s), {result.TotalBytes} byte(s).");
+      return ExitCodes.SUCCESS;
    }
 
    private void WriteUnknownEnvironmentError(ToolConfiguration config, string environmentName, string role)

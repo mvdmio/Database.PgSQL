@@ -23,8 +23,9 @@ public class CopyHandlerTests
          }
       };
 
-      await handler.HandleAsync(config, "prod", "test", null, null, ct);
+      var exitCode = await handler.HandleAsync(config, "prod", "test", null, null, ct);
 
+      exitCode.Should().Be(1);
       reporter.Errors.Should().ContainInOrder(
          "Error: source environment 'prod' not found in .mvdmio-migrations.yml.",
          "Available environments: test"
@@ -48,8 +49,9 @@ public class CopyHandlerTests
          }
       };
 
-      await handler.HandleAsync(config, "prod", "test", null, null, ct);
+      var exitCode = await handler.HandleAsync(config, "prod", "test", null, null, ct);
 
+      exitCode.Should().Be(1);
       reporter.Errors.Should().ContainInOrder(
          "Error: destination environment 'test' not found in .mvdmio-migrations.yml.",
          "Available environments: prod"
@@ -74,8 +76,9 @@ public class CopyHandlerTests
          }
       };
 
-      await handler.HandleAsync(config, "a", "b", null, null, ct);
+      var exitCode = await handler.HandleAsync(config, "a", "b", null, null, ct);
 
+      exitCode.Should().Be(1);
       reporter.Errors.Should().ContainSingle().Which.Should().Contain("Refusing to copy a database onto itself");
       copyService.WasCalled.Should().BeFalse();
    }
@@ -104,8 +107,9 @@ public class CopyHandlerTests
          }
       };
 
-      await handler.HandleAsync(config, "prod", "test", null, null, ct);
+      var exitCode = await handler.HandleAsync(config, "prod", "test", null, null, ct);
 
+      exitCode.Should().Be(0);
       copyService.WasCalled.Should().BeTrue();
       copyService.SourceConnectionString.Should().Be("Host=prod;Database=proddb");
       copyService.DestinationConnectionString.Should().Be("Host=test;Database=testdb");
@@ -155,8 +159,9 @@ public class CopyHandlerTests
          }
       };
 
-      await handler.HandleAsync(config, "prod", "test", null, null, ct);
+      var exitCode = await handler.HandleAsync(config, "prod", "test", null, null, ct);
 
+      exitCode.Should().Be(1);
       reporter.Errors.Should().ContainSingle().Which.Should().Contain("Destination schema does not match source");
    }
 

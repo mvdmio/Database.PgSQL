@@ -1,23 +1,19 @@
+using mvdmio.Database.PgSQL.Tool;
 using mvdmio.Database.PgSQL.Tool.Commands;
 using System.CommandLine;
 
-var rootCommand = new RootCommand("PostgreSQL database migration tool");
+var cancellation = new CancellationTokenSource();
 
-rootCommand.Subcommands.Add(InitCommand.Create());
+Console.CancelKeyPress += (_, e) =>
+{
+   e.Cancel = true;
 
-rootCommand.Subcommands.Add(PullCommand.Create());
+   if (cancellation.IsCancellationRequested)
+      Environment.Exit(ExitCodes.CANCELLED);
 
-rootCommand.Subcommands.Add(CleanupCommand.Create());
+   cancellation.Cancel();
+};
 
-rootCommand.Subcommands.Add(CopyCommand.Create());
+var configuration = new InvocationConfiguration { ProcessTerminationTimeout = null };
 
-var migrationCommand = new Command("migration", "Migration scaffolding commands");
-migrationCommand.Subcommands.Add(MigrationCreateCommand.Create());
-rootCommand.Subcommands.Add(migrationCommand);
-
-var migrateCommand = new Command("migrate", "Run database migrations");
-migrateCommand.Subcommands.Add(MigrateLatestCommand.Create());
-migrateCommand.Subcommands.Add(MigrateToCommand.Create());
-rootCommand.Subcommands.Add(migrateCommand);
-
-return rootCommand.Parse(args).Invoke();
+return await RootCommandFactory.Create().Parse(args).InvokeAsync(configuration, cancellation.Token);

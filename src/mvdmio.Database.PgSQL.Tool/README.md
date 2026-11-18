@@ -179,6 +179,26 @@ Connection strings are resolved in this order:
 2. `--environment` or `-e`
 3. First entry in `connectionStrings`
 
+## Exit codes and Ctrl+C
+
+Every command ends with one of three exit codes:
+
+| Code  | Meaning                                                                                                                                                              |
+|-------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `0`   | The command finished and the result is valid, including when it had nothing to do (no pending migrations, `db cleanup` with nothing to delete, `db cleanup` skipped because an environment has no recorded migration yet). |
+| `1`   | The command could not do what it was asked and someone has to act: no connection string, an unknown `--environment`, no `.mvdmio-migrations.yml`, `db init` over an existing file, `db migrate to` with an identifier no migration reaches, invalid configured schemas or a failed schema export in `db pull` or `db cleanup`, `db copy` with the same source and destination or mismatched schemas, a failed build, a database it cannot reach, a migration that throws, an unreadable configuration file, or a mistyped command or option. |
+| `130` | You pressed Ctrl+C.                                                                                                                                                  |
+
+The first Ctrl+C stops the command at the next safe point, prints `Cancelled.`, and exits `130`:
+
+- While the tool builds the migrations project, the build stops and no `dotnet build` process is left running.
+- During `db migrate`, the migration that is running finishes and records itself, and so does an embedded schema that is being applied to an empty database. The tool then runs no further migration. While it waits for the migration lock that another instance holds, the first Ctrl+C stops it at once.
+- During `db pull`, `db copy`, and `db cleanup`, the database call in progress is cancelled, or the next one when none is running.
+
+A second Ctrl+C exits at once with `130`, whatever the tool is doing. During a migration, PostgreSQL rolls back the open transaction when the connection drops, and the migration runs again next time.
+
+`db init` and `db migration create` finish in an instant and ignore Ctrl+C.
+
 ## Typical Workflow
 
 ```bash

@@ -129,7 +129,9 @@ Connection string resolution order:
 2. `--environment` / `-e`
 3. first `connectionStrings` entry
 
-If an environment name is invalid, the tool prints the available environments.
+If an environment name is invalid, the tool prints the available environments and exits `1`.
+
+Exit codes: `0` finished (including nothing to do), `1` could not do what was asked (every error the tool prints, a failed build, an unreachable database, a throwing migration), `130` Ctrl+C. The first Ctrl+C lets a running migration finish and stops before the next one; a second exits at once.
 
 ## Agent Workflow
 
@@ -183,6 +185,7 @@ db cleanup
 ## Guardrails
 
 - Do not assume the globally installed `db` version matches the repo source; prefer `dotnet run --project ... -- <command>` when validating changes in this repository.
-- `db migrate ...` builds the configured project as part of the command; build failures block migration.
+- `db migrate ...` builds the configured project as part of the command; build failures block migration and exit `1`.
+- Treat any non-zero exit as a failure; exit `0` means the command finished, `130` means it was cancelled with Ctrl+C.
 - `db cleanup` is destructive for old migration source files. Review deleted files before committing.
 - When using `--connection-string`, avoid leaking secrets into logs, docs, or commits.

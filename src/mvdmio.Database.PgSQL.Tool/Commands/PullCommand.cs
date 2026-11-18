@@ -23,14 +23,11 @@ internal static class PullCommand
       command.Options.Add(connectionStringOption);
       command.Options.Add(environmentOption);
 
-      command.SetAction(async (parseResult, cancellationToken) =>
-      {
-         await handler.HandleAsync(
-            parseResult.GetValue(connectionStringOption),
-            parseResult.GetValue(environmentOption),
-            cancellationToken
-         );
-      });
+      command.SetCancellableAction((parseResult, cancellationToken) => handler.HandleAsync(
+         parseResult.GetValue(connectionStringOption),
+         parseResult.GetValue(environmentOption),
+         cancellationToken
+      ));
 
       return command;
    }

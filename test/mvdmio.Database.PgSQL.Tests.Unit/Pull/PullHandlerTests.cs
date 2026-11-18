@@ -25,8 +25,9 @@ public class PullHandlerTests
          }
       };
 
-      await handler.HandleAsync(config, null, "staging", cancellationToken);
+      var exitCode = await handler.HandleAsync(config, null, "staging", cancellationToken);
 
+      exitCode.Should().Be(1);
       reporter.Errors.Should().ContainInOrder(
          "Error: Environment 'staging' not found in .mvdmio-migrations.yml.",
          "Available environments: local, prod"
@@ -64,8 +65,9 @@ public class PullHandlerTests
          }
       };
 
-      await handler.HandleAsync(config, null, null, cancellationToken);
+      var exitCode = await handler.HandleAsync(config, null, null, cancellationToken);
 
+      exitCode.Should().Be(0);
       schemaExportService.ConnectionString.Should().Be("Host=localhost;Database=localdb");
       schemaExportService.Schemas.Should().BeEquivalentTo(["billing", "identity"]);
       schemaExportService.OwnedScopes.Should().BeEquivalentTo(["MyApp.Billing"]);
@@ -106,10 +108,30 @@ public class PullHandlerTests
          }
       };
 
-      await handler.HandleAsync(config, null, null, cancellationToken);
+      var exitCode = await handler.HandleAsync(config, null, null, cancellationToken);
 
+      exitCode.Should().Be(1);
       fileSystem.Writes.Should().BeEmpty();
       reporter.Errors.Should().ContainSingle().Which.Should().Be("Error: Configured schemas were not found in the database: missing_schema.");
+   }
+
+   [Fact]
+   public async Task HandleAsync_WithNoConnectionString_WritesErrorAndSkipsWork()
+   {
+      var schemaExportService = new FakeSchemaExportService();
+      var fileSystem = new FakePullFileSystem();
+      var reporter = new FakePullReporter();
+      var handler = new PullHandler(schemaExportService, fileSystem, reporter);
+
+      var exitCode = await handler.HandleAsync(new ToolConfiguration { BasePath = Path.Combine("C:", "repo") }, null, null, TestContext.Current.CancellationToken);
+
+      exitCode.Should().Be(1);
+      reporter.Errors.Should().ContainInOrder(
+         "Error: No connection string provided.",
+         "Specify one via --connection-string, --environment, or add an entry to connectionStrings in .mvdmio-migrations.yml."
+      );
+      schemaExportService.ConnectionString.Should().BeNull();
+      fileSystem.Writes.Should().BeEmpty();
    }
 
    private sealed class FakeSchemaExportService : SchemaExportService

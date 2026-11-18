@@ -178,6 +178,9 @@ Every command reads connection strings and project layout from `.mvdmio-migratio
 database — `db migrate latest`, `db migrate to`, and `db pull` — take `--environment`/`-e` to pick which one, or
 `--connection-string` to bypass the config.
 
+Every command exits `0` on success, `1` on any error, and `130` when you press Ctrl+C; see
+**[Exit codes and Ctrl+C](src/mvdmio.Database.PgSQL.Tool/README.md#exit-codes-and-ctrlc)** for what Ctrl+C does in each phase.
+
 Options and configuration: **[CLI documentation](src/mvdmio.Database.PgSQL.Tool/README.md)**.
 
 ## License

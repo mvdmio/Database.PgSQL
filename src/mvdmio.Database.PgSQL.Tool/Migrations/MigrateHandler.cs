@@ -24,7 +24,7 @@ internal sealed class MigrateHandler
       _reporter = reporter;
    }
 
-   public Task HandleAsync(
+   public Task<int> HandleAsync(
       MigrateRequest request,
       string? connectionStringOverride,
       string? environmentOverride,
@@ -35,7 +35,7 @@ internal sealed class MigrateHandler
       return HandleAsync(request, config, connectionStringOverride, environmentOverride, cancellationToken);
    }
 
-   internal async Task HandleAsync(
+   internal async Task<int> HandleAsync(
       MigrateRequest request,
       ToolConfiguration config,
       string? connectionStringOverride,
@@ -47,14 +47,14 @@ internal sealed class MigrateHandler
       if (string.IsNullOrWhiteSpace(connectionString))
       {
          WriteMissingConnectionError(config, environmentOverride);
-         return;
+         return ExitCodes.FAILURE;
       }
 
       var projectPath = ToolPathResolver.GetProjectPath(config);
-      var project = _projectLoader.Load(projectPath);
+      var project = await _projectLoader.LoadAsync(projectPath, cancellationToken);
       var environmentName = ConnectionStringResolver.ResolveEnvironmentName(config, connectionStringOverride, environmentOverride);
 
-      await _executionService.ExecuteAsync(request, connectionString, environmentName, project, cancellationToken);
+      return await _executionService.ExecuteAsync(request, connectionString, environmentName, project, cancellationToken);
    }
 
    private void WriteMissingConnectionError(ToolConfiguration config, string? environmentOverride)

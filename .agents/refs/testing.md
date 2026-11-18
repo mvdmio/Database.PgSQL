@@ -25,7 +25,7 @@ TDD is the expectation: write tests before implementing, and always add/modify t
 ## Integration tests
 
 - Location: `test/mvdmio.Database.PgSQL.Tests.Integration/`. **Docker must be running.**
-- Inherit from `TestBase`, unless the test is about the data source it builds itself (`DataSourceConstructionTests`, `ConnectionPoolTests`). It builds a `DatabaseConnection` against the shared `Testcontainers` PostgreSQL container, opens a transaction in `InitializeAsync`, and **rolls it back in `DisposeAsync`** — so each test is isolated and leaves no state behind. Use the `Db` property and the `CancellationToken` it exposes.
+- Inherit from `TestBase`, unless the test is about the data source it builds itself (`DataSourceConstructionTests`, `ConnectionPoolTests`) or runs the migrator, which needs committed history rows, a held advisory lock or non-transactional migrations that a rolled-back transaction would defeat (`SchemaFirstMigrationTests`, `ConcurrentMigrationTests`, `NonTransactionalMigrationTests`, `PerScopeMigrationTests`, `MigrationCancellationTests`); those implement `IAsyncLifetime` and start their own container. `TestBase` builds a `DatabaseConnection` against the shared `Testcontainers` PostgreSQL container, opens a transaction in `InitializeAsync`, and **rolls it back in `DisposeAsync`** — so each test is isolated and leaves no state behind. Use the `Db` property and the `CancellationToken` it exposes.
 - Test migrations live under `Fixture/Migrations/`; embedded test schemas under `Schemas/` (embedded with `LogicalName` = filename).
 - The `SecondarySchema` project provides a separate assembly when a test needs migrations/schema from more than one assembly.
 

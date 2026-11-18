@@ -194,6 +194,8 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
          var scopesWithWatermark = SchemaBootstrapSelector.GetScopesWithWatermark(executedMigrations);
          var databaseWasGloballyEmpty = !tableExisted || executedMigrations.Length == 0;
 
+         cancellationToken.ThrowIfCancellationRequested();
+
          var schemasApplied = await SchemaBootstrapApplier.ApplyForEmptyScopesAsync(
             _connection,
             _logger,
@@ -203,7 +205,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
             scopesWithWatermark,
             databaseWasGloballyEmpty,
             targetIdentifier,
-            cancellationToken);
+            CancellationToken.None);
 
          if (schemasApplied)
          {
@@ -256,12 +258,14 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <inheritdoc />
    public async Task RunAsync(IDbMigration migration, CancellationToken cancellationToken = default)
    {
+      cancellationToken.ThrowIfCancellationRequested();
+
       try
       {
          async Task UpAndRecordAsync()
          {
             await migration.UpAsync(_connection);
-            await InsertMigrationRowAsync(migration.Identifier, migration.Name, migration.Scope, cancellationToken);
+            await InsertMigrationRowAsync(migration.Identifier, migration.Name, migration.Scope, CancellationToken.None);
          }
 
          if (migration.RunsInTransaction)

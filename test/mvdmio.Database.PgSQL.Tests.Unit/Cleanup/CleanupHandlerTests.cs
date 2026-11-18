@@ -50,8 +50,12 @@ public class CleanupHandlerTests : IDisposable
       _runtimeFactory.RowsByConnectionString[DEV] = Executed(202602151200, 202602161000, 202602170000);
       _runtimeFactory.RowsByConnectionString[PROD] = Executed(202602151200, 202602170000);
 
-      await CreateHandler(Project(202602151200, 202602161000, 202602170000)).HandleAsync(Config(), TestContext.Current.CancellationToken);
+      var projectLoader = Project(202602151200, 202602161000, 202602170000);
 
+      var exitCode = await CreateHandler(projectLoader).HandleAsync(Config(), TestContext.Current.CancellationToken);
+
+      exitCode.Should().Be(0);
+      projectLoader.LoadedWith.Should().Be(TestContext.Current.CancellationToken);
       File.Exists(everywhere).Should().BeFalse();
       File.Exists(outOfOrderInProd).Should().BeTrue();
       _schemaExportService.ConnectionStrings.Should().Equal(DEV, PROD);
@@ -86,12 +90,76 @@ public class CleanupHandlerTests : IDisposable
       _runtimeFactory.RowsByConnectionString[DEV] = Executed(202602151200, 202602170000);
       _runtimeFactory.RowsByConnectionString[PROD] = Executed(202602151200, 202602170000);
 
-      await CreateHandler(Project(202602151200, 202602170000)).HandleAsync(Config(), TestContext.Current.CancellationToken);
+      var exitCode = await CreateHandler(Project(202602151200, 202602170000)).HandleAsync(Config(), TestContext.Current.CancellationToken);
 
+      exitCode.Should().Be(0);
       File.Exists(current).Should().BeTrue();
       _reporter.Infos.Should().Contain("No migration files are older than the lowest environment version.");
       _reporter.Infos.Should().NotContain("No migration files were deleted.");
       _reporter.Infos.Should().NotContain(info => info.StartsWith("Kept ", StringComparison.Ordinal));
+   }
+
+   [Fact]
+   public async Task HandleAsync_WithNoEnvironmentsConfigured_WritesErrorAndTouchesNothing()
+   {
+      var obsolete = CreateMigrationFile("_202602151200_CreateUsers.cs");
+      var config = new ToolConfiguration { BasePath = _basePath };
+
+      var exitCode = await CreateHandler(Project(202602151200)).HandleAsync(config, TestContext.Current.CancellationToken);
+
+      exitCode.Should().Be(1);
+      _reporter.Errors.Should().ContainInOrder(
+         "Error: No environments configured.",
+         "Add connectionStrings to .mvdmio-migrations.yml before running cleanup."
+      );
+      _schemaExportService.ConnectionStrings.Should().BeEmpty();
+      File.Exists(obsolete).Should().BeTrue();
+   }
+
+   [Fact]
+   public async Task HandleAsync_WhenAnExportFails_StopsAtThatEnvironmentDeletesNothingAndFails()
+   {
+      var obsolete = CreateMigrationFile("_202602151200_CreateUsers.cs");
+      _runtimeFactory.RowsByConnectionString[DEV] = Executed(202602151200, 202602170000);
+      _runtimeFactory.RowsByConnectionString[PROD] = Executed(202602151200, 202602170000);
+      _schemaExportService.FailingConnectionStrings.Add(DEV);
+
+      var exitCode = await CreateHandler(Project(202602151200, 202602170000)).HandleAsync(Config(), TestContext.Current.CancellationToken);
+
+      exitCode.Should().Be(1);
+      _reporter.Errors.Should().ContainSingle().Which.Should().Be("Error: Configured schemas were not found in the database: missing_schema.");
+      _schemaExportService.ConnectionStrings.Should().Equal(DEV);
+      File.Exists(obsolete).Should().BeTrue();
+   }
+
+   [Fact]
+   public async Task HandleAsync_WhenALaterExportFails_DeletesNothingAndFails()
+   {
+      var obsolete = CreateMigrationFile("_202602151200_CreateUsers.cs");
+      _runtimeFactory.RowsByConnectionString[DEV] = Executed(202602151200, 202602170000);
+      _schemaExportService.FailingConnectionStrings.Add(PROD);
+
+      var exitCode = await CreateHandler(Project(202602151200, 202602170000)).HandleAsync(Config(), TestContext.Current.CancellationToken);
+
+      exitCode.Should().Be(1);
+      _schemaExportService.ConnectionStrings.Should().Equal(DEV, PROD);
+      File.Exists(obsolete).Should().BeTrue();
+   }
+
+   [Fact]
+   public async Task HandleAsync_WhenAnEnvironmentHasNoRecordedMigration_SkipsCleanupDeletesNothingAndSucceeds()
+   {
+      var obsolete = CreateMigrationFile("_202602151200_CreateUsers.cs");
+      _runtimeFactory.RowsByConnectionString[DEV] = Executed(202602151200, 202602170000);
+      _runtimeFactory.RowsByConnectionString[PROD] = Executed(202602151200, 202602170000);
+      _schemaExportService.ScriptsByConnectionString[PROD] = "-- no migration header\n";
+
+      var exitCode = await CreateHandler(Project(202602151200, 202602170000)).HandleAsync(Config(), TestContext.Current.CancellationToken);
+
+      exitCode.Should().Be(0);
+      _reporter.Infos.Should().Contain("Cleanup skipped: At least one environment has no recorded migration version.");
+      _reporter.Errors.Should().BeEmpty();
+      File.Exists(obsolete).Should().BeTrue();
    }
 
    public void Dispose()
@@ -143,19 +211,24 @@ public class CleanupHandlerTests : IDisposable
    {
       public MigrationProjectContext? Result { get; init; }
       public Exception? Failure { get; init; }
+      public CancellationToken LoadedWith { get; private set; }
 
-      public override MigrationProjectContext Load(string projectPath)
+      public override Task<MigrationProjectContext> LoadAsync(string projectPath, CancellationToken cancellationToken)
       {
+         LoadedWith = cancellationToken;
+
          if (Failure is not null)
             throw Failure;
 
-         return Result!;
+         return Task.FromResult(Result!);
       }
    }
 
    private sealed class FakeSchemaExportService : SchemaExportService
    {
       public List<string> ConnectionStrings { get; } = [];
+      public HashSet<string> FailingConnectionStrings { get; } = new(StringComparer.Ordinal);
+      public Dictionary<string, string> ScriptsByConnectionString { get; } = new(StringComparer.Ordinal);
 
       public override Task<SchemaExportResult> ExportAsync(
          string connectionString,
@@ -165,7 +238,12 @@ public class CleanupHandlerTests : IDisposable
       )
       {
          ConnectionStrings.Add(connectionString);
-         return Task.FromResult(new SchemaExportResult($"-- Migration version: 202602170000 (Migration202602170000) [{SCOPE}]\n", [], [], []));
+
+         if (FailingConnectionStrings.Contains(connectionString))
+            throw new InvalidOperationException("Configured schemas were not found in the database: missing_schema.");
+
+         var script = ScriptsByConnectionString.GetValueOrDefault(connectionString, $"-- Migration version: 202602170000 (Migration202602170000) [{SCOPE}]\n");
+         return Task.FromResult(new SchemaExportResult(script, [], [], []));
       }
    }
 

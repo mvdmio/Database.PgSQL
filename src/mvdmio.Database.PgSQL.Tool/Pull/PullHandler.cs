@@ -24,13 +24,13 @@ internal sealed class PullHandler
       _reporter = reporter;
    }
 
-   public Task HandleAsync(string? connectionStringOverride, string? environmentOverride, CancellationToken cancellationToken = default)
+   public Task<int> HandleAsync(string? connectionStringOverride, string? environmentOverride, CancellationToken cancellationToken = default)
    {
       var config = ToolConfigurationLoader.Load();
       return HandleAsync(config, connectionStringOverride, environmentOverride, cancellationToken);
    }
 
-   internal async Task HandleAsync(
+   internal async Task<int> HandleAsync(
       ToolConfiguration config,
       string? connectionStringOverride,
       string? environmentOverride,
@@ -42,7 +42,7 @@ internal sealed class PullHandler
       if (string.IsNullOrWhiteSpace(connectionString))
       {
          WriteMissingConnectionError(config, environmentOverride);
-         return;
+         return ExitCodes.FAILURE;
       }
 
       var schemasDirectory = ToolPathResolver.GetSchemasDirectoryPath(config);
@@ -64,7 +64,7 @@ internal sealed class PullHandler
       catch (InvalidOperationException ex)
       {
          _reporter.WriteError($"Error: {ex.Message}");
-         return;
+         return ExitCodes.FAILURE;
       }
 
       foreach (var warning in schemaResult.Warnings)
@@ -86,6 +86,7 @@ internal sealed class PullHandler
 
       _reporter.WriteInfo(string.Empty);
       _reporter.WriteInfo($"Schema written to {outputPath}");
+      return ExitCodes.SUCCESS;
    }
 
    private void WriteMissingConnectionError(ToolConfiguration config, string? environmentOverride)

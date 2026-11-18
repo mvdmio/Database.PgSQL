@@ -27,7 +27,7 @@ internal class MigrationExecutionService
       _reporter = reporter;
    }
 
-   public virtual async Task ExecuteAsync(
+   public virtual async Task<int> ExecuteAsync(
       MigrateRequest request,
       string connectionString,
       string? environmentName,
@@ -37,7 +37,7 @@ internal class MigrationExecutionService
    {
       var targetMigrations = GetTargetMigrations(request, project.Migrations);
       if (targetMigrations is null)
-         return;
+         return ExitCodes.FAILURE;
 
       _reporter.WriteInfo(string.Empty);
 
@@ -55,7 +55,7 @@ internal class MigrationExecutionService
             if (pendingCount == 0)
             {
                _reporter.WriteInfo("Database is already up to date.");
-               return;
+               return ExitCodes.SUCCESS;
             }
          }
          else
@@ -65,7 +65,7 @@ internal class MigrationExecutionService
             if (pendingCount == 0)
             {
                _reporter.WriteInfo("Database is already up to date for the specified target.");
-               return;
+               return ExitCodes.SUCCESS;
             }
          }
 
@@ -80,6 +80,7 @@ internal class MigrationExecutionService
       var finalExecuted = (await runtime.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
       var appliedCount = finalExecuted.Length - alreadyExecuted.Length;
       _reporter.WriteInfo($"Migration complete. {appliedCount} migration(s) applied.");
+      return ExitCodes.SUCCESS;
    }
 
    private IReadOnlyList<IDbMigration>? GetTargetMigrations(

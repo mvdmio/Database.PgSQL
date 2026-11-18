@@ -11,10 +11,7 @@ internal static class CleanupCommand
 
       var command = new Command("cleanup", "Pull schemas for all environments and delete obsolete migration files");
 
-      command.SetAction(async (_, cancellationToken) =>
-      {
-         await handler.HandleAsync(cancellationToken);
-      });
+      command.SetCancellableAction((_, cancellationToken) => handler.HandleAsync(cancellationToken));
 
       return command;
    }

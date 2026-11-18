@@ -39,12 +39,12 @@ internal static class CopyCommand
       command.Options.Add(schemasOption);
       command.Options.Add(excludeTablesOption);
 
-      command.SetAction(async (parseResult, cancellationToken) =>
+      command.SetCancellableAction((parseResult, cancellationToken) =>
       {
          var schemas = ExpandCsv(parseResult.GetValue(schemasOption));
          var excludeTables = ExpandCsv(parseResult.GetValue(excludeTablesOption));
 
-         await handler.HandleAsync(
+         return handler.HandleAsync(
             parseResult.GetValue(fromOption)!,
             parseResult.GetValue(toOption)!,
             schemas,

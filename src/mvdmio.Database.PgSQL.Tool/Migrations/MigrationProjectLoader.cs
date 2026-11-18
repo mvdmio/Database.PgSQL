@@ -20,9 +20,9 @@ internal class MigrationProjectLoader
       _assemblyBuilder = assemblyBuilder;
    }
 
-   public virtual MigrationProjectContext Load(string projectPath)
+   public virtual async Task<MigrationProjectContext> LoadAsync(string projectPath, CancellationToken cancellationToken)
    {
-      var assembly = _assemblyBuilder.BuildAndLoadAssembly(projectPath);
+      var assembly = await _assemblyBuilder.BuildAndLoadAssemblyAsync(projectPath, cancellationToken);
       var migrationRetriever = new ReflectionMigrationRetriever(assembly);
       var migrations = migrationRetriever.RetrieveMigrations().OrderBy(x => x.Identifier).ToArray();
 
@@ -38,13 +38,13 @@ internal sealed record MigrationProjectContext(
 
 internal interface IProjectAssemblyBuilder
 {
-   Assembly BuildAndLoadAssembly(string projectPath);
+   Task<Assembly> BuildAndLoadAssemblyAsync(string projectPath, CancellationToken cancellationToken);
 }
 
 internal sealed class ProjectAssemblyBuilder : IProjectAssemblyBuilder
 {
-   public Assembly BuildAndLoadAssembly(string projectPath)
+   public Task<Assembly> BuildAndLoadAssemblyAsync(string projectPath, CancellationToken cancellationToken)
    {
-      return ProjectBuilder.BuildAndLoadAssembly(projectPath);
+      return ProjectBuilder.BuildAndLoadAssemblyAsync(projectPath, cancellationToken);
    }
 }

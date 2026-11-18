@@ -8,8 +8,10 @@ internal static class ProjectBuilder
 {
    private const string DISABLE_BUILD_SERVERS_FLAG = "--disable-build-servers";
 
-   public static Assembly BuildAndLoadAssembly(string projectPath)
+   public static async Task<Assembly> BuildAndLoadAssemblyAsync(string projectPath, CancellationToken cancellationToken, Action<int>? onProcessStarted = null)
    {
+      cancellationToken.ThrowIfCancellationRequested();
+
       var csprojPath = ResolveCsprojPath(projectPath);
       var projectDir = Path.GetDirectoryName(csprojPath)!;
 
@@ -30,14 +32,26 @@ internal static class ProjectBuilder
       };
 
       process.Start();
+      onProcessStarted?.Invoke(process.Id);
 
       var stdoutTask = process.StandardOutput.ReadToEndAsync();
       var stderrTask = process.StandardError.ReadToEndAsync();
 
-      process.WaitForExit();
+      try
+      {
+         await process.WaitForExitAsync(cancellationToken);
+      }
+      catch (OperationCanceledException)
+      {
+         if (!process.HasExited)
+            process.Kill(entireProcessTree: true);
 
-      var stdout = stdoutTask.GetAwaiter().GetResult();
-      var stderr = stderrTask.GetAwaiter().GetResult();
+         await process.WaitForExitAsync(CancellationToken.None);
+         throw;
+      }
+
+      var stdout = await stdoutTask;
+      var stderr = await stderrTask;
 
       if (process.ExitCode != 0)
       {

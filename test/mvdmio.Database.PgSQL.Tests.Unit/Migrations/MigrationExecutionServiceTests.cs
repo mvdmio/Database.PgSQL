@@ -16,7 +16,7 @@ public class MigrationExecutionServiceTests
       var service = new MigrationExecutionService(runtimeFactory, schemaResourceService, reporter);
       var project = CreateProjectContext([new FakeDbMigration(202602161500)]);
 
-      await service.ExecuteAsync(
+      var exitCode = await service.ExecuteAsync(
          MigrateRequest.To(202602161400),
          "Host=localhost;Database=mydb",
          "local",
@@ -24,6 +24,7 @@ public class MigrationExecutionServiceTests
          TestContext.Current.CancellationToken
       );
 
+      exitCode.Should().Be(1);
       reporter.Errors.Should().ContainSingle().Which.Should().Be("Error: No migrations found with identifier <= 202602161400.");
       runtimeFactory.CallCount.Should().Be(0);
    }
@@ -47,7 +48,7 @@ public class MigrationExecutionServiceTests
       var service = new MigrationExecutionService(runtimeFactory, schemaResourceService, reporter);
       var project = CreateProjectContext([new FakeDbMigration(202602161430), new FakeDbMigration(202602161530)]);
 
-      await service.ExecuteAsync(
+      var exitCode = await service.ExecuteAsync(
          MigrateRequest.Latest,
          "Host=localhost;Database=mydb",
          "local",
@@ -55,6 +56,7 @@ public class MigrationExecutionServiceTests
          TestContext.Current.CancellationToken
       );
 
+      exitCode.Should().Be(0);
       runtimeFactory.CallCount.Should().Be(1);
       runtime.MigrateLatestCallCount.Should().Be(1);
       runtime.MigrateToCallCount.Should().Be(0);
@@ -103,7 +105,7 @@ public class MigrationExecutionServiceTests
       var service = new MigrationExecutionService(runtimeFactory, new FakeSchemaResourceService(), reporter);
       var project = CreateProjectContext([new FakeDbMigration(202602161430), new FakeDbMigration(202602161530)]);
 
-      await service.ExecuteAsync(
+      var exitCode = await service.ExecuteAsync(
          MigrateRequest.Latest,
          "Host=localhost;Database=mydb",
          "local",
@@ -111,6 +113,7 @@ public class MigrationExecutionServiceTests
          TestContext.Current.CancellationToken
       );
 
+      exitCode.Should().Be(0);
       reporter.Infos.Should().Contain("Database is already up to date.");
       runtime.MigrateLatestCallCount.Should().Be(0);
    }
@@ -118,7 +121,7 @@ public class MigrationExecutionServiceTests
    [Fact]
    public async Task ExecuteAsync_LatestWithOnlyOutOfOrderMigrationPending_RunsMigrator()
    {
-      var (runtime, reporter) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.Latest);
+      var (runtime, reporter, _) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.Latest);
 
       reporter.Infos.Should().NotContain("Database is already up to date.");
       runtime.MigrateLatestCallCount.Should().Be(1);
@@ -130,7 +133,7 @@ public class MigrationExecutionServiceTests
    [InlineData(202602161600)]
    public async Task ExecuteAsync_TargetAtOrAboveOutOfOrderMigration_RunsMigratorToTarget(long target)
    {
-      var (runtime, reporter) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.To(target));
+      var (runtime, reporter, _) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.To(target));
 
       reporter.Infos.Should().NotContain("Database is already up to date for the specified target.");
       runtime.MigrateToCallCount.Should().Be(1);
@@ -140,8 +143,9 @@ public class MigrationExecutionServiceTests
    [Fact]
    public async Task ExecuteAsync_TargetBelowOutOfOrderMigration_ReportsUpToDateAndSkipsMigrator()
    {
-      var (runtime, reporter) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.To(202602161430));
+      var (runtime, reporter, exitCode) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.To(202602161430));
 
+      exitCode.Should().Be(0);
       reporter.Infos.Should().Contain("Database is already up to date for the specified target.");
       runtime.MigrateToCallCount.Should().Be(0);
    }
@@ -369,7 +373,7 @@ public class MigrationExecutionServiceTests
       );
    }
 
-   private static async Task<(FakeMigrationRuntime Runtime, FakeMigrateReporter Reporter)> ExecuteWithOutOfOrderMigrationAsync(MigrateRequest request)
+   private static async Task<(FakeMigrationRuntime Runtime, FakeMigrateReporter Reporter, int ExitCode)> ExecuteWithOutOfOrderMigrationAsync(MigrateRequest request)
    {
       ExecutedMigrationModel[] rows =
       [
@@ -386,9 +390,9 @@ public class MigrationExecutionServiceTests
       var service = new MigrationExecutionService(new FakeMigrationRuntimeFactory { Runtime = runtime }, new FakeSchemaResourceService(), reporter);
       var project = CreateProjectContext([new FakeDbMigration(202602161400), new FakeDbMigration(202602161500), new FakeDbMigration(202602161600)]);
 
-      await service.ExecuteAsync(request, "Host=localhost;Database=mydb", "local", project, TestContext.Current.CancellationToken);
+      var exitCode = await service.ExecuteAsync(request, "Host=localhost;Database=mydb", "local", project, TestContext.Current.CancellationToken);
 
-      return (runtime, reporter);
+      return (runtime, reporter, exitCode);
    }
 
    private sealed class FakeMigrationRuntimeFactory : IMigrationRuntimeFactory

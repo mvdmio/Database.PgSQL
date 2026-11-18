@@ -1,4 +1,4 @@
-using mvdmio.Database.PgSQL.Tool.Configuration;
+using mvdmio.Database.PgSQL.Tool.Init;
 using System.CommandLine;
 
 namespace mvdmio.Database.PgSQL.Tool.Commands;
@@ -7,44 +7,11 @@ internal static class InitCommand
 {
    public static Command Create()
    {
+      var handler = new InitHandler();
+
       var command = new Command("init", "Initialize a .mvdmio-migrations.yml configuration file in the current directory");
 
-      command.SetAction(_ =>
-      {
-         var currentDir = Directory.GetCurrentDirectory();
-         var configPath = Path.Combine(currentDir, ToolConfiguration.CONFIG_FILE_NAME);
-
-         if (File.Exists(configPath))
-         {
-            Console.Error.WriteLine($"Error: Configuration file already exists: {configPath}");
-            return;
-         }
-
-         var config = new ToolConfiguration
-         {
-            ConnectionStrings = new Dictionary<string, string>
-            {
-               ["local"] = "Host=localhost;Database=mydb;Username=postgres;Password=secret"
-            }
-         };
-
-         config.Save(currentDir);
-
-         Console.WriteLine($"Created configuration file: {configPath}");
-         Console.WriteLine();
-         Console.WriteLine("Default settings:");
-         Console.WriteLine($"  project:             {config.Project}");
-         Console.WriteLine($"  migrationsDirectory: {config.MigrationsDirectory}");
-         Console.WriteLine($"  schemasDirectory:    {config.SchemasDirectory}");
-         Console.WriteLine("  schemas:             all user schemas (default)");
-         Console.WriteLine("  scopes:              all migration scopes (default; declare ownership on shared databases)");
-         Console.WriteLine("  connectionStrings:   local (placeholder)");
-         Console.WriteLine();
-         Console.WriteLine("Migrations are tracked in the \"mvdmio\".\"migrations\" table.");
-         Console.WriteLine();
-         Console.WriteLine("Edit the file to configure your project settings and connection strings.");
-         Console.WriteLine("The first configured environment is used by default when no --environment flag is passed.");
-      });
+      command.SetAction(_ => handler.Handle(Directory.GetCurrentDirectory()));
 
       return command;
    }

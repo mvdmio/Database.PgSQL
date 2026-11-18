@@ -31,26 +31,26 @@ internal sealed class CleanupHandler
       _reporter = reporter;
    }
 
-   public Task HandleAsync(CancellationToken cancellationToken = default)
+   public Task<int> HandleAsync(CancellationToken cancellationToken = default)
    {
       var config = ToolConfigurationLoader.Load();
       return HandleAsync(config, cancellationToken);
    }
 
-   internal async Task HandleAsync(ToolConfiguration config, CancellationToken cancellationToken = default)
+   internal async Task<int> HandleAsync(ToolConfiguration config, CancellationToken cancellationToken = default)
    {
       if (config.ConnectionStrings is null || config.ConnectionStrings.Count == 0)
       {
          _reporter.WriteError("Error: No environments configured.");
          _reporter.WriteError("Add connectionStrings to .mvdmio-migrations.yml before running cleanup.");
-         return;
+         return ExitCodes.FAILURE;
       }
 
       var schemasDirectory = ToolPathResolver.GetSchemasDirectoryPath(config);
       var migrationsDirectory = ToolPathResolver.GetMigrationsDirectoryPath(config);
       Directory.CreateDirectory(schemasDirectory);
 
-      var project = _projectLoader.Load(ToolPathResolver.GetProjectPath(config));
+      var project = await _projectLoader.LoadAsync(ToolPathResolver.GetProjectPath(config), cancellationToken);
       var environments = new List<CleanupEnvironment>();
 
       foreach (KeyValuePair<string, string> environment in config.ConnectionStrings)
@@ -58,7 +58,7 @@ internal sealed class CleanupHandler
          var cleanupEnvironment = await PullEnvironmentAsync(config, environment.Key, environment.Value, schemasDirectory, project, cancellationToken);
 
          if (cleanupEnvironment is null)
-            return;
+            return ExitCodes.FAILURE;
 
          environments.Add(cleanupEnvironment);
       }
@@ -67,6 +67,7 @@ internal sealed class CleanupHandler
 
       var plan = MigrationCleanupPlanner.Plan(migrationsDirectory, project.Migrations, environments);
       ApplyPlan(plan);
+      return ExitCodes.SUCCESS;
    }
 
    private async Task<CleanupEnvironment?> PullEnvironmentAsync(

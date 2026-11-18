@@ -22,6 +22,9 @@ public interface IDatabaseMigrator
    ///    is applied when at least one scope that assembly vouches for has no rows yet. Assemblies whose
    ///    vouched scopes already have rows are left alone. After baselines are recorded, the remaining pending
    ///    migrations are run in identifier order.
+   ///    Cancellation lets a migration, or an embedded-schema bootstrap, that has started finish. The run then starts
+   ///    nothing further and throws <see cref="OperationCanceledException" />, never a
+   ///    <see cref="Exceptions.MigrationException" />. Cancelling while waiting for the migration lock stops at once.
    /// </summary>
    Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken = default);
 
@@ -32,6 +35,9 @@ public interface IDatabaseMigrator
    ///    that assembly vouches for has no rows yet, unless that schema's header contains an identifier above
    ///    <paramref name="targetIdentifier"/> — that schema is skipped, while other assemblies are still considered.
    ///    After baselines are recorded, remaining migrations up to the target are run.
+   ///    Cancellation lets a migration, or an embedded-schema bootstrap, that has started finish. The run then starts
+   ///    nothing further and throws <see cref="OperationCanceledException" />, never a
+   ///    <see cref="Exceptions.MigrationException" />. Cancelling while waiting for the migration lock stops at once.
    /// </summary>
    /// <param name="targetIdentifier">The migration identifier to migrate up to (inclusive).</param>
    /// <param name="cancellationToken">Cancellation token.</param>
@@ -39,6 +45,8 @@ public interface IDatabaseMigrator
 
    /// <summary>
    ///    Run a migration on the database. Returns true if the migration ran successfully. False otherwise.
+   ///    A token cancelled before the migration starts throws <see cref="OperationCanceledException" /> and runs
+   ///    nothing. A migration that has started finishes and records its row; cancellation never interrupts it.
    /// </summary>
    Task RunAsync(IDbMigration migration, CancellationToken cancellationToken = default);
 
