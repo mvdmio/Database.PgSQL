@@ -13,7 +13,7 @@ public sealed class TestFixture : IAsyncLifetime
 
    public TestFixture()
    {
-      DbContainer = new PostgreSqlBuilder("postgres:18").Build();
+      DbContainer = new PostgreSqlBuilder("postgres:19").Build();
    }
 
    public async ValueTask InitializeAsync()

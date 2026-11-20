@@ -11,7 +11,7 @@ dotnet --list-runtimes | grep -q 'Microsoft.NETCore.App 10\.'
 ## Launch
 ```sh
 docker rm -f pgsql-run >/dev/null 2>&1
-docker run -d --name pgsql-run -e POSTGRES_PASSWORD=secret -p 55432:5432 postgres:16
+docker run -d --name pgsql-run -e POSTGRES_PASSWORD=secret -p 55432:5432 postgres:19
 ```
 
 ## Ready

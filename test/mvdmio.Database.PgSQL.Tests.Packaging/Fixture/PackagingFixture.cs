@@ -27,7 +27,7 @@ public sealed class PackagingFixture : IAsyncLifetime
 
    public PackagingFixture()
    {
-      _container = new PostgreSqlBuilder("postgres:18").Build();
+      _container = new PostgreSqlBuilder("postgres:19").Build();
       _repositoryRoot = RepositoryRoot();
 
       PackageVersion = $"0.0.0-packagingtest{Guid.NewGuid():N}";

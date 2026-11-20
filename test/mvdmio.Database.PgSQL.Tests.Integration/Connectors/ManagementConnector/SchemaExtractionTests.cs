@@ -766,7 +766,7 @@ public class SchemaExtractionTests : TestBase
 
       var script = await Db.Management.GenerateSchemaScriptAsync(CancellationToken);
 
-      await using var replayContainer = new PostgreSqlBuilder("postgres:18").Build();
+      await using var replayContainer = new PostgreSqlBuilder("postgres:19").Build();
       await replayContainer.StartAsync(CancellationToken);
 
       await using var replayFactory = new DatabaseConnectionFactory();

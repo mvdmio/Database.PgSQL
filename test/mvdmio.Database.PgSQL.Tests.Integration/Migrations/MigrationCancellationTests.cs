@@ -26,7 +26,7 @@ public class MigrationCancellationTests : IAsyncLifetime
 
    public async ValueTask InitializeAsync()
    {
-      _dbContainer = new PostgreSqlBuilder("postgres:18").Build();
+      _dbContainer = new PostgreSqlBuilder("postgres:19").Build();
       await _dbContainer.StartAsync();
       _connectionFactory = new DatabaseConnectionFactory();
    }
