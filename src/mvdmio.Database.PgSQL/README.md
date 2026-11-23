@@ -1506,7 +1506,13 @@ LinqDatabaseConnector.ConfigureMappingSchema(schema =>
 ```
 
 Like the Dapper handler registry this applies process-wide. `PGSQL0011` warns at build time when a table definition has a
-property type the query surface cannot map, so you find out before the query runs.
+property type the query surface cannot map, so you find out before the query runs. One-dimensional arrays of `bool`,
+`short`, `int`, `long`, `float`, `double`, `decimal`, `string`, `DateTime`, `Guid`, `DateTimeOffset`, `DateOnly`,
+`TimeOnly` and `TimeSpan` map without a conversion, nullable as a whole (`string[]?`) or, for value types, by element
+(`int?[]`), and `byte[]` is `bytea`. `List<T>`, multi-dimensional and jagged arrays, `char[]`, `sbyte[]`, `Uri[]` and
+enum arrays still warn. The warning stays after you register a conversion, because the analyzer cannot see the
+registration: suppress it yourself with `#pragma warning disable PGSQL0011` or `NoWarn` for a type you registered a
+conversion for.
 
 ## Build-Time Diagnostics
 
@@ -1524,7 +1530,7 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0008` | Error    | `[Table]` value is not `table` or `schema.table`                                   |
 | `PGSQL0009` | Error    | A property is not a public instance property with a public getter and a setter of any accessibility |
 | `PGSQL0010` | Error    | A generated name is already taken — by a non-partial type in the same namespace, or by the primary key's own lookup |
-| `PGSQL0011` | Warning  | A property type cannot be mapped by the query surface — register a conversion       |
+| `PGSQL0011` | Warning  | A property type cannot be mapped by the query surface — suppress it for a converted type |
 | `PGSQL0014` | Error    | A relation's target is not a `[Table]` class in the same compilation                |
 | `PGSQL0015` | Error    | A relation to one row is not nullable                                                |
 | `PGSQL0016` | Error    | A relation property's type is neither a relation definition nor a supported collection of one |
@@ -1551,7 +1557,7 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 `PGSQL0001` is a warning rather than an error because you can implement `Identifier` and `Name` yourself instead of
 following the naming convention. If you do neither, a misnamed migration class throws the moment those properties are
 read. `PGSQL0011` is a warning because the rest of the repository still works — only `Query()` cannot handle that
-column until a conversion is registered. `PGSQL0024` is a warning for the same reason, one surface down: commands honour
+column, and a registered conversion makes it work there without clearing the warning. `PGSQL0024` is a warning for the same reason, one surface down: commands honour
 the claim and only `Query()` cannot. `PGSQL0027`, `PGSQL0031` and `PGSQL0034` are warnings too, and drop nothing at
 all — the relation they name still generates; each flags something worth a second look rather than a malformed
 declaration. `PGSQL0014` through `PGSQL0018` and `PGSQL0028` through `PGSQL0035` drop only
@@ -1564,8 +1570,8 @@ names. Everything else — including `PGSQL0020`,
 `PGSQL0025` and `PGSQL0026` — abandons the table, because a malformed key or a malformed tenancy declaration leaves
 every generated signature undefined rather than one relation.
 
-`PGSQL0023` exists rather than being folded into `PGSQL0011` because that warning's advice — register a conversion —
-cannot help: there is no PostgreSQL type to convert to.
+`PGSQL0023` exists rather than being folded into `PGSQL0011` because that warning is one you suppress for a type with a
+registered conversion, and no conversion can help here: there is no PostgreSQL type to convert to.
 
 ## CLI Tool
 

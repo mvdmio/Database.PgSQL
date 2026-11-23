@@ -147,6 +147,17 @@ public sealed class TestFixture : IAsyncLifetime
 
       await connection.Dapper.ExecuteAsync(
          """
+         CREATE TABLE IF NOT EXISTS public.generated_array_columns (
+            array_column_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            locales         TEXT[] NOT NULL,
+            tags            TEXT[] NULL,
+            numbers         INTEGER[] NOT NULL
+         )
+         """
+      );
+
+      await connection.Dapper.ExecuteAsync(
+         """
          CREATE TABLE IF NOT EXISTS public.generated_tenant_projects (
             account_id      BIGINT NOT NULL,
             project_id      BIGINT GENERATED ALWAYS AS IDENTITY,

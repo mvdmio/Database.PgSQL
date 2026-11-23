@@ -176,6 +176,105 @@ public class TableRepositoryGeneratorTests
    }
 
    [Fact]
+   public void NativelyMappedArrayTypes_ProduceNoWarning()
+   {
+      var source = """
+         using mvdmio.Database.PgSQL.Attributes;
+         using System;
+
+         namespace Demo;
+
+         [Table("public.arrays")]
+         public partial class ArrayTable
+         {
+            [PrimaryKey]
+            public long Id { get; set; }
+
+            public string[] Locales { get; set; } = [];
+            public string[]? Tags { get; set; }
+            public int[] Numbers { get; set; } = [];
+            public long[] Big { get; set; } = [];
+            public Guid[] Ids { get; set; } = [];
+            public DateTime[] Moments { get; set; } = [];
+            public int?[] OptionalNumbers { get; set; } = [];
+            public byte[] Blob { get; set; } = [];
+         }
+         """;
+
+      var result = GeneratorHarness.RunGenerator(source);
+
+      result.Diagnostics.Should().NotContain(x => x.Id == "PGSQL0011");
+      result.GeneratedSources.Should().NotBeEmpty();
+   }
+
+   [Theory]
+   [InlineData("char[]", "Letters")]
+   [InlineData("sbyte[]", "Signed")]
+   [InlineData("Uri[]", "Links")]
+   [InlineData("Status[]", "States")]
+   [InlineData("string[][]", "Jagged")]
+   [InlineData("string[,]", "Grid")]
+   [InlineData("List<string>", "Names")]
+   public void UnmappableArrayTypes_StillProduceWarning(string type, string property)
+   {
+      var source = $$"""
+         using mvdmio.Database.PgSQL.Attributes;
+         using System;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         public enum Status { Active, Archived }
+
+         [Table("public.arrays")]
+         public partial class ArrayTable
+         {
+            [PrimaryKey]
+            public long Id { get; set; }
+
+            public string[] Locales { get; set; } = [];
+            public {{type}} {{property}} { get; set; } = default!;
+         }
+         """;
+
+      var result = GeneratorHarness.RunGenerator(source);
+
+      var warnings = result.Diagnostics.Where(x => x.Id == "PGSQL0011").ToList();
+
+      warnings.Should().ContainSingle();
+      warnings[0].GetMessage().Should().Contain($"'ArrayTable.{property}'");
+   }
+
+   [Fact]
+   public void UnmappablePropertyType_MessageSaysTheWarningStaysAfterAConversionAndHowToSuppressIt()
+   {
+      var source = """
+         using mvdmio.Database.PgSQL.Attributes;
+         using System.Collections.Generic;
+
+         namespace Demo;
+
+         [Table("public.users")]
+         public partial class UserTable
+         {
+            [PrimaryKey]
+            public long UserId { get; set; }
+
+            public List<string> Tags { get; set; } = new();
+         }
+         """;
+
+      var result = GeneratorHarness.RunGenerator(source);
+
+      var message = result.Diagnostics.Single(x => x.Id == "PGSQL0011").GetMessage();
+
+      message.Should().Contain("the warning stays even after a conversion is registered");
+      message.Should().Contain("#pragma warning disable PGSQL0011");
+      message.Should().Contain("NoWarn");
+      message.Should().NotContain("; register a conversion");
+   }
+
+   [Fact]
    public void NonPartialTable_ProducesDiagnostic()
    {
       var source = """

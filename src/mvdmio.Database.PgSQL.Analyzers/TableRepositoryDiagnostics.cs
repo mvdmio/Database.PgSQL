@@ -104,11 +104,11 @@ internal static class TableRepositoryDiagnostics
    public static readonly DiagnosticDescriptor UnmappableQueryPropertyType = new(
       id: "PGSQL0011",
       title: "Property type cannot be mapped by the query surface",
-      messageFormat: "'{0}.{1}' has type '{2}', which the query surface cannot map; register a conversion with LinqDatabaseConnector.ConfigureMappingSchema",
+      messageFormat: "'{0}.{1}' has type '{2}', which the query surface cannot map; the warning stays even after a conversion is registered with LinqDatabaseConnector.ConfigureMappingSchema, because the analyzer cannot see the registration, so suppress it yourself with '#pragma warning disable PGSQL0011' or NoWarn for a type you registered a conversion for",
       category: CATEGORY_GENERATION,
       defaultSeverity: DiagnosticSeverity.Warning,
       isEnabledByDefault: true,
-      description: "Query() can only translate property types the query surface knows how to convert. Other types need a conversion registered through the mapping hook."
+      description: "Query() can only translate property types the query surface knows how to convert. A conversion registered with LinqDatabaseConnector.ConfigureMappingSchema does not clear this warning, because the analyzer cannot see the registration. Suppress it yourself with '#pragma warning disable PGSQL0011' or NoWarn for a type you registered a conversion for."
    );
 
    public static readonly DiagnosticDescriptor RelationTargetIsNotATableDefinition = new(
@@ -208,7 +208,7 @@ internal static class TableRepositoryDiagnostics
       category: CATEGORY_GENERATION,
       defaultSeverity: DiagnosticSeverity.Error,
       isEnabledByDefault: true,
-      description: "The driver registers no integer or numeric mapping for the unsigned integer types, by inference or with an explicit type, so a repository over one of them reads and filters and then throws on every insert and update. Refused here rather than at run time. Separate from PGSQL0011, whose advice — register a conversion — cannot help, because there is no PostgreSQL type to convert to."
+      description: "The driver registers no integer or numeric mapping for the unsigned integer types, by inference or with an explicit type, so a repository over one of them reads and filters and then throws on every insert and update. Refused here rather than at run time. Separate from PGSQL0011, which a registered conversion can be suppressed for, because here there is no PostgreSQL type to convert to."
    );
 
    public const string WRITABLE_ALTERNATIVES_FOR_UNSIGNED_INTEGERS = "int, long or decimal";

@@ -4,12 +4,26 @@ namespace mvdmio.Database.PgSQL.Analyzers;
 
 internal static class QueryMappableTypes
 {
-   private static readonly HashSet<string> _mappableTypeNames = new(StringComparer.Ordinal) {
+   private static readonly HashSet<string> _nativeTypeNames = new(StringComparer.Ordinal) {
+      "bool",
+      "short",
+      "int",
+      "long",
+      "float",
+      "double",
+      "decimal",
+      "string",
+      "System.DateTime",
       "System.Guid",
       "System.DateTimeOffset",
       "System.DateOnly",
       "System.TimeOnly",
-      "System.TimeSpan",
+      "System.TimeSpan"
+   };
+
+   private static readonly HashSet<string> _scalarOnlyTypeNames = new(StringComparer.Ordinal) {
+      "byte",
+      "char",
       "System.Uri",
       "System.Collections.Generic.Dictionary<string, string>"
    };
@@ -28,28 +42,23 @@ internal static class QueryMappableTypes
 
    private static bool IsRegisteredForItsType(ITypeSymbol type)
    {
-      if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
-         return IsRegisteredForItsType(nullable.TypeArguments[0]);
-
       if (type is IArrayTypeSymbol array)
-         return array.Rank == 1 && array.ElementType.SpecialType == SpecialType.System_Byte;
+         return array.Rank == 1 && (array.ElementType.SpecialType == SpecialType.System_Byte || IsNative(array.ElementType));
 
-      switch (type.SpecialType)
-      {
-         case SpecialType.System_Boolean:
-         case SpecialType.System_Char:
-         case SpecialType.System_Byte:
-         case SpecialType.System_Int16:
-         case SpecialType.System_Int32:
-         case SpecialType.System_Int64:
-         case SpecialType.System_Single:
-         case SpecialType.System_Double:
-         case SpecialType.System_Decimal:
-         case SpecialType.System_String:
-         case SpecialType.System_DateTime:
-            return true;
-      }
+      return IsNative(type) || _scalarOnlyTypeNames.Contains(NameOf(type));
+   }
 
-      return _mappableTypeNames.Contains(type.ToDisplayString(_typeNameFormat));
+   private static bool IsNative(ITypeSymbol type)
+   {
+      return _nativeTypeNames.Contains(NameOf(type));
+   }
+
+   private static string NameOf(ITypeSymbol type)
+   {
+      var unwrapped = type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable
+         ? nullable.TypeArguments[0]
+         : type;
+
+      return unwrapped.ToDisplayString(_typeNameFormat);
    }
 }
