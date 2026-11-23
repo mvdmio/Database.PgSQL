@@ -8,6 +8,18 @@ Glossary for the PostgreSQL data-access and migration library. Defines the domai
 A single, ordered change to the database schema or data, implemented as an `IDbMigration`. Identified by its **Identifier** and grouped within a **Scope**. Runs in one transaction with its history row unless it opts out with `RunsInTransaction`, in which case each of its statements commits on its own and the history row is written only after the whole migration succeeds.
 _Avoid_: Script, change-set, upgrade.
 
+**Deploy phase**:
+The point in a deploy where part of a **Migration** may run. There are two. Pre-deploy runs while the old application version is still serving. Post-deploy runs once the new version is serving.
+_Avoid_: Stage, step, slot.
+
+**Pre-deploy part**:
+The part of a **Migration** that runs in the pre-deploy **Deploy phase**. Every migration has one. A migration written before deploy phases existed consists of only this part.
+_Avoid_: Up, main part, first half.
+
+**Post-deploy part**:
+The optional part of a **Migration** that runs in the post-deploy **Deploy phase**. It may run only after the same migration's **Pre-deploy part** has run. It undoes what the old application version needed, such as dropping an index the new version no longer uses.
+_Avoid_: Cleanup, down, second half, contract step.
+
 **Identifier**:
 A `YYYYMMDDHHmm` timestamp that orders a **Migration** within its **Scope**. Unique per scope, not globally.
 _Avoid_: Version, sequence number.
