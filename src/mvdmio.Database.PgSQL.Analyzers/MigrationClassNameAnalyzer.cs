@@ -13,8 +13,6 @@ public sealed class MigrationClassNameAnalyzer : DiagnosticAnalyzer
    public const string DiagnosticId = "PGSQL0001";
 
    private const string CATEGORY = "Naming";
-   private const string IDBMIGRATION_INTERFACE_NAME = "IDbMigration";
-   private const string IDBMIGRATION_FULL_NAMESPACE = "mvdmio.Database.PgSQL.Migrations.Interfaces";
 
    private static readonly Regex _migrationNameRegex = new(@"^_?(\d{12})_(.+)$", RegexOptions.Compiled);
 
@@ -46,7 +44,7 @@ public sealed class MigrationClassNameAnalyzer : DiagnosticAnalyzer
       if (namedType.TypeKind != TypeKind.Class || namedType.IsAbstract)
          return;
 
-      if (!ImplementsIDbMigration(namedType))
+      if (MigrationInterface.FindOn(namedType) is null)
          return;
 
       var className = namedType.Name;
@@ -63,10 +61,5 @@ public sealed class MigrationClassNameAnalyzer : DiagnosticAnalyzer
       );
 
       context.ReportDiagnostic(diagnostic);
-   }
-
-   private static bool ImplementsIDbMigration(INamedTypeSymbol type)
-   {
-      return type.AllInterfaces.Any(x => x.Name == IDBMIGRATION_INTERFACE_NAME && x.ContainingNamespace.ToDisplayString() == IDBMIGRATION_FULL_NAMESPACE);
    }
 }

@@ -1301,6 +1301,11 @@ What changes when `RunsInTransaction` is `false`:
 - If you call the migrator inside a transaction of your own, the migration joins that transaction, as every migration
   does, and `CREATE INDEX CONCURRENTLY` then fails with PostgreSQL's own error.
 
+The build checks for the flag: a migration that runs in a transaction and holds a statement PostgreSQL refuses inside
+one (`CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, `REINDEX ... CONCURRENTLY`, `ALTER TABLE ... DETACH
+PARTITION ... CONCURRENTLY`, `VACUUM`, `CREATE`/`DROP DATABASE`, `CREATE`/`DROP TABLESPACE`, `ALTER SYSTEM`) fails the
+build with `PGSQL0039` until it overrides `RunsInTransaction` to return `false`.
+
 The standard way to change a large table:
 
 - **Back-fill in batches** that each pick only rows still unfilled, so a re-run picks up where the failed run stopped.
@@ -1541,6 +1546,7 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0033` | Error    | `[Relation]` sits on a property whose type is not a relation definition               |
 | `PGSQL0034` | Warning  | A relation reads the same columns of its own table as another that carries a condition, but states none itself |
 | `PGSQL0035` | Error    | A relation key pair's two columns can both hold null                                  |
+| `PGSQL0039` | Error    | A migration runs a statement PostgreSQL refuses inside a transaction without setting `RunsInTransaction` to `false` |
 
 `PGSQL0001` is a warning rather than an error because you can implement `Identifier` and `Name` yourself instead of
 following the naming convention. If you do neither, a misnamed migration class throws the moment those properties are
@@ -1552,7 +1558,9 @@ declaration. `PGSQL0014` through `PGSQL0018` and `PGSQL0028` through `PGSQL0035`
 the relation they describe and let the rest of the table generate, so the message you read is the mistake you made
 rather than a wall of type-not-found errors from everything that names the missing data type. `PGSQL0021` through
 `PGSQL0024` abandon nothing at all either: a contradictory nullability claim, a refused storage claim and an
-unwritable property type all leave every generated signature well-defined. Everything else — including `PGSQL0020`,
+unwritable property type all leave every generated signature well-defined. `PGSQL0039` is an error that abandons
+nothing: it reads migration classes, not table definitions, and the migration still builds once you add the flag it
+names. Everything else — including `PGSQL0020`,
 `PGSQL0025` and `PGSQL0026` — abandons the table, because a malformed key or a malformed tenancy declaration leaves
 every generated signature undefined rather than one relation.
 
