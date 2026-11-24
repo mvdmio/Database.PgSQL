@@ -29,7 +29,7 @@ The stable logical timeline a **Migration** belongs to, and the unit its **Basel
 _Avoid_: Assembly name (it defaults to that but is not bound to it), namespace, module.
 
 **Baseline**:
-The lowest recorded **Identifier** within a single **Scope**. Every **Migration** at or below it is taken as already present without a row of its own — whether it was folded into a schema-first bootstrap, predates a database adopted part-way, or is simply the first that ran. Above it, a migration is present only when its own row is recorded. A scope with no rows has no baseline, and every migration in it is pending.
+The lowest recorded **Identifier** within a single **Scope**. Every **Migration** at or below it is taken as already present without a row of its own — whether it was folded into a schema-first bootstrap or predates a database adopted part-way. The one exception is a migration whose own row at the Baseline carries an explicit phase: it ran itself, so its pre-deploy part is present by that row and its post-deploy part is pending until a `post-deploy` row exists. Above it, a migration is present only when its own row is recorded. A scope with no rows has no baseline, and every migration in it is pending.
 _Avoid_: Floor, cutoff, low-water mark.
 
 **Watermark**:

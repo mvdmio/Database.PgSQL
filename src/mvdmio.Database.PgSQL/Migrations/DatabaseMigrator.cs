@@ -12,7 +12,7 @@ namespace mvdmio.Database.PgSQL.Migrations;
 
 /// <summary>
 ///    Class for running database migrations. Migrations are tracked per scope, so the timelines of different
-///    assemblies advance independently. <see cref="IDatabaseMigrator.MigrateDatabaseToLatestAsync" /> states which
+///    assemblies advance independently. <see cref="IDatabaseMigrator.MigrateDatabaseToLatestAsync(DeployPhase, CancellationToken)" /> states which
 ///    migrations are pending.
 /// </summary>
 [PublicAPI]
@@ -31,6 +31,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    private readonly Assembly[] _assemblies;
 
    private bool _scopeColumnExists;
+   private bool _phaseColumnExists;
 
    /// <summary>
    ///    Initializes a new instance of the <see cref="DatabaseMigrator"/> class using reflection-based migration retrieval.
@@ -125,27 +126,20 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <inheritdoc />
    public async Task<IEnumerable<ExecutedMigrationModel>> RetrieveAlreadyExecutedMigrationsAsync(CancellationToken cancellationToken = default)
    {
-      if (!await ScopeColumnExistsAsync(cancellationToken))
-      {
-         return await _connection.Dapper.QueryAsync<ExecutedMigrationModel>(
-            $"""
-            SELECT
-               identifier AS identifier,
-               name AS name,
-               executed_at AS executedAtUtc
-            FROM {MIGRATIONS_TABLE_FULLY_QUALIFIED}
-            """,
-            ct: cancellationToken
-         );
-      }
+      var scopeColumn = await ScopeColumnExistsAsync(cancellationToken) ? ", scope AS scope" : string.Empty;
+      var phaseExpression = await PhaseColumnExistsAsync(cancellationToken)
+         ? $"CASE phase WHEN '{MigrationsTableManager.POST_DEPLOY_PHASE_TEXT}' THEN {(int)DeployPhase.PostDeploy} ELSE {(int)DeployPhase.PreDeploy} END"
+         : ((int)DeployPhase.PreDeploy).ToString();
+      var phaseRecordedExpression = await PhaseColumnExistsAsync(cancellationToken) ? "phase IS NOT NULL" : "FALSE";
 
       return await _connection.Dapper.QueryAsync<ExecutedMigrationModel>(
          $"""
          SELECT
             identifier AS identifier,
             name AS name,
-            executed_at AS executedAtUtc,
-            scope AS scope
+            executed_at AS executedAtUtc{scopeColumn},
+            {phaseExpression} AS phase,
+            {phaseRecordedExpression} AS hasRecordedPhase
          FROM {MIGRATIONS_TABLE_FULLY_QUALIFIED}
          """,
          ct: cancellationToken
@@ -155,17 +149,31 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    /// <inheritdoc />
    public Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken = default)
    {
-      return MigrateAsync(targetIdentifier: null, cancellationToken);
+      return MigrateAsync(targetIdentifier: null, DeployPhase.PreDeploy, cancellationToken);
+   }
+
+   /// <inheritdoc />
+   public Task MigrateDatabaseToLatestAsync(DeployPhase phase, CancellationToken cancellationToken = default)
+   {
+      return MigrateAsync(targetIdentifier: null, phase, cancellationToken);
    }
 
    /// <inheritdoc />
    public Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken = default)
    {
-      return MigrateAsync(targetIdentifier, cancellationToken);
+      return MigrateAsync(targetIdentifier, DeployPhase.PreDeploy, cancellationToken);
    }
 
-   private async Task MigrateAsync(long? targetIdentifier, CancellationToken cancellationToken)
+   /// <inheritdoc />
+   public Task MigrateDatabaseToAsync(long targetIdentifier, DeployPhase phase, CancellationToken cancellationToken = default)
    {
+      return MigrateAsync(targetIdentifier, phase, cancellationToken);
+   }
+
+   private async Task MigrateAsync(long? targetIdentifier, DeployPhase phase, CancellationToken cancellationToken)
+   {
+      DeployPhaseValidation.ThrowIfInvalid(phase);
+
       var migratorOpenedConnection = await _connection.OpenAsync(cancellationToken);
       var lockAcquired = false;
 
@@ -183,6 +191,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
          {
             await MigrationsTableManager.EnsureTableAsync(_connection, cancellationToken);
             _scopeColumnExists = true;
+            _phaseColumnExists = true;
             executedMigrations = (await RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
             executedMigrations = await BackfillScopesAsync(executedMigrations, discoveredMigrations, cancellationToken);
          }
@@ -210,6 +219,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
          if (schemasApplied)
          {
             _scopeColumnExists = true;
+            _phaseColumnExists = true;
             executedMigrations = (await RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
             executedMigrations = await BackfillScopesAsync(executedMigrations, discoveredMigrations, cancellationToken);
          }
@@ -217,24 +227,23 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
          {
             await MigrationsTableManager.EnsureTableAsync(_connection, cancellationToken);
             _scopeColumnExists = true;
+            _phaseColumnExists = true;
          }
 
-         var pendingMigrations = PendingMigrationSelector.SelectPending(executedMigrations, discoveredMigrations, targetIdentifier);
+         if (phase == DeployPhase.PreDeploy)
+            MigrationWarnings.LogWaitingPostDeployParts(_logger, PendingMigrationSelector.SelectWaitingPostDeployParts(executedMigrations, discoveredMigrations, targetIdentifier));
 
-         foreach (var pending in pendingMigrations)
+         if (phase == DeployPhase.PostDeploy)
+            MigrationWarnings.LogBlockedPostDeployParts(_logger, PendingMigrationSelector.SelectBlockedPostDeployParts(executedMigrations, discoveredMigrations, targetIdentifier));
+
+         var pendingParts = PendingMigrationSelector.SelectPending(executedMigrations, discoveredMigrations, phase, targetIdentifier);
+
+         foreach (var pending in pendingParts)
          {
             if (pending.IsOutOfOrder)
-            {
-               _logger.LogWarning(
-                  "Running out-of-order migration {Identifier} ({Name}) in scope {Scope}: it is below the scope's watermark {Watermark}, so it runs later than its identifier suggests.",
-                  pending.Migration.Identifier,
-                  pending.Migration.Name,
-                  pending.Migration.Scope,
-                  pending.ScopeWatermark
-               );
-            }
+               MigrationWarnings.LogOutOfOrder(_logger, pending);
 
-            await RunAsync(pending.Migration, cancellationToken);
+            await RunPartAsync(pending.Migration, pending.Phase, cancellationToken);
          }
       }
       finally
@@ -256,22 +265,51 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
    }
 
    /// <inheritdoc />
-   public async Task RunAsync(IDbMigration migration, CancellationToken cancellationToken = default)
+   public Task RunAsync(IDbMigration migration, CancellationToken cancellationToken = default)
+   {
+      return RunAsync(migration, DeployPhase.PreDeploy, cancellationToken);
+   }
+
+   /// <summary>
+   ///    Run the parts of a migration that belong to the requested phase and record a history row for each part
+   ///    that ran. A part the migration does not have (<see cref="DeployPhase.PostDeploy" /> on a migration that does
+   ///    not implement <see cref="IDbMigration.PostDeployAsync" />) is skipped and records no row.
+   ///    <see cref="DeployPhase.All" /> runs the pre-deploy part, then the post-deploy part when there is one.
+   ///    A token cancelled before a part starts throws <see cref="OperationCanceledException" /> and runs nothing
+   ///    further; a part that has started finishes and records its row.
+   /// </summary>
+   /// <param name="migration">The migration to run.</param>
+   /// <param name="phase">The phase to run: <see cref="DeployPhase.PreDeploy" />, <see cref="DeployPhase.PostDeploy" /> or <see cref="DeployPhase.All" />.</param>
+   /// <param name="cancellationToken">Cancellation token.</param>
+   /// <exception cref="ArgumentOutOfRangeException">The phase is zero or has a bit outside <see cref="DeployPhase.All" />.</exception>
+   /// <exception cref="MigrationException">A part failed.</exception>
+   public async Task RunAsync(IDbMigration migration, DeployPhase phase, CancellationToken cancellationToken = default)
+   {
+      DeployPhaseValidation.ThrowIfInvalid(phase);
+
+      if (phase.HasFlag(DeployPhase.PreDeploy))
+         await RunPartAsync(migration, DeployPhase.PreDeploy, cancellationToken);
+
+      if (phase.HasFlag(DeployPhase.PostDeploy) && PostDeployPart.Exists(migration))
+         await RunPartAsync(migration, DeployPhase.PostDeploy, cancellationToken);
+   }
+
+   private async Task RunPartAsync(IDbMigration migration, DeployPhase part, CancellationToken cancellationToken)
    {
       cancellationToken.ThrowIfCancellationRequested();
 
       try
       {
-         async Task UpAndRecordAsync()
+         async Task RunAndRecordAsync()
          {
-            await migration.UpAsync(_connection);
-            await InsertMigrationRowAsync(migration.Identifier, migration.Name, migration.Scope, CancellationToken.None);
+            await (part == DeployPhase.PreDeploy ? migration.PreDeployAsync(_connection) : migration.PostDeployAsync(_connection));
+            await InsertMigrationRowAsync(migration.Identifier, migration.Name, migration.Scope, part, CancellationToken.None);
          }
 
          if (migration.RunsInTransaction)
-            await _connection.InTransactionAsync(UpAndRecordAsync);
+            await _connection.InTransactionAsync(RunAndRecordAsync);
          else
-            await UpAndRecordAsync();
+            await RunAndRecordAsync();
       }
       catch (Exception exception)
       {
@@ -279,7 +317,7 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
       }
    }
 
-   private async Task InsertMigrationRowAsync(long identifier, string name, string? scope, CancellationToken cancellationToken)
+   private async Task InsertMigrationRowAsync(long identifier, string name, string? scope, DeployPhase part, CancellationToken cancellationToken)
    {
       var parameters = new Dictionary<string, object?> {
          { "identifier", identifier },
@@ -291,8 +329,18 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
       {
          parameters["scope"] = scope;
 
+         var phaseColumn = string.Empty;
+         var phaseValue = string.Empty;
+
+         if (await PhaseColumnExistsAsync(cancellationToken))
+         {
+            parameters["phase"] = part == DeployPhase.PreDeploy ? MigrationsTableManager.PRE_DEPLOY_PHASE_TEXT : MigrationsTableManager.POST_DEPLOY_PHASE_TEXT;
+            phaseColumn = ", phase";
+            phaseValue = ", :phase";
+         }
+
          await _connection.Dapper.ExecuteAsync(
-            $"INSERT INTO {MIGRATIONS_TABLE_FULLY_QUALIFIED} (identifier, name, executed_at, scope) VALUES (:identifier, :name, :executedAtUtc, :scope)",
+            $"INSERT INTO {MIGRATIONS_TABLE_FULLY_QUALIFIED} (identifier, name, executed_at, scope{phaseColumn}) VALUES (:identifier, :name, :executedAtUtc, :scope{phaseValue})",
             parameters,
             ct: cancellationToken
          );
@@ -412,5 +460,14 @@ public sealed class DatabaseMigrator : IDatabaseMigrator
 
       _scopeColumnExists = await MigrationsTableManager.ScopeColumnExistsAsync(_connection, cancellationToken);
       return _scopeColumnExists;
+   }
+
+   private async Task<bool> PhaseColumnExistsAsync(CancellationToken cancellationToken)
+   {
+      if (_phaseColumnExists)
+         return true;
+
+      _phaseColumnExists = await MigrationsTableManager.PhaseColumnExistsAsync(_connection, cancellationToken);
+      return _phaseColumnExists;
    }
 }

@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.Models;
 using mvdmio.Database.PgSQL.Tool.Cleanup;
@@ -92,6 +93,38 @@ public class MigrationCleanupPlannerTests : IDisposable
    }
 
    [Fact]
+   public void Plan_WithPostDeployPartPendingInOneEnvironment_KeepsTheFile()
+   {
+      var twoPart = CreateFile(_tempDirectory, "_202602151200_ReplaceIndex.cs");
+      IDbMigration[] discovered = [TwoPartMigration(202602151200, "ScopeA")];
+
+      var dev = Env("dev", 202602170000, Executed(202602140000, "ScopeA"), Executed(202602151200, "ScopeA"), Executed(202602151200, "ScopeA", DeployPhase.PostDeploy));
+      var prod = Env("prod", 202602170000, Executed(202602140000, "ScopeA"), Executed(202602151200, "ScopeA"));
+
+      var plan = MigrationCleanupPlanner.Plan(_tempDirectory, discovered, [dev, prod]);
+
+      plan.FilesToDelete.Should().BeEmpty();
+      plan.PendingFilesKept.Should().ContainSingle();
+      plan.PendingFilesKept[0].Path.Should().Be(twoPart);
+      plan.PendingFilesKept[0].PendingEnvironments.Should().Equal("prod");
+   }
+
+   [Fact]
+   public void Plan_WithBothPartsDoneInEveryEnvironment_DeletesTheFile()
+   {
+      var twoPart = CreateFile(_tempDirectory, "_202602151200_ReplaceIndex.cs");
+      IDbMigration[] discovered = [TwoPartMigration(202602151200, "ScopeA")];
+
+      var dev = Env("dev", 202602170000, Executed(202602140000, "ScopeA"), Executed(202602151200, "ScopeA"), Executed(202602151200, "ScopeA", DeployPhase.PostDeploy));
+      var prod = Env("prod", 202602170000, Executed(202602140000, "ScopeA"), Executed(202602151200, "ScopeA"), Executed(202602151200, "ScopeA", DeployPhase.PostDeploy));
+
+      var plan = MigrationCleanupPlanner.Plan(_tempDirectory, discovered, [dev, prod]);
+
+      plan.FilesToDelete.Should().Equal(twoPart);
+      plan.PendingFilesKept.Should().BeEmpty();
+   }
+
+   [Fact]
    public void Plan_WithIdentifierSharedByTwoScopes_KeepsFileWhenEitherMigrationIsPending()
    {
       var shared = CreateFile(_tempDirectory, "_202602161000_Shared.cs");
@@ -175,9 +208,36 @@ public class MigrationCleanupPlannerTests : IDisposable
       return new ExecutedMigrationModel(identifier, $"Migration{identifier}", DateTime.UtcNow, scope);
    }
 
+   private static ExecutedMigrationModel Executed(long identifier, string scope, DeployPhase phase)
+   {
+      return Executed(identifier, scope) with { Phase = phase };
+   }
+
    private static IDbMigration Migration(long identifier, string scope)
    {
       return new FakeMigration(identifier, scope);
+   }
+
+   private static IDbMigration TwoPartMigration(long identifier, string scope)
+   {
+      return new FakeTwoPartMigration(identifier, scope);
+   }
+
+   private sealed class FakeTwoPartMigration(long identifier, string scope) : IDbMigration
+   {
+      public long Identifier => identifier;
+      public string Name => $"Migration{identifier}";
+      public string Scope => scope;
+
+      public Task PreDeployAsync(DatabaseConnection db)
+      {
+         return Task.CompletedTask;
+      }
+
+      public Task PostDeployAsync(DatabaseConnection db)
+      {
+         return Task.CompletedTask;
+      }
    }
 
    private static string CreateFile(string directory, string fileName)

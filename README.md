@@ -125,7 +125,8 @@ Full walkthrough: [Generated Repositories](src/mvdmio.Database.PgSQL/README.md#g
 ```bash
 db init                              # create .mvdmio-migrations.yml
 db migration create AddUsersTable    # scaffold a migration
-db migrate latest                    # apply pending migrations
+db migrate latest                    # apply pending pre-deploy parts (--phase pre-deploy is the default)
+db migrate latest --phase post-deploy # after the deploy: apply pending post-deploy parts
 db pull                              # export the current schema to Schemas/
 ```
 
@@ -168,8 +169,8 @@ Core-backed endpoint.
 |------------------------------|-----------------------------------------------------------------|
 | `db init`                    | Create the `.mvdmio-migrations.yml` configuration file            |
 | `db migration create <name>` | Scaffold a timestamped migration class                            |
-| `db migrate latest`          | Apply all pending migrations                                      |
-| `db migrate to <identifier>` | Apply migrations up to a specific identifier                      |
+| `db migrate latest`          | Apply pending migrations; `--phase pre-deploy\|post-deploy\|all`, default `pre-deploy` |
+| `db migrate to <identifier>` | Apply migrations up to a specific identifier, with the same `--phase` |
 | `db pull`                    | Export the current database schema to a schema file                |
 | `db cleanup`                 | Refresh schema files; delete migrations no environment still needs |
 | `db copy --from x --to y`    | Copy all table data between configured environments                |
@@ -177,6 +178,13 @@ Core-backed endpoint.
 Every command reads connection strings and project layout from `.mvdmio-migrations.yml`. The commands that talk to a
 database — `db migrate latest`, `db migrate to`, and `db pull` — take `--environment`/`-e` to pick which one, or
 `--connection-string` to bypass the config.
+
+`db migrate latest` and `db migrate to` also take `--phase pre-deploy|post-deploy|all`, default `pre-deploy`. A migration
+can hold a pre-deploy part (`PreDeployAsync`, or `UpAsync`) and a post-deploy part (`PostDeployAsync`); a pipeline runs
+`db migrate latest --phase pre-deploy` before the deploy and `db migrate latest --phase post-deploy` after it, and
+`--phase all` runs both for a local database. The command prints how many parts are pending in each phase of the run, and
+after a pre-deploy run how many post-deploy parts are waiting. See
+[Running Migrations in Two Pipeline Steps](src/mvdmio.Database.PgSQL/README.md#running-migrations-in-two-pipeline-steps).
 
 Every command exits `0` on success, `1` on any error, and `130` when you press Ctrl+C; see
 **[Exit codes and Ctrl+C](src/mvdmio.Database.PgSQL.Tool/README.md#exit-codes-and-ctrlc)** for what Ctrl+C does in each phase.

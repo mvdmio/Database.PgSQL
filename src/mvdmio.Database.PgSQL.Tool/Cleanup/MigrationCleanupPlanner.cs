@@ -37,7 +37,7 @@ internal static partial class MigrationCleanupPlanner
          .Select(environment => (
             environment.Name,
             Identifiers: PendingMigrationSelector
-               .SelectPending(environment.ExecutedMigrations, discoveredMigrations)
+               .SelectPending(environment.ExecutedMigrations, discoveredMigrations, DeployPhase.All)
                .Select(x => x.Migration.Identifier)
                .ToHashSet()
          ))

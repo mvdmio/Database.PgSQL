@@ -68,15 +68,35 @@ migration counts as pending, so the command does not report "already up to date"
 db migrate latest
 db migrate latest --environment prod
 db migrate latest --connection-string "Host=localhost;Database=mydb;Username=postgres;Password=secret"
+db migrate latest --phase post-deploy
 ```
+
+`--phase` takes `pre-deploy`, `post-deploy`, or `all`, and defaults to `pre-deploy`; any other value fails argument
+parsing like any mistyped option. A migration can hold a pre-deploy part (`PreDeployAsync`, or `UpAsync`) and a
+post-deploy part (`PostDeployAsync`). A pipeline runs `--phase pre-deploy` before the deploy and `--phase post-deploy`
+after it; `--phase all` runs both parts, for local databases and tests.
+
+- The output prints how many parts are pending in each phase of the run: `Pending pre-deploy part(s): N.` for a
+  `pre-deploy` run, `Pending post-deploy part(s): N.` for a `post-deploy` run, both lines for an `all` run. "Already up
+  to date" means nothing is pending in the run's phases. `Found N migration(s), M already applied.` counts the
+  migrations whose pre-deploy part has a row.
+- After a `pre-deploy` run, including one that found nothing pending, the output adds `N post-deploy part(s) waiting
+  for a post-deploy run.` when N is above zero. N includes the parts the run just unlocked.
+- A `pre-deploy` run never runs a post-deploy part. It logs a `Warning:` line naming each post-deploy part left from an
+  earlier run. A `post-deploy` run runs only parts whose pre-deploy part has run and logs a `Warning:` line for each
+  migration whose pre-deploy part is still pending.
+- `Migration complete. N migration(s) applied.` counts the migrations that had a part run.
+- Run `db pull` after the post-deploy step.
 
 ### `db migrate to <identifier>`
 
 Applies migrations up to a specific version (inclusive). Out-of-order migrations at or below the target count as
-pending and run with the same warning; ones above the target wait.
+pending and run with the same warning; ones above the target wait. It takes the same `--phase` option as
+`db migrate latest`, and the identifier ceiling applies to both parts.
 
 ```bash
 db migrate to 202602161430
+db migrate to 202602161430 --phase all
 ```
 
 ### `db pull`

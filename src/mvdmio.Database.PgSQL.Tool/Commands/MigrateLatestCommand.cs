@@ -19,12 +19,15 @@ internal static class MigrateLatestCommand
          Description = "The environment to use (looks up the connection string from connectionStrings in .mvdmio-migrations.yml)"
       };
 
+      var phaseOption = PhaseOption.Create();
+
       var command = new Command("latest", "Migrate the database to the latest version");
       command.Options.Add(connectionStringOption);
       command.Options.Add(environmentOption);
+      command.Options.Add(phaseOption);
 
       command.SetCancellableAction((parseResult, cancellationToken) => handler.HandleAsync(
-         MigrateRequest.Latest,
+         MigrateRequest.Latest(parseResult.GetValue(phaseOption)),
          parseResult.GetValue(connectionStringOption),
          parseResult.GetValue(environmentOption),
          cancellationToken

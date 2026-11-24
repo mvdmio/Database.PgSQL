@@ -41,10 +41,7 @@ public sealed class MigrationClassNameAnalyzer : DiagnosticAnalyzer
    {
       var namedType = (INamedTypeSymbol)context.Symbol;
 
-      if (namedType.TypeKind != TypeKind.Class || namedType.IsAbstract)
-         return;
-
-      if (MigrationInterface.FindOn(namedType) is null)
+      if (!MigrationSymbols.IsConcreteMigration(namedType))
          return;
 
       var className = namedType.Name;

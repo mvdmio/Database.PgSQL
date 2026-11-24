@@ -46,41 +46,86 @@ internal class MigrationExecutionService
 
       if (!await TryReportSchemaPathAsync(request, environmentName, project, alreadyExecuted, cancellationToken))
       {
-         var pendingCount = PendingMigrationSelector.SelectPending(alreadyExecuted, targetMigrations, request.TargetIdentifier).Count;
+         var pending = PendingMigrationSelector.SelectPending(alreadyExecuted, targetMigrations, request.Phase, request.TargetIdentifier);
+         var alreadyAppliedCount = alreadyExecuted.Count(PendingMigrationSelector.IsPreDeployRow);
 
          if (request.IsLatest)
-         {
-            _reporter.WriteInfo($"Found {targetMigrations.Count} migration(s), {alreadyExecuted.Length} already applied.");
-
-            if (pendingCount == 0)
-            {
-               _reporter.WriteInfo("Database is already up to date.");
-               return ExitCodes.SUCCESS;
-            }
-         }
+            _reporter.WriteInfo($"Found {targetMigrations.Count} migration(s), {alreadyAppliedCount} already applied.");
          else
-         {
-            _reporter.WriteInfo($"Found {targetMigrations.Count} migration(s) up to {request.TargetIdentifier}, {alreadyExecuted.Length} already applied.");
+            _reporter.WriteInfo($"Found {targetMigrations.Count} migration(s) up to {request.TargetIdentifier}, {alreadyAppliedCount} already applied.");
 
-            if (pendingCount == 0)
-            {
-               _reporter.WriteInfo("Database is already up to date for the specified target.");
-               return ExitCodes.SUCCESS;
-            }
+         ReportPendingCounts(request.Phase, pending);
+
+         if (pending.Count == 0)
+         {
+            _reporter.WriteInfo(request.IsLatest ? "Database is already up to date." : "Database is already up to date for the specified target.");
+            WarnAboutUnrunPostDeployParts(request, alreadyExecuted, targetMigrations);
+            ReportWaitingPostDeployParts(request, alreadyExecuted, targetMigrations);
+            return ExitCodes.SUCCESS;
          }
 
          _reporter.WriteInfo(string.Empty);
       }
 
       if (request.IsLatest)
-         await runtime.MigrateDatabaseToLatestAsync(cancellationToken);
+         await runtime.MigrateDatabaseToLatestAsync(request.Phase, cancellationToken);
       else
-         await runtime.MigrateDatabaseToAsync(request.TargetIdentifier!.Value, cancellationToken);
+         await runtime.MigrateDatabaseToAsync(request.TargetIdentifier!.Value, request.Phase, cancellationToken);
 
       var finalExecuted = (await runtime.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken)).ToArray();
-      var appliedCount = finalExecuted.Length - alreadyExecuted.Length;
+      var appliedCount = CountMigrationsWithNewRows(alreadyExecuted, finalExecuted);
       _reporter.WriteInfo($"Migration complete. {appliedCount} migration(s) applied.");
+      ReportWaitingPostDeployParts(request, finalExecuted, targetMigrations);
       return ExitCodes.SUCCESS;
+   }
+
+   private static int CountMigrationsWithNewRows(
+      IEnumerable<ExecutedMigrationModel> before,
+      IEnumerable<ExecutedMigrationModel> after
+   )
+   {
+      var recordedBefore = before.Select(x => (x.Scope, x.Identifier, x.Phase)).ToHashSet();
+
+      return after
+         .Where(x => !recordedBefore.Contains((x.Scope, x.Identifier, x.Phase)))
+         .Select(x => (x.Scope, x.Identifier))
+         .Distinct()
+         .Count();
+   }
+
+   private void ReportPendingCounts(DeployPhase phase, IReadOnlyList<PendingMigration> pending)
+   {
+      foreach (var part in new[] { DeployPhase.PreDeploy, DeployPhase.PostDeploy }.Where(part => phase.HasFlag(part)))
+         _reporter.WriteInfo($"Pending {DeployPhaseNames.Format(part)} part(s): {pending.Count(x => x.Phase == part)}.");
+   }
+
+   private void WarnAboutUnrunPostDeployParts(
+      MigrateRequest request,
+      IReadOnlyCollection<ExecutedMigrationModel> executed,
+      IReadOnlyList<IDbMigration> targetMigrations
+   )
+   {
+      var logger = new ConsoleMigratorLogger(_reporter);
+
+      if (request.Phase == DeployPhase.PreDeploy)
+         MigrationWarnings.LogWaitingPostDeployParts(logger, PendingMigrationSelector.SelectWaitingPostDeployParts(executed, targetMigrations, request.TargetIdentifier));
+
+      if (request.Phase == DeployPhase.PostDeploy)
+         MigrationWarnings.LogBlockedPostDeployParts(logger, PendingMigrationSelector.SelectBlockedPostDeployParts(executed, targetMigrations, request.TargetIdentifier));
+   }
+
+   private void ReportWaitingPostDeployParts(
+      MigrateRequest request,
+      IReadOnlyCollection<ExecutedMigrationModel> executed,
+      IReadOnlyList<IDbMigration> targetMigrations
+   )
+   {
+      if (request.Phase != DeployPhase.PreDeploy)
+         return;
+
+      var waitingCount = PendingMigrationSelector.SelectWaitingPostDeployParts(executed, targetMigrations, request.TargetIdentifier).Count;
+      if (waitingCount > 0)
+         _reporter.WriteInfo($"{waitingCount} post-deploy part(s) waiting for a post-deploy run.");
    }
 
    private IReadOnlyList<IDbMigration>? GetTargetMigrations(
@@ -206,8 +251,8 @@ internal interface IMigrationRuntime : IAsyncDisposable
 {
    Task<bool> IsDatabaseEmptyAsync(CancellationToken cancellationToken);
    Task<IEnumerable<ExecutedMigrationModel>> RetrieveAlreadyExecutedMigrationsAsync(CancellationToken cancellationToken);
-   Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken);
-   Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken);
+   Task MigrateDatabaseToLatestAsync(DeployPhase phase, CancellationToken cancellationToken);
+   Task MigrateDatabaseToAsync(long targetIdentifier, DeployPhase phase, CancellationToken cancellationToken);
 }
 
 internal interface IMigrationRuntimeFactory
@@ -231,7 +276,7 @@ internal sealed class DatabaseMigrationRuntime : IMigrationRuntime
    public DatabaseMigrationRuntime(string connectionString, string? environmentName, MigrationProjectContext project)
    {
       _connection = new DatabaseConnection(connectionString);
-      _migrator = new DatabaseMigrator(_connection, environmentName, new ConsoleLoggerFactory(), [project.Assembly], project.MigrationRetriever);
+      _migrator = new DatabaseMigrator(_connection, environmentName, new ConsoleLoggerFactory(new ConsoleMigrateReporter()), [project.Assembly], project.MigrationRetriever);
    }
 
    public async ValueTask DisposeAsync()
@@ -249,22 +294,29 @@ internal sealed class DatabaseMigrationRuntime : IMigrationRuntime
       return await _migrator.RetrieveAlreadyExecutedMigrationsAsync(cancellationToken);
    }
 
-   public async Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken)
+   public async Task MigrateDatabaseToLatestAsync(DeployPhase phase, CancellationToken cancellationToken)
    {
-      await _migrator.MigrateDatabaseToLatestAsync(cancellationToken);
+      await _migrator.MigrateDatabaseToLatestAsync(phase, cancellationToken);
    }
 
-   public async Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken)
+   public async Task MigrateDatabaseToAsync(long targetIdentifier, DeployPhase phase, CancellationToken cancellationToken)
    {
-      await _migrator.MigrateDatabaseToAsync(targetIdentifier, cancellationToken);
+      await _migrator.MigrateDatabaseToAsync(targetIdentifier, phase, cancellationToken);
    }
 }
 
 internal sealed class ConsoleLoggerFactory : ILoggerFactory
 {
+   private readonly IMigrateReporter _reporter;
+
+   public ConsoleLoggerFactory(IMigrateReporter reporter)
+   {
+      _reporter = reporter;
+   }
+
    public ILogger CreateLogger(string categoryName)
    {
-      return new ConsoleMigratorLogger();
+      return new ConsoleMigratorLogger(_reporter);
    }
 
    public void AddProvider(ILoggerProvider provider)
@@ -278,6 +330,13 @@ internal sealed class ConsoleLoggerFactory : ILoggerFactory
 
 internal sealed class ConsoleMigratorLogger : ILogger<DatabaseMigrator>
 {
+   private readonly IMigrateReporter _reporter;
+
+   public ConsoleMigratorLogger(IMigrateReporter reporter)
+   {
+      _reporter = reporter;
+   }
+
    public IDisposable? BeginScope<TState>(TState state)
       where TState : notnull
    {
@@ -300,8 +359,8 @@ internal sealed class ConsoleMigratorLogger : ILogger<DatabaseMigrator>
          message = $"{message}{Environment.NewLine}{exception}";
 
       if (logLevel >= LogLevel.Error)
-         Console.Error.WriteLine($"Error: {message}");
+         _reporter.WriteError($"Error: {message}");
       else
-         Console.WriteLine($"Warning: {message}");
+         _reporter.WriteInfo($"Warning: {message}");
    }
 }

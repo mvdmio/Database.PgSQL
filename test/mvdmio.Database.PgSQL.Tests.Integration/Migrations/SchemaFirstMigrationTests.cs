@@ -187,6 +187,28 @@ public class SchemaFirstMigrationTests : IAsyncLifetime
    }
 
    [Fact]
+   public async Task MigrateDatabaseToLatestAsync_WithEmbeddedSchema_RecordsBaselineRowWithNullPhase()
+   {
+      await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());
+
+      var migrationRetriever = new ReflectionMigrationRetriever(typeof(TestFixture).Assembly);
+      var migrator = new DatabaseMigrator(
+         db,
+         null,
+         NullLoggerFactory.Instance,
+         [TestAssembly],
+         migrationRetriever);
+
+      await migrator.MigrateDatabaseToLatestAsync(CancellationToken);
+
+      var baselinePhases = (await db.Dapper.QueryAsync<string?>(
+         """SELECT phase FROM "mvdmio"."migrations" WHERE identifier = 202505181000""",
+         ct: CancellationToken)).ToArray();
+
+      baselinePhases.Should().ContainSingle().Which.Should().BeNull();
+   }
+
+   [Fact]
    public async Task MigrateDatabaseToLatestAsync_WithEnvironmentSpecificSchema_AppliesCorrectSchema()
    {
       await using var db = _connectionFactory.BuildConnection(_dbContainer.GetConnectionString());

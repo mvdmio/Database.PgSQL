@@ -866,6 +866,40 @@ public class SchemaExtractionTests : TestBase
    }
 
    [Fact]
+   public async Task GetCurrentMigrationVersionAsync_WithPreAndPostDeployRowsForOneIdentifier_ReturnsThePreDeployRow()
+   {
+      await Db.Dapper.ExecuteAsync(
+         """
+         INSERT INTO "mvdmio"."migrations" (identifier, name, executed_at, scope, phase)
+         VALUES (202601010001, 'PostDeployRow', NOW(), 'Phased.App', 'post-deploy'),
+                (202601010001, 'PreDeployRow', NOW(), 'Phased.App', 'pre-deploy')
+         """,
+         ct: CancellationToken);
+
+      var currentMigrations = await Db.Management.Schema.GetCurrentMigrationVersionAsync(CancellationToken);
+
+      currentMigrations.Where(m => m.Scope == "Phased.App").Should().ContainSingle()
+         .Which.Name.Should().Be("PreDeployRow");
+   }
+
+   [Fact]
+   public async Task GetCurrentMigrationVersionAsync_WithNullAndPostDeployRowsForOneIdentifier_ReturnsTheNullPhaseRow()
+   {
+      await Db.Dapper.ExecuteAsync(
+         """
+         INSERT INTO "mvdmio"."migrations" (identifier, name, executed_at, scope, phase)
+         VALUES (202601010001, 'PostDeployRow', NOW(), 'Phased.App', 'post-deploy'),
+                (202601010001, 'NullPhaseRow', NOW(), 'Phased.App', NULL)
+         """,
+         ct: CancellationToken);
+
+      var currentMigrations = await Db.Management.Schema.GetCurrentMigrationVersionAsync(CancellationToken);
+
+      currentMigrations.Where(m => m.Scope == "Phased.App").Should().ContainSingle()
+         .Which.Name.Should().Be("NullPhaseRow");
+   }
+
+   [Fact]
    public async Task GetCurrentMigrationVersionAsync_WithOwnedScopes_ExcludesForeignScopesAndKeepsLegacyRows()
    {
       await InsertForeignAndLegacyMigrationRowsAsync();

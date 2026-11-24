@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Tests.Unit.Building;
 using mvdmio.Database.PgSQL.Tool.Commands;
 using System.CommandLine;
@@ -28,6 +29,51 @@ public sealed class RootCommandTests : IDisposable
 
       exitCode.Should().Be(1);
       error.ToString().Should().Contain("Error: No connection string provided.");
+   }
+
+   [Theory]
+   [InlineData("migrate latest --phase pre-deploy", DeployPhase.PreDeploy)]
+   [InlineData("migrate latest --phase post-deploy", DeployPhase.PostDeploy)]
+   [InlineData("migrate latest --phase all", DeployPhase.All)]
+   [InlineData("migrate latest", DeployPhase.PreDeploy)]
+   [InlineData("migrate to 202602161430 --phase pre-deploy", DeployPhase.PreDeploy)]
+   [InlineData("migrate to 202602161430 --phase post-deploy", DeployPhase.PostDeploy)]
+   [InlineData("migrate to 202602161430 --phase all", DeployPhase.All)]
+   [InlineData("migrate to 202602161430", DeployPhase.PreDeploy)]
+   public void Parse_MigrateWithPhaseOption_ParsesIntoDeployPhase(string commandLine, DeployPhase expected)
+   {
+      var parseResult = RootCommandFactory.Create().Parse(commandLine.Split(' '));
+
+      parseResult.Errors.Should().BeEmpty();
+      parseResult.GetValue<DeployPhase>("--phase").Should().Be(expected);
+   }
+
+   [Theory]
+   [InlineData("migrate latest --phase sometimes")]
+   [InlineData("migrate latest --phase PRE-DEPLOY")]
+   [InlineData("migrate to 202602161430 --phase sometimes")]
+   public void Invoke_MigrateWithUnknownPhase_ReportsParseErrorAndExitsWithOne(string commandLine)
+   {
+      var error = new StringWriter();
+      Console.SetError(error);
+
+      var exitCode = RootCommandFactory.Create().Parse(commandLine.Split(' ')).Invoke();
+
+      exitCode.Should().Be(1);
+      error.ToString().Should().Contain("not recognized for option '--phase'. Must be one of: pre-deploy, post-deploy, all.");
+   }
+
+   [Theory]
+   [InlineData("migrate latest --help")]
+   [InlineData("migrate to --help")]
+   public void Invoke_MigrateHelp_ListsThePhaseValuesAndItsDefault(string commandLine)
+   {
+      var output = new StringWriter();
+
+      var exitCode = RootCommandFactory.Create().Parse(commandLine.Split(' ')).Invoke(new InvocationConfiguration { Output = output });
+
+      exitCode.Should().Be(0);
+      output.ToString().Should().Contain("--phase").And.Contain("pre-deploy, post-deploy, all");
    }
 
    [Fact]

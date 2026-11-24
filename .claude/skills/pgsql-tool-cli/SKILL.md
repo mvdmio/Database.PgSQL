@@ -78,7 +78,17 @@ db migrate latest --connection-string "Host=localhost;Database=mydb;Username=pos
 db migrate to 202602161430 -e acc
 ```
 
+Both migrate commands take `--phase pre-deploy|post-deploy|all` (default `pre-deploy`). A migration holds a pre-deploy part (`PreDeployAsync`, or `UpAsync`) and optionally a post-deploy part (`PostDeployAsync`); a pipeline runs `--phase pre-deploy` before the deploy and `--phase post-deploy` after it, and `--phase all` runs both locally.
+
+```bash
+db migrate latest --phase pre-deploy
+db migrate latest --phase post-deploy
+db migrate to 202602161430 --phase all
+```
+
 Important behavior:
+- A pre-deploy run never runs a post-deploy part; it warns about waiting ones and prints how many are waiting. A post-deploy run skips a part whose pre-deploy part is still pending and warns.
+- The output prints the pending count per phase of the run.
 - The configured project is built during migrate.
 - Migrations are tracked in `"mvdmio"."migrations"`.
 - On an empty database, an embedded schema may be applied first if a matching schema file exists.

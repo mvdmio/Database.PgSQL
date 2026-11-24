@@ -4,6 +4,9 @@ internal static class MigrationsTableManager
 {
    public const string UNIQUE_INDEX_NAME = "migrations_scope_identifier_key";
 
+   public const string PRE_DEPLOY_PHASE_TEXT = "pre-deploy";
+   public const string POST_DEPLOY_PHASE_TEXT = "post-deploy";
+
    public static async Task EnsureTableAsync(DatabaseConnection connection, CancellationToken cancellationToken = default)
    {
       if (await IsTableInCurrentShapeAsync(connection, cancellationToken))
@@ -17,13 +20,16 @@ internal static class MigrationsTableManager
             identifier  BIGINT      NOT NULL,
             name        TEXT        NOT NULL,
             executed_at TIMESTAMPTZ NOT NULL,
-            scope       TEXT        NULL
+            scope       TEXT        NULL,
+            phase       TEXT        NULL
          );
 
          ALTER TABLE "mvdmio"."migrations" ADD COLUMN IF NOT EXISTS scope TEXT NULL;
+         ALTER TABLE "mvdmio"."migrations" ADD COLUMN IF NOT EXISTS phase TEXT NULL;
          ALTER TABLE "mvdmio"."migrations" DROP CONSTRAINT IF EXISTS migrations_pkey;
 
-         CREATE UNIQUE INDEX IF NOT EXISTS {UNIQUE_INDEX_NAME} ON "mvdmio"."migrations" (scope, identifier);
+         DROP INDEX IF EXISTS "mvdmio".{UNIQUE_INDEX_NAME};
+         CREATE UNIQUE INDEX {UNIQUE_INDEX_NAME} ON "mvdmio"."migrations" (scope, identifier, phase);
          """,
          ct: cancellationToken
       );
@@ -31,11 +37,21 @@ internal static class MigrationsTableManager
 
    public static async Task<bool> ScopeColumnExistsAsync(DatabaseConnection connection, CancellationToken cancellationToken = default)
    {
+      return await ColumnExistsAsync(connection, "scope", cancellationToken);
+   }
+
+   public static async Task<bool> PhaseColumnExistsAsync(DatabaseConnection connection, CancellationToken cancellationToken = default)
+   {
+      return await ColumnExistsAsync(connection, "phase", cancellationToken);
+   }
+
+   private static async Task<bool> ColumnExistsAsync(DatabaseConnection connection, string columnName, CancellationToken cancellationToken)
+   {
       return await connection.Dapper.ExecuteScalarAsync<bool>(
-         """
+         $"""
          SELECT EXISTS (
             SELECT 1 FROM information_schema.columns
-            WHERE table_schema = 'mvdmio' AND table_name = 'migrations' AND column_name = 'scope'
+            WHERE table_schema = 'mvdmio' AND table_name = 'migrations' AND column_name = '{columnName}'
          )
          """,
          ct: cancellationToken
@@ -51,8 +67,13 @@ internal static class MigrationsTableManager
                    WHERE table_schema = 'mvdmio' AND table_name = 'migrations' AND column_name = 'scope'
                 )
             AND EXISTS (
+                   SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'mvdmio' AND table_name = 'migrations' AND column_name = 'phase'
+                )
+            AND EXISTS (
                    SELECT 1 FROM pg_indexes
                    WHERE schemaname = 'mvdmio' AND tablename = 'migrations' AND indexname = '{UNIQUE_INDEX_NAME}'
+                     AND indexdef LIKE '%(scope, identifier, phase)%'
                 )
             AND NOT EXISTS (
                    SELECT 1

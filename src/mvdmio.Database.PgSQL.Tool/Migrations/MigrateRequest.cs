@@ -1,13 +1,18 @@
+using mvdmio.Database.PgSQL.Migrations;
+
 namespace mvdmio.Database.PgSQL.Tool.Migrations;
 
-internal sealed record MigrateRequest(long? TargetIdentifier)
+internal sealed record MigrateRequest(long? TargetIdentifier, DeployPhase Phase)
 {
-   public static MigrateRequest Latest { get; } = new((long?)null);
-
    public bool IsLatest => !TargetIdentifier.HasValue;
 
-   public static MigrateRequest To(long targetIdentifier)
+   public static MigrateRequest Latest(DeployPhase phase)
    {
-      return new MigrateRequest(targetIdentifier);
+      return new MigrateRequest(null, phase);
+   }
+
+   public static MigrateRequest To(long targetIdentifier, DeployPhase phase)
+   {
+      return new MigrateRequest(targetIdentifier, phase);
    }
 }

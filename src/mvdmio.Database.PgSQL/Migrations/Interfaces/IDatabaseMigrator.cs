@@ -44,7 +44,37 @@ public interface IDatabaseMigrator
    Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken = default);
 
    /// <summary>
-   ///    Run a migration on the database. Returns true if the migration ran successfully. False otherwise.
+   ///    Run the parts of all pending migrations that belong to the requested phase, in identifier order, with the
+   ///    pre-deploy part of a migration before its post-deploy part. <see cref="MigrateDatabaseToLatestAsync(CancellationToken)" />
+   ///    states which pre-deploy parts are pending; it equals this method with <see cref="DeployPhase.PreDeploy" />.
+   ///    A post-deploy part is pending when its migration implements <see cref="IDbMigration.PostDeployAsync" />, has a
+   ///    pre-deploy row, has no post-deploy row, and its identifier is above the scope's baseline. In a
+   ///    <see cref="DeployPhase.PostDeploy" /> run the pre-deploy row must exist before the run starts; in a
+   ///    <see cref="DeployPhase.All" /> run a post-deploy part runs right after the pre-deploy part of the same run.
+   ///    A pre-deploy run logs a warning naming each post-deploy part left waiting from an earlier run, and a
+   ///    post-deploy run logs a warning naming each migration whose post-deploy part is blocked by a pending
+   ///    pre-deploy part.
+   /// </summary>
+   /// <param name="phase">The phase to run: <see cref="DeployPhase.PreDeploy" />, <see cref="DeployPhase.PostDeploy" /> or <see cref="DeployPhase.All" />.</param>
+   /// <param name="cancellationToken">Cancellation token.</param>
+   /// <exception cref="ArgumentOutOfRangeException">The phase is zero or has a bit outside <see cref="DeployPhase.All" />.</exception>
+   Task MigrateDatabaseToLatestAsync(DeployPhase phase, CancellationToken cancellationToken = default);
+
+   /// <summary>
+   ///    Run the parts of all pending migrations up to and including the specified identifier that belong to the
+   ///    requested phase. The identifier ceiling applies to both parts of a migration, and
+   ///    <see cref="MigrateDatabaseToAsync(long, CancellationToken)" /> equals this method with
+   ///    <see cref="DeployPhase.PreDeploy" />. <see cref="MigrateDatabaseToLatestAsync(DeployPhase, CancellationToken)" />
+   ///    describes which parts are pending.
+   /// </summary>
+   /// <param name="targetIdentifier">The migration identifier to migrate up to (inclusive).</param>
+   /// <param name="phase">The phase to run: <see cref="DeployPhase.PreDeploy" />, <see cref="DeployPhase.PostDeploy" /> or <see cref="DeployPhase.All" />.</param>
+   /// <param name="cancellationToken">Cancellation token.</param>
+   /// <exception cref="ArgumentOutOfRangeException">The phase is zero or has a bit outside <see cref="DeployPhase.All" />.</exception>
+   Task MigrateDatabaseToAsync(long targetIdentifier, DeployPhase phase, CancellationToken cancellationToken = default);
+
+   /// <summary>
+   ///    Run the pre-deploy part of a migration on the database and record its history row.
    ///    A token cancelled before the migration starts throws <see cref="OperationCanceledException" /> and runs
    ///    nothing. A migration that has started finishes and records its row; cancellation never interrupts it.
    /// </summary>

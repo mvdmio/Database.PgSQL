@@ -24,13 +24,16 @@ internal static class MigrateToCommand
          Description = "The environment to use (looks up the connection string from connectionStrings in .mvdmio-migrations.yml)"
       };
 
+      var phaseOption = PhaseOption.Create();
+
       var command = new Command("to", "Migrate the database up to a specific version");
       command.Arguments.Add(identifierArgument);
       command.Options.Add(connectionStringOption);
       command.Options.Add(environmentOption);
+      command.Options.Add(phaseOption);
 
       command.SetCancellableAction((parseResult, cancellationToken) => handler.HandleAsync(
-         MigrateRequest.To(parseResult.GetValue(identifierArgument)),
+         MigrateRequest.To(parseResult.GetValue(identifierArgument), parseResult.GetValue(phaseOption)),
          parseResult.GetValue(connectionStringOption),
          parseResult.GetValue(environmentOption),
          cancellationToken

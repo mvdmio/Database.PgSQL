@@ -1249,6 +1249,8 @@ Besides `MigrateDatabaseToLatestAsync`, the migrator offers:
   too
 - `RetrieveAlreadyExecutedMigrationsAsync()` — read the migration history
 - `RunAsync(migration)` — run a single migration and record it
+- `MigrateDatabaseToLatestAsync(phase)`, `MigrateDatabaseToAsync(identifier, phase)` and `RunAsync(migration, phase)` —
+  run one part of the migrations, see [Running Migrations in Two Pipeline Steps](#running-migrations-in-two-pipeline-steps)
 - `IsDatabaseEmptyAsync()` — check whether any migration has ever been applied
 
 ### Migrations Outside a Transaction
@@ -1311,8 +1313,79 @@ The standard way to change a large table:
 - **Back-fill in batches** that each pick only rows still unfilled, so a re-run picks up where the failed run stopped.
 - **Build an index** with `DROP INDEX CONCURRENTLY IF EXISTS`, then `CREATE INDEX CONCURRENTLY`. A failed concurrent
   build leaves an invalid index behind; a plain `CREATE INDEX CONCURRENTLY IF NOT EXISTS` would skip it on the re-run.
-- **Work that can last longer than the deploy waits for the app to start** does not belong in a migration, because
-  migrations run at app start. Put it in an app job.
+- **Work that can last longer than the deploy waits** does not belong in a migration your pipeline runs before the
+  deploy. Put it in an app job, or run it in a [post-deploy part](#running-migrations-in-two-pipeline-steps).
+
+### Running Migrations in Two Pipeline Steps
+
+Some changes need work at two points of a deploy. Replacing an index means building the new index while the old
+application version still serves and uses the old one, and dropping the old index only after the new version is
+deployed. A migration can hold both halves: a **pre-deploy part** and a **post-deploy part**, in one class. Write the
+pre-deploy part in `PreDeployAsync` (or in `UpAsync`, as every migration does) and the post-deploy part in
+`PostDeployAsync`.
+
+```csharp
+public class _202611231000_ReplaceRequestsExportCursorIndex : IDbMigration
+{
+   public bool RunsInTransaction => false;
+
+   public async Task PreDeployAsync(DatabaseConnection db)
+   {
+      await db.Dapper.ExecuteAsync("DROP INDEX CONCURRENTLY IF EXISTS public.ix_requests_export_cursor_v2");
+      await db.Dapper.ExecuteAsync("CREATE INDEX CONCURRENTLY ix_requests_export_cursor_v2 ON public.requests (export_cursor, created_at)");
+   }
+
+   public async Task PostDeployAsync(DatabaseConnection db)
+   {
+      await db.Dapper.ExecuteAsync("DROP INDEX CONCURRENTLY IF EXISTS public.ix_requests_export_cursor");
+   }
+}
+```
+
+`RunsInTransaction => false` applies to both parts, so `CREATE INDEX CONCURRENTLY` and `DROP INDEX CONCURRENTLY`
+both work. Write each part so it gives the same result when run again from any point it can stop at: a part that
+fails partway stays unrecorded and runs again from its first statement. `CREATE INDEX CONCURRENTLY IF NOT EXISTS`
+is not safe to re-run, because a failed build leaves an invalid index that `IF NOT EXISTS` skips; drop first, as above.
+
+Your pipeline runs the two parts as two steps:
+
+```bash
+db migrate latest --phase pre-deploy     # before the deploy: the old version still serves
+# ... deploy the new application version ...
+db migrate latest --phase post-deploy    # after the deploy: the old version is gone
+db pull                                  # refresh the schema file after the post-deploy step
+```
+
+- `--phase` takes `pre-deploy`, `post-deploy`, or `all`. Leaving it out runs `pre-deploy`, so existing pipelines and
+  existing migrations behave as before. `db migrate to <identifier>` takes the same option.
+- `--phase all` runs both parts, pre-deploy first, for local databases and tests.
+- A pre-deploy run never runs a post-deploy part. When post-deploy parts are still waiting from an earlier run, it
+  logs a warning that names them, and `db migrate` prints how many post-deploy parts are now waiting.
+- A post-deploy run runs only post-deploy parts whose pre-deploy part has already run. It logs a warning for every
+  migration with a post-deploy part whose pre-deploy part is still pending.
+- Each part is its own row in `mvdmio.migrations`, with `phase` set to `pre-deploy` or `post-deploy`. `db migrate`
+  prints how many parts are pending in each phase of the run.
+- A migration that implements only `UpAsync` has a pre-deploy part and no post-deploy part. Adding `PostDeployAsync`
+  to a migration that already ran makes its post-deploy part run at the next post-deploy run.
+- A migration folded into an [embedded schema file](#embedded-schema-files) counts as fully applied, both parts.
+  A scope's first migration, the one at its baseline, counts as fully applied too once its pre-deploy part has run,
+  so it should not rely on a separate post-deploy run.
+- Only an application on version 0.47.0 or later runs post-deploy parts. An older version sharing the database keeps
+  migrating: it counts a migration as run once any row for its identifier exists, and never runs a post-deploy part.
+- Run `db pull` after the post-deploy step, so the schema file reflects the finished change.
+
+From code, `MigrateDatabaseToLatestAsync(DeployPhase.PostDeploy)` and `MigrateDatabaseToAsync(identifier, DeployPhase.PostDeploy)`
+take a `DeployPhase` (`PreDeploy`, `PostDeploy`, or `All`); the overloads without one run pre-deploy only.
+`RunAsync(migration, phase)` runs the parts you pass for one migration and records them. A phase of `0`, or one with a
+bit outside `All`, throws `ArgumentOutOfRangeException`. `RetrieveAlreadyExecutedMigrationsAsync` reports the part
+each row records in `ExecutedMigrationModel.Phase`.
+
+The build rejects a migration whose parts are unclear: `PGSQL0036` when it defines `PostDeployAsync` together with
+`UpAsync`, `PGSQL0037` when it defines both `UpAsync` and `PreDeployAsync`, and `PGSQL0038` when it defines neither
+`UpAsync` nor `PreDeployAsync`, including a class with only `PostDeployAsync`.
+
+A custom implementation of `IDatabaseMigrator` has to add the two `DeployPhase` overloads, which is a breaking change
+on 0.x.
 
 ### Migration Scopes
 
@@ -1552,6 +1625,9 @@ The package ships analyzers that catch mistakes at compile time instead of at ru
 | `PGSQL0033` | Error    | `[Relation]` sits on a property whose type is not a relation definition               |
 | `PGSQL0034` | Warning  | A relation reads the same columns of its own table as another that carries a condition, but states none itself |
 | `PGSQL0035` | Error    | A relation key pair's two columns can both hold null                                  |
+| `PGSQL0036` | Error    | A migration defines `PostDeployAsync` together with `UpAsync`                          |
+| `PGSQL0037` | Error    | A migration defines both `UpAsync` and `PreDeployAsync`                                |
+| `PGSQL0038` | Error    | A migration defines neither `UpAsync` nor `PreDeployAsync`                             |
 | `PGSQL0039` | Error    | A migration runs a statement PostgreSQL refuses inside a transaction without setting `RunsInTransaction` to `false` |
 
 `PGSQL0001` is a warning rather than an error because you can implement `Identifier` and `Name` yourself instead of

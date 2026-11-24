@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Tool.Configuration;
 using mvdmio.Database.PgSQL.Tool.Migrations;
@@ -22,7 +23,7 @@ public class MigrateHandlerTests
          }
       };
 
-      var exitCode = await handler.HandleAsync(MigrateRequest.Latest, config, null, "prod", TestContext.Current.CancellationToken);
+      var exitCode = await handler.HandleAsync(MigrateRequest.Latest(DeployPhase.PreDeploy), config, null, "prod", TestContext.Current.CancellationToken);
 
       exitCode.Should().Be(1);
       reporter.Errors.Should().ContainInOrder(
@@ -41,7 +42,7 @@ public class MigrateHandlerTests
       var reporter = new FakeMigrateReporter();
       var handler = new MigrateHandler(projectLoader, executionService, reporter);
 
-      var exitCode = await handler.HandleAsync(MigrateRequest.To(202602161430), new ToolConfiguration(), null, null, TestContext.Current.CancellationToken);
+      var exitCode = await handler.HandleAsync(MigrateRequest.To(202602161430, DeployPhase.PreDeploy), new ToolConfiguration(), null, null, TestContext.Current.CancellationToken);
 
       exitCode.Should().Be(1);
       reporter.Errors.Should().ContainInOrder(
@@ -65,7 +66,7 @@ public class MigrateHandlerTests
          }
       };
 
-      var exitCode = await handler.HandleAsync(MigrateRequest.To(1), config, null, null, TestContext.Current.CancellationToken);
+      var exitCode = await handler.HandleAsync(MigrateRequest.To(1, DeployPhase.PreDeploy), config, null, null, TestContext.Current.CancellationToken);
 
       exitCode.Should().Be(1);
    }
@@ -91,7 +92,7 @@ public class MigrateHandlerTests
             ["local"] = "Host=localhost;Database=localdb"
          }
       };
-      var request = MigrateRequest.To(202602161430);
+      var request = MigrateRequest.To(202602161430, DeployPhase.PreDeploy);
 
       var exitCode = await handler.HandleAsync(request, config, null, null, TestContext.Current.CancellationToken);
 
@@ -104,6 +105,27 @@ public class MigrateHandlerTests
       executionService.EnvironmentName.Should().Be("local");
       executionService.Project.Should().BeSameAs(project);
       reporter.Errors.Should().BeEmpty();
+   }
+
+   [Theory]
+   [InlineData(DeployPhase.PreDeploy)]
+   [InlineData(DeployPhase.PostDeploy)]
+   [InlineData(DeployPhase.All)]
+   public async Task HandleAsync_WithPhase_HandsThePhaseToTheExecutionService(DeployPhase phase)
+   {
+      var executionService = new FakeMigrationExecutionService();
+      var handler = new MigrateHandler(new FakeMigrationProjectLoader(), executionService, new FakeMigrateReporter());
+      var config = new ToolConfiguration
+      {
+         ConnectionStrings = new Dictionary<string, string>
+         {
+            ["local"] = "Host=localhost;Database=localdb"
+         }
+      };
+
+      await handler.HandleAsync(MigrateRequest.Latest(phase), config, null, null, TestContext.Current.CancellationToken);
+
+      executionService.Request!.Phase.Should().Be(phase);
    }
 
    private sealed class FakeMigrationProjectLoader : MigrationProjectLoader

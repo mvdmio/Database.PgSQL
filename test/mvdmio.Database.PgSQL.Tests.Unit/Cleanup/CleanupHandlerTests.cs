@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.MigrationRetrievers.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.Models;
@@ -276,12 +277,12 @@ public class CleanupHandlerTests : IDisposable
          return Task.FromResult(rows.AsEnumerable());
       }
 
-      public Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken)
+      public Task MigrateDatabaseToLatestAsync(DeployPhase phase, CancellationToken cancellationToken)
       {
          throw new NotSupportedException("Cleanup never migrates.");
       }
 
-      public Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken)
+      public Task MigrateDatabaseToAsync(long targetIdentifier, DeployPhase phase, CancellationToken cancellationToken)
       {
          throw new NotSupportedException("Cleanup never migrates.");
       }

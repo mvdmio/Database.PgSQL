@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using mvdmio.Database.PgSQL.Migrations;
 using mvdmio.Database.PgSQL.Migrations.Interfaces;
 using mvdmio.Database.PgSQL.Migrations.Models;
 using mvdmio.Database.PgSQL.Tool.Migrations;
@@ -17,7 +18,7 @@ public class MigrationExecutionServiceTests
       var project = CreateProjectContext([new FakeDbMigration(202602161500)]);
 
       var exitCode = await service.ExecuteAsync(
-         MigrateRequest.To(202602161400),
+         MigrateRequest.To(202602161400, DeployPhase.PreDeploy),
          "Host=localhost;Database=mydb",
          "local",
          project,
@@ -49,7 +50,7 @@ public class MigrationExecutionServiceTests
       var project = CreateProjectContext([new FakeDbMigration(202602161430), new FakeDbMigration(202602161530)]);
 
       var exitCode = await service.ExecuteAsync(
-         MigrateRequest.Latest,
+         MigrateRequest.Latest(DeployPhase.PreDeploy),
          "Host=localhost;Database=mydb",
          "local",
          project,
@@ -82,7 +83,7 @@ public class MigrationExecutionServiceTests
       var project = CreateProjectContext([new FakeDbMigration(202602161430)]);
 
       await service.ExecuteAsync(
-         MigrateRequest.Latest,
+         MigrateRequest.Latest(DeployPhase.PreDeploy),
          "Host=localhost;Database=mydb",
          "local",
          project,
@@ -106,7 +107,7 @@ public class MigrationExecutionServiceTests
       var project = CreateProjectContext([new FakeDbMigration(202602161430), new FakeDbMigration(202602161530)]);
 
       var exitCode = await service.ExecuteAsync(
-         MigrateRequest.Latest,
+         MigrateRequest.Latest(DeployPhase.PreDeploy),
          "Host=localhost;Database=mydb",
          "local",
          project,
@@ -121,7 +122,7 @@ public class MigrationExecutionServiceTests
    [Fact]
    public async Task ExecuteAsync_LatestWithOnlyOutOfOrderMigrationPending_RunsMigrator()
    {
-      var (runtime, reporter, _) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.Latest);
+      var (runtime, reporter, _) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.Latest(DeployPhase.PreDeploy));
 
       reporter.Infos.Should().NotContain("Database is already up to date.");
       runtime.MigrateLatestCallCount.Should().Be(1);
@@ -133,7 +134,7 @@ public class MigrationExecutionServiceTests
    [InlineData(202602161600)]
    public async Task ExecuteAsync_TargetAtOrAboveOutOfOrderMigration_RunsMigratorToTarget(long target)
    {
-      var (runtime, reporter, _) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.To(target));
+      var (runtime, reporter, _) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.To(target, DeployPhase.PreDeploy));
 
       reporter.Infos.Should().NotContain("Database is already up to date for the specified target.");
       runtime.MigrateToCallCount.Should().Be(1);
@@ -143,7 +144,7 @@ public class MigrationExecutionServiceTests
    [Fact]
    public async Task ExecuteAsync_TargetBelowOutOfOrderMigration_ReportsUpToDateAndSkipsMigrator()
    {
-      var (runtime, reporter, exitCode) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.To(202602161430));
+      var (runtime, reporter, exitCode) = await ExecuteWithOutOfOrderMigrationAsync(MigrateRequest.To(202602161430, DeployPhase.PreDeploy));
 
       exitCode.Should().Be(0);
       reporter.Infos.Should().Contain("Database is already up to date for the specified target.");
@@ -175,7 +176,7 @@ public class MigrationExecutionServiceTests
       var project = CreateProjectContext([new FakeDbMigration(202602161430), new FakeDbMigration(202602161530)]);
 
       await service.ExecuteAsync(
-         MigrateRequest.Latest,
+         MigrateRequest.Latest(DeployPhase.PreDeploy),
          "Host=localhost;Database=mydb",
          "local",
          project,
@@ -213,7 +214,7 @@ public class MigrationExecutionServiceTests
       var project = CreateProjectContext([]);
 
       await service.ExecuteAsync(
-         MigrateRequest.Latest,
+         MigrateRequest.Latest(DeployPhase.PreDeploy),
          "Host=localhost;Database=mydb",
          "local",
          project,
@@ -246,7 +247,7 @@ public class MigrationExecutionServiceTests
       var project = CreateProjectContext([new FakeDbMigration(202602161430)]);
 
       await service.ExecuteAsync(
-         MigrateRequest.Latest,
+         MigrateRequest.Latest(DeployPhase.PreDeploy),
          "Host=localhost;Database=mydb",
          "local",
          project,
@@ -278,7 +279,7 @@ public class MigrationExecutionServiceTests
       var project = CreateProjectContext([new FakeDbMigration(202602161430), new FakeDbMigration(202602161530)]);
 
       await service.ExecuteAsync(
-         MigrateRequest.Latest,
+         MigrateRequest.Latest(DeployPhase.PreDeploy),
          "Host=localhost;Database=mydb",
          "local",
          project,
@@ -313,7 +314,7 @@ public class MigrationExecutionServiceTests
       var project = CreateProjectContext([new FakeDbMigration(202602161430), new FakeDbMigration(202602161530)]);
 
       await service.ExecuteAsync(
-         MigrateRequest.To(202602161430),
+         MigrateRequest.To(202602161430, DeployPhase.PreDeploy),
          "Host=localhost;Database=mydb",
          "local",
          project,
@@ -351,7 +352,7 @@ public class MigrationExecutionServiceTests
       var project = CreateProjectContext([new FakeDbMigration(202602161430)]);
 
       await service.ExecuteAsync(
-         MigrateRequest.To(202602161430),
+         MigrateRequest.To(202602161430, DeployPhase.PreDeploy),
          "Host=localhost;Database=mydb",
          "local",
          project,
@@ -362,6 +363,180 @@ public class MigrationExecutionServiceTests
       reporter.Infos.Should().NotContain(info => info.Contains("Empty database detected", StringComparison.Ordinal));
       runtime.MigrateToCallCount.Should().Be(1);
       runtime.MigrateToTarget.Should().Be(202602161430);
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_PreDeployRunWithNewTwoPartMigration_ReportsPendingPreDeployCountAndAllWaitingPostDeployParts()
+   {
+      var (runtime, reporter, exitCode) = await ExecuteTwoPartScenarioAsync(
+         MigrateRequest.Latest(DeployPhase.PreDeploy),
+         alreadyExecuted: [Row(100), Row(200)],
+         finalExecuted: [Row(100), Row(200), Row(300)],
+         migrations: [new FakeDbMigration(100), new FakeTwoPartMigration(200), new FakeTwoPartMigration(300)]
+      );
+
+      exitCode.Should().Be(0);
+      runtime.MigratePhase.Should().Be(DeployPhase.PreDeploy);
+      reporter.Infos.Should().Contain("Found 3 migration(s), 2 already applied.");
+      reporter.Infos.Should().Contain("Pending pre-deploy part(s): 1.");
+      reporter.Infos.Should().NotContain(info => info.StartsWith("Pending post-deploy", StringComparison.Ordinal));
+      reporter.Infos.Should().Contain("Migration complete. 1 migration(s) applied.");
+      reporter.Infos.Should().Contain("2 post-deploy part(s) waiting for a post-deploy run.");
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_PreDeployRunWhenUpToDateWithPostDeployPartWaiting_ReportsUpToDateAndWaitingCount()
+   {
+      var (runtime, reporter, exitCode) = await ExecuteTwoPartScenarioAsync(
+         MigrateRequest.Latest(DeployPhase.PreDeploy),
+         alreadyExecuted: [Row(100), Row(200)],
+         finalExecuted: [],
+         migrations: [new FakeDbMigration(100), new FakeTwoPartMigration(200)]
+      );
+
+      exitCode.Should().Be(0);
+      runtime.MigrateLatestCallCount.Should().Be(0);
+      reporter.Infos.Should().Contain("Pending pre-deploy part(s): 0.");
+      reporter.Infos.Should().Contain("Database is already up to date.");
+      reporter.Infos.Should().Contain("1 post-deploy part(s) waiting for a post-deploy run.");
+      reporter.Infos.Should().ContainSingle(info => info.StartsWith("Warning: The post-deploy part of migration 200 ", StringComparison.Ordinal) && info.Contains("is waiting from an earlier run", StringComparison.Ordinal));
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_PostDeployRunOnFreshDatabase_WarnsThatThePreDeployPartIsPending()
+   {
+      var (runtime, reporter, exitCode) = await ExecuteTwoPartScenarioAsync(
+         MigrateRequest.Latest(DeployPhase.PostDeploy),
+         alreadyExecuted: [],
+         finalExecuted: [],
+         migrations: [new FakeDbMigration(100), new FakeTwoPartMigration(200)]
+      );
+
+      exitCode.Should().Be(0);
+      runtime.MigrateLatestCallCount.Should().Be(0);
+      reporter.Infos.Should().Contain("Database is already up to date.");
+      reporter.Infos.Should().ContainSingle(info => info.StartsWith("Warning: The post-deploy part of migration 200 ", StringComparison.Ordinal) && info.Contains("its pre-deploy part is still pending", StringComparison.Ordinal));
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_PreDeployRunWithNoPostDeployPartWaiting_PrintsNoWaitingLine()
+   {
+      var (_, reporter, _) = await ExecuteTwoPartScenarioAsync(
+         MigrateRequest.Latest(DeployPhase.PreDeploy),
+         alreadyExecuted: [Row(100)],
+         finalExecuted: [Row(100), Row(200)],
+         migrations: [new FakeDbMigration(100), new FakeDbMigration(200)]
+      );
+
+      reporter.Infos.Should().NotContain(info => info.Contains("waiting for a post-deploy run", StringComparison.Ordinal));
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_PostDeployRun_ReportsOnlyPostDeployCountAndSkipsPartWhosePreDeployPartIsPending()
+   {
+      var (runtime, reporter, exitCode) = await ExecuteTwoPartScenarioAsync(
+         MigrateRequest.Latest(DeployPhase.PostDeploy),
+         alreadyExecuted: [Row(100), Row(200)],
+         finalExecuted: [Row(100), Row(200), Row(200, DeployPhase.PostDeploy)],
+         migrations: [new FakeDbMigration(100), new FakeTwoPartMigration(200), new FakeTwoPartMigration(300)]
+      );
+
+      exitCode.Should().Be(0);
+      runtime.MigratePhase.Should().Be(DeployPhase.PostDeploy);
+      reporter.Infos.Should().Contain("Pending post-deploy part(s): 1.");
+      reporter.Infos.Should().NotContain(info => info.StartsWith("Pending pre-deploy", StringComparison.Ordinal));
+      reporter.Infos.Should().Contain("Migration complete. 1 migration(s) applied.");
+      reporter.Infos.Should().NotContain(info => info.Contains("waiting for a post-deploy run", StringComparison.Ordinal));
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_PostDeployRunWithOnlyPartWhosePreDeployPartIsPending_CountsNothingAndReportsUpToDate()
+   {
+      var (runtime, reporter, exitCode) = await ExecuteTwoPartScenarioAsync(
+         MigrateRequest.Latest(DeployPhase.PostDeploy),
+         alreadyExecuted: [Row(100)],
+         finalExecuted: [],
+         migrations: [new FakeDbMigration(100), new FakeTwoPartMigration(200)]
+      );
+
+      exitCode.Should().Be(0);
+      runtime.MigrateLatestCallCount.Should().Be(0);
+      reporter.Infos.Should().Contain("Pending post-deploy part(s): 0.");
+      reporter.Infos.Should().Contain("Database is already up to date.");
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_AllRun_ReportsBothPendingCountsAndNoWaitingLine()
+   {
+      var (runtime, reporter, _) = await ExecuteTwoPartScenarioAsync(
+         MigrateRequest.Latest(DeployPhase.All),
+         alreadyExecuted: [Row(100)],
+         finalExecuted: [Row(100), Row(200), Row(200, DeployPhase.PostDeploy)],
+         migrations: [new FakeDbMigration(100), new FakeTwoPartMigration(200)]
+      );
+
+      runtime.MigratePhase.Should().Be(DeployPhase.All);
+      reporter.Infos.Should().Contain("Pending pre-deploy part(s): 1.");
+      reporter.Infos.Should().Contain("Pending post-deploy part(s): 1.");
+      reporter.Infos.Should().Contain("Migration complete. 1 migration(s) applied.");
+      reporter.Infos.Should().NotContain(info => info.Contains("waiting for a post-deploy run", StringComparison.Ordinal));
+   }
+
+   [Fact]
+   public async Task ExecuteAsync_WithPostDeployRowsRecorded_CountsOnlyPreDeployRowsAsAlreadyApplied()
+   {
+      var (_, reporter, _) = await ExecuteTwoPartScenarioAsync(
+         MigrateRequest.Latest(DeployPhase.PreDeploy),
+         alreadyExecuted: [Row(100), Row(200), Row(200, DeployPhase.PostDeploy)],
+         finalExecuted: [],
+         migrations: [new FakeDbMigration(100), new FakeTwoPartMigration(200)]
+      );
+
+      reporter.Infos.Should().Contain("Found 2 migration(s), 2 already applied.");
+   }
+
+   [Theory]
+   [InlineData(DeployPhase.PreDeploy)]
+   [InlineData(DeployPhase.PostDeploy)]
+   [InlineData(DeployPhase.All)]
+   public async Task ExecuteAsync_TargetRunWithPhase_PassesPhaseToRuntime(DeployPhase phase)
+   {
+      var (runtime, _, _) = await ExecuteTwoPartScenarioAsync(
+         MigrateRequest.To(300, phase),
+         alreadyExecuted: [Row(100), Row(200)],
+         finalExecuted: [Row(100), Row(200), Row(300)],
+         migrations: [new FakeTwoPartMigration(100), new FakeTwoPartMigration(200), new FakeDbMigration(300)]
+      );
+
+      runtime.MigrateToCallCount.Should().Be(1);
+      runtime.MigratePhase.Should().Be(phase);
+      runtime.MigrateToTarget.Should().Be(300);
+   }
+
+   private static ExecutedMigrationModel Row(long identifier, DeployPhase phase = DeployPhase.PreDeploy)
+   {
+      return new ExecutedMigrationModel(identifier, $"Migration{identifier}", DateTime.UtcNow, ThisAssemblyScope) { Phase = phase };
+   }
+
+   private static async Task<(FakeMigrationRuntime Runtime, FakeMigrateReporter Reporter, int ExitCode)> ExecuteTwoPartScenarioAsync(
+      MigrateRequest request,
+      ExecutedMigrationModel[] alreadyExecuted,
+      ExecutedMigrationModel[] finalExecuted,
+      IReadOnlyList<IDbMigration> migrations
+   )
+   {
+      var runtime = new FakeMigrationRuntime
+      {
+         IsDatabaseEmptyResult = false,
+         AlreadyExecuted = alreadyExecuted,
+         FinalExecuted = finalExecuted
+      };
+      var reporter = new FakeMigrateReporter();
+      var service = new MigrationExecutionService(new FakeMigrationRuntimeFactory { Runtime = runtime }, new FakeSchemaResourceService(), reporter);
+
+      var exitCode = await service.ExecuteAsync(request, "Host=localhost;Database=mydb", "local", CreateProjectContext(migrations), TestContext.Current.CancellationToken);
+
+      return (runtime, reporter, exitCode);
    }
 
    private static MigrationProjectContext CreateProjectContext(IReadOnlyList<IDbMigration> migrations)
@@ -421,6 +596,7 @@ public class MigrationExecutionServiceTests
       public int MigrateLatestCallCount { get; private set; }
       public int MigrateToCallCount { get; private set; }
       public long? MigrateToTarget { get; private set; }
+      public DeployPhase? MigratePhase { get; private set; }
 
       public ValueTask DisposeAsync()
       {
@@ -438,15 +614,17 @@ public class MigrationExecutionServiceTests
          return Task.FromResult(result.AsEnumerable());
       }
 
-      public Task MigrateDatabaseToLatestAsync(CancellationToken cancellationToken)
+      public Task MigrateDatabaseToLatestAsync(DeployPhase phase, CancellationToken cancellationToken)
       {
          MigrateLatestCallCount++;
+         MigratePhase = phase;
          return Task.CompletedTask;
       }
 
-      public Task MigrateDatabaseToAsync(long targetIdentifier, CancellationToken cancellationToken)
+      public Task MigrateDatabaseToAsync(long targetIdentifier, DeployPhase phase, CancellationToken cancellationToken)
       {
          MigrateToCallCount++;
+         MigratePhase = phase;
          MigrateToTarget = targetIdentifier;
          return Task.CompletedTask;
       }
@@ -502,6 +680,27 @@ public class MigrationExecutionServiceTests
       public IEnumerable<IDbMigration> RetrieveMigrations()
       {
          return _migrations;
+      }
+   }
+
+   private sealed class FakeTwoPartMigration : IDbMigration
+   {
+      public FakeTwoPartMigration(long identifier)
+      {
+         Identifier = identifier;
+      }
+
+      public long Identifier { get; }
+      public string Name => $"TwoPart{Identifier}";
+
+      public Task PreDeployAsync(DatabaseConnection db)
+      {
+         return Task.CompletedTask;
+      }
+
+      public Task PostDeployAsync(DatabaseConnection db)
+      {
+         return Task.CompletedTask;
       }
    }
 

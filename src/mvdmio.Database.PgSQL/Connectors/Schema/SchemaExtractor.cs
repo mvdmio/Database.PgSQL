@@ -120,6 +120,10 @@ public sealed class SchemaExtractor
          ? null
          : new Dictionary<string, object?> { { "ownedScopes", _ownedScopes.ToArray() } };
 
+      var phaseOrdering = await MigrationsTableManager.PhaseColumnExistsAsync(_db, cancellationToken)
+         ? $", CASE phase WHEN '{MigrationsTableManager.POST_DEPLOY_PHASE_TEXT}' THEN 1 ELSE 0 END"
+         : string.Empty;
+
       return (await _db.Dapper.QueryAsync<ExecutedMigrationModel>(
          $"""
          SELECT DISTINCT ON (scope)
@@ -129,7 +133,7 @@ public sealed class SchemaExtractor
             scope AS scope
          FROM {MIGRATIONS_TABLE_FULLY_QUALIFIED}
          {ownedScopesFilter}
-         ORDER BY scope, identifier DESC
+         ORDER BY scope, identifier DESC{phaseOrdering}
          """,
          parameters,
          ct: cancellationToken

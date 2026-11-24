@@ -4,7 +4,7 @@
 
 1. Create a class implementing `IDbMigration`.
 2. Name it `_{identifier}_{name}` where identifier is a `YYYYMMDDHHmm` timestamp, e.g. `_202602161430_AddUsersTable`. `Identifier` and `Name` default from the class name (a Roslyn analyzer warns if the convention is broken); override them only when needed.
-3. Implement `UpAsync(DatabaseConnection)` with the schema/data change.
+3. Implement `UpAsync(DatabaseConnection)` with the schema/data change. For a change that needs work after the deploy too, implement `PreDeployAsync` (instead of `UpAsync`) and `PostDeployAsync`; the analyzers `PGSQL0036` to `PGSQL0038` reject mixing `UpAsync` with either, or defining neither `UpAsync` nor `PreDeployAsync`. A pipeline runs `db migrate latest --phase pre-deploy` before the deploy and `--phase post-deploy` after it; `--phase all` runs both locally.
 4. Place it in the consuming assembly the `DatabaseMigrator` is configured to scan.
 
 The `db` CLI tool can scaffold a migration for you (see below).
